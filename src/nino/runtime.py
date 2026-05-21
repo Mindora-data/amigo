@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
+from .consolidation import Consolidator, InMemoryColdStore
 from .contracts import (
     AgentState,
     ConsolidationRequest,
@@ -30,10 +31,17 @@ def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 class NinoRuntime:
-    def __init__(self, state_store: InMemoryStateStore, episode_store: InMemoryEpisodeStore | None = None) -> None:
+    def __init__(
+        self,
+        state_store: InMemoryStateStore,
+        episode_store: InMemoryEpisodeStore | None = None,
+        cold_store: InMemoryColdStore | None = None,
+    ) -> None:
         self.state_store = state_store
         self.episode_store = episode_store or InMemoryEpisodeStore()
-        self.retriever = MemoryRetriever(self.episode_store)
+        self.cold_store = cold_store or InMemoryColdStore()
+        self.retriever = MemoryRetriever(self.episode_store, self.cold_store)
+        self.consolidator = Consolidator(self.cold_store)
 
     def load_or_init_state(self, agent_id: str) -> AgentState:
         existing = self.state_store.get(agent_id)
@@ -43,12 +51,8 @@ class NinoRuntime:
             agent_id=agent_id,
             tick=0,
             drive_vector={
-                "curiosity": 0.5,
-                "safety": 0.5,
-                "attachment": 0.5,
-                "coherence": 0.5,
-                "exploration": 0.5,
-                "energy": 0.8,
+                "curiosity": 0.5, "safety": 0.5, "attachment": 0.5,
+                "coherence": 0.5, "exploration": 0.5, "energy": 0.8
             },
             active_goals=[],
             energy=0.8,
@@ -69,7 +73,36 @@ class NinoRuntime:
         return PolicyResponse(chosen_action=action, confidence=0.6, reason_trace=["default_f1_policy"])
 
     def consolidate(self, request: ConsolidationRequest) -> ConsolidationResponse:
-        return ConsolidationResponse(cold_memory_updates=[], autobiographical_updates=[], contradictions=[])
+        episodes: list[Episode] = []
+        for raw in request.episodes:
+            if isinstance(raw, Episode):
+                episodes.append(raw)
+            else:
+                episodes.append(
+                    Episode(
+                        episode_id=raw["episode_id"],
+                        agent_id=raw["agent_id"],
+                        timestamp=raw["timestamp"],
+                        text=raw.get("text", ""),
+                        intent=raw.get("intent", "unknown"),
+                        salience=float(raw.get("salience", 0.5)),
+                        confidence=float(raw.get("confidence", 0.8)),
+                    )
+                )
+
+        now = datetime.now(timezone.utc)
+        result = self.consolidator.consolidate(
+            agent_id=request.agent_id,
+            episodes=episodes,
+            since=now - timedelta(hours=24),
+            until=now,
+            min_confidence=0.55,
+        )
+        return ConsolidationResponse(
+            cold_memory_updates=result["cold_memory_updates"],
+            autobiographical_updates=[],
+            contradictions=result["contradictions"],
+        )
 
     def tick(self, agent_id: str, percept_frame: dict[str, Any]) -> dict[str, Any]:
         state = self.load_or_init_state(agent_id)

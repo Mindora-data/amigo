@@ -1,7 +1,8 @@
 from __future__ import annotations
+
 from datetime import datetime, timedelta, timezone
 
-from nino.contracts import RetrieveRequest
+from nino.contracts import ConsolidationRequest, RetrieveRequest
 from nino.memory import Episode, InMemoryEpisodeStore, MemoryRetriever
 from nino.runtime import InMemoryStateStore, NinoRuntime
 
@@ -30,3 +31,15 @@ def test_runtime_tick_persists_state_and_writes_episode() -> None:
     assert out2["tick"] == 2
     assert out3["tick"] == 3
     assert out3["retrieved_memory_count"] >= 1
+
+def test_hybrid_retrieval_uses_cold_and_hot() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    runtime.tick("agent-h", {"intent": "chat", "text": "prefiero mañanas", "confidence": 0.95})
+    runtime.tick("agent-h", {"intent": "chat", "text": "hoy entrené", "confidence": 0.9})
+
+    episodes = runtime.episode_store.list_for_agent("agent-h")
+    runtime.consolidate(ConsolidationRequest(agent_id="agent-h", episodes=episodes))
+
+    req = RetrieveRequest(query_intent="preference mañanas", self_state={}, relation_state={}, time_scope="long")
+    out = runtime.retrieve_memory("agent-h", req)
+    assert any(c.fact_id.startswith("cold::") for c in out.memory_candidates)

@@ -1,0 +1,123 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+import re
+
+from .memory import Episode
+
+PREFERENCE_RE = re.compile(r"\b(prefiero|me gusta)\s+(?P<value>[\wáéíóúñ]+)", re.IGNORECASE)
+
+@dataclass(slots=True)
+class MemoryFact:
+    fact_id: str
+    agent_id: str
+    key: str
+    value: str
+    confidence: float
+    source_episode_id: str
+    valid_from: datetime
+    valid_to: datetime | None = None
+
+class InMemoryColdStore:
+    def __init__(self) -> None:
+        self._facts: dict[str, list[MemoryFact]] = {}
+
+    def upsert(self, fact: MemoryFact) -> None:
+        facts = self._facts.setdefault(fact.agent_id, [])
+        for i, existing in enumerate(facts):
+            if existing.fact_id == fact.fact_id:
+                facts[i] = fact
+                return
+        facts.append(fact)
+
+    def list_for_agent(self, agent_id: str) -> list[MemoryFact]:
+        return list(self._facts.get(agent_id, []))
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+class Consolidator:
+    def __init__(self, cold_store: InMemoryColdStore) -> None:
+        self.cold_store = cold_store
+
+    def consolidate(
+        self,
+        agent_id: str,
+        episodes: list[Episode],
+        since: datetime | None = None,
+        until: datetime | None = None,
+        min_confidence: float = 0.55,
+    ) -> dict[str, list[dict]]:
+        now = datetime.now(timezone.utc)
+        window_start = since or (now - timedelta(hours=24))
+        window_end = until or now
+
+        cold_updates: list[dict] = []
+        contradictions: list[dict] = []
+
+        facts = self.cold_store.list_for_agent(agent_id)
+        fact_ids = {f.fact_id for f in facts}
+
+        filtered = [e for e in episodes if window_start <= e.timestamp <= window_end]
+        filtered.sort(key=lambda e: (e.timestamp, e.episode_id))
+
+        for ep in filtered:
+            conf = _clamp01(ep.confidence)
+            if conf < min_confidence:
+                continue
+
+            m = PREFERENCE_RE.search(ep.text)
+            if not m:
+                continue
+
+            value = m.group("value").lower()
+            key = "preference"
+            new_fact_id = f"cold::{ep.episode_id}"
+
+            # idempotencia por episodio consolidado
+            if new_fact_id in fact_ids:
+                continue
+
+            active = [f for f in facts if f.key == key and f.valid_to is None]
+            for old in active:
+                if old.value != value:
+                    old.valid_to = ep.timestamp
+                    self.cold_store.upsert(old)
+                    contradictions.append(
+                        {
+                            "key": key,
+                            "old_value": old.value,
+                            "new_value": value,
+                            "resolved_at": ep.timestamp.isoformat(),
+                            "old_source": old.source_episode_id,
+                            "new_source": ep.episode_id,
+                            "reason": "newer_high_confidence_signal",
+                        }
+                    )
+
+            new_fact = MemoryFact(
+                fact_id=new_fact_id,
+                agent_id=agent_id,
+                key=key,
+                value=value,
+                confidence=conf,
+                source_episode_id=ep.episode_id,
+                valid_from=ep.timestamp,
+            )
+            self.cold_store.upsert(new_fact)
+            facts.append(new_fact)
+            fact_ids.add(new_fact_id)
+
+            cold_updates.append(
+                {
+                    "fact_id": new_fact.fact_id,
+                    "key": new_fact.key,
+                    "value": new_fact.value,
+                    "source_episode_id": new_fact.source_episode_id,
+                    "confidence": new_fact.confidence,
+                    "valid_from": new_fact.valid_from.isoformat(),
+                }
+            )
+
+        return {"cold_memory_updates": cold_updates, "contradictions": contradictions}

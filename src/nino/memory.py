@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Protocol
 
 from .contracts import MemoryCandidate, RetrieveRequest, RetrieveResponse
+
+class ColdStoreProtocol(Protocol):
+    def list_for_agent(self, agent_id: str) -> list[object]: ...
 
 @dataclass(slots=True)
 class Episode:
@@ -49,31 +53,52 @@ def _recency_score(ts: datetime, now: datetime, scope: str) -> float:
     return _clamp01(1.0 - (age_hours / horizon))
 
 class MemoryRetriever:
-    def __init__(self, episode_store: InMemoryEpisodeStore) -> None:
+    def __init__(self, episode_store: InMemoryEpisodeStore, cold_store: ColdStoreProtocol | None = None) -> None:
         self.episode_store = episode_store
+        self.cold_store = cold_store
 
     def retrieve(self, agent_id: str, request: RetrieveRequest, top_k: int = 5) -> RetrieveResponse:
         now = datetime.now(timezone.utc)
-        episodes = self.episode_store.list_for_agent(agent_id)
-
         scored: list[MemoryCandidate] = []
-        for ep in episodes:
+
+        # HOT
+        for ep in self.episode_store.list_for_agent(agent_id):
             sem = _semantic_overlap(request.query_intent, f"{ep.intent} {ep.text}")
             rec = _recency_score(ep.timestamp, now, request.time_scope)
             sal = _clamp01(ep.salience)
             conf = _clamp01(ep.confidence)
             score = _clamp01((0.45 * sem) + (0.25 * rec) + (0.20 * sal) + (0.10 * conf))
-            if score <= 0:
-                continue
-            scored.append(
-                MemoryCandidate(
-                    fact_id=f"hot::{ep.episode_id}",
-                    statement=ep.text,
-                    score=round(score, 6),
-                    source_episode_id=ep.episode_id,
-                    confidence=conf,
+            if score > 0:
+                scored.append(
+                    MemoryCandidate(
+                        fact_id=f"hot::{ep.episode_id}",
+                        statement=ep.text,
+                        score=round(score, 6),
+                        source_episode_id=ep.episode_id,
+                        confidence=conf,
+                    )
                 )
-            )
+
+        # COLD
+        if self.cold_store is not None:
+            for fact in self.cold_store.list_for_agent(agent_id):
+                if getattr(fact, "valid_to", None) is not None:
+                    continue
+                statement = f"{getattr(fact, 'key', '')} {getattr(fact, 'value', '')}".strip()
+                sem = _semantic_overlap(request.query_intent, statement)
+                rec = _recency_score(getattr(fact, "valid_from"), now, request.time_scope)
+                conf = _clamp01(float(getattr(fact, "confidence", 0.0)))
+                score = _clamp01((0.55 * sem) + (0.15 * rec) + (0.30 * conf))
+                if score > 0:
+                    scored.append(
+                        MemoryCandidate(
+                            fact_id=str(getattr(fact, "fact_id")),
+                            statement=statement,
+                            score=round(score, 6),
+                            source_episode_id=str(getattr(fact, "source_episode_id")),
+                            confidence=conf,
+                        )
+                    )
 
         scored.sort(key=lambda c: c.score, reverse=True)
         return RetrieveResponse(memory_candidates=scored[:top_k])
