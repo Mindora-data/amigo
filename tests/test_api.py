@@ -5,6 +5,9 @@ from datetime import datetime, timedelta, timezone
 import json
 
 from nino.api import create_app
+from nino.api import create_app_with_runtime
+from nino.autonomy import BackgroundAutonomy
+from nino.persistence import create_persistent_runtime
 
 
 def _request(app, method: str, path: str, payload: dict | None = None) -> dict:
@@ -74,6 +77,20 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert state["tick"] == 1
     assert len(episodes["episodes"]) == 1
     assert episodes["episodes"][0]["text"] == "me gusta piano"
+
+
+def test_http_api_exposes_autonomy_status_and_run_once(tmp_path) -> None:
+    runtime = create_persistent_runtime(tmp_path / "nino.db")
+    runtime.tick("api-auto", {"intent": "chat", "text": "hola"})
+    autonomy = BackgroundAutonomy(runtime, interval_seconds=10)
+    app = create_app_with_runtime(runtime, autonomy=autonomy)
+
+    status = _request(app, "GET", "/autonomy/status")
+    run_once = _request(app, "POST", "/autonomy/run-once", {"now": "2026-05-21T10:00:00+00:00"})
+
+    assert status["enabled"] is True
+    assert run_once["enabled"] is True
+    assert run_once["results"][0]["agent_id"] == "api-auto"
 
 
 def test_http_api_lists_agents(tmp_path) -> None:

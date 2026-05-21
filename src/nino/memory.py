@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import re
 from typing import Protocol
 
 from .contracts import MemoryCandidate, RetrieveRequest, RetrieveResponse
@@ -47,8 +48,36 @@ class InMemoryEpisodeStore:
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
+STOPWORDS = {
+    "el", "la", "los", "las", "un", "una", "de", "del", "que", "y", "a", "en",
+    "me", "mi", "mis", "tu", "tus", "soy", "eres", "gusta", "prefiero",
+    "hablemos", "hola", "buenas", "con", "por", "para", "chat", "question",
+    "greeting", "unknown", "saludo", "intent",
+}
+SYNONYMS = {
+    "musica": "música",
+    "musical": "música",
+    "pianista": "piano",
+}
+
+def _without_accents(value: str) -> str:
+    return (
+        value.lower()
+        .replace("á", "a")
+        .replace("é", "e")
+        .replace("í", "i")
+        .replace("ó", "o")
+        .replace("ú", "u")
+    )
+
 def _tokenize(text: str) -> set[str]:
-    return {tok.strip(".,!?;:\"'()[]{}").lower() for tok in text.split() if tok.strip()}
+    tokens: set[str] = set()
+    for raw in re.findall(r"[\wáéíóúñ]+", text.lower()):
+        normalized = _without_accents(raw)
+        if len(normalized) <= 2 or normalized in STOPWORDS:
+            continue
+        tokens.add(SYNONYMS.get(normalized, normalized))
+    return tokens
 
 def _semantic_overlap(query: str, text: str) -> float:
     q = _tokenize(query)

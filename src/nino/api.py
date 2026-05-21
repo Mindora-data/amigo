@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import urlparse
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 
+from .autonomy import BackgroundAutonomy
 from .contracts import ConsolidationRequest, ProactivitySettings, RetrieveRequest
 from .internal_loop import InternalLoop
 from .memory import Episode
@@ -272,13 +273,25 @@ def _episode_from_raw(raw: dict[str, Any]) -> Episode:
 
 
 class NinoService:
-    def __init__(self, runtime: NinoRuntime) -> None:
+    def __init__(self, runtime: NinoRuntime, autonomy: BackgroundAutonomy | None = None) -> None:
         self.runtime = runtime
         self.internal_loop = InternalLoop(runtime)
         self.scheduler = NinoScheduler(runtime)
+        self.autonomy = autonomy
 
     def health(self) -> dict[str, Any]:
         return {"ok": True, "service": "nino"}
+
+    def autonomy_status(self) -> dict[str, Any]:
+        if self.autonomy is None:
+            return {"enabled": False, "running": False}
+        return _to_jsonable(self.autonomy.status())
+
+    def autonomy_run_once(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.autonomy is None:
+            return {"enabled": False, "results": []}
+        now = _parse_datetime(payload["now"]) if "now" in payload else None
+        return {"enabled": True, "results": self.autonomy.run_once(now=now)}
 
     def list_agents(self) -> dict[str, Any]:
         return {"agents": self.runtime.list_agents()}
@@ -434,6 +447,8 @@ class NinoHttpApp:
                 "status": "ok",
                 "endpoints": [
                     "GET /health",
+                    "GET /autonomy/status",
+                    "POST /autonomy/run-once",
                     "POST /agents/{agent_id}/tick",
                     "GET /agents/{agent_id}/state",
                     "GET /agents/{agent_id}/episodes",
@@ -454,6 +469,10 @@ class NinoHttpApp:
             }
         if method == "GET" and path == "/health":
             return "200 OK", self.service.health()
+        if method == "GET" and path == "/autonomy/status":
+            return "200 OK", self.service.autonomy_status()
+        if method == "POST" and path == "/autonomy/run-once":
+            return "200 OK", self.service.autonomy_run_once(payload)
 
         if method == "POST" and path == "/internal/scheduled":
             return "200 OK", self.service.scheduled_all(payload)
@@ -512,12 +531,33 @@ def create_app(db_path: str | Path) -> NinoHttpApp:
     return NinoHttpApp(NinoService(create_persistent_runtime(db_path)))
 
 
-def run_server(db_path: str | Path, host: str = "127.0.0.1", port: int = 8000) -> None:
-    app = create_app(db_path)
+def create_app_with_runtime(
+    runtime: NinoRuntime,
+    autonomy: BackgroundAutonomy | None = None,
+) -> NinoHttpApp:
+    return NinoHttpApp(NinoService(runtime, autonomy=autonomy))
+
+
+def run_server(
+    db_path: str | Path,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    scheduler_interval_seconds: float = 0.0,
+) -> None:
+    runtime = create_persistent_runtime(db_path)
+    autonomy = None
+    if scheduler_interval_seconds > 0:
+        autonomy = BackgroundAutonomy(runtime, interval_seconds=scheduler_interval_seconds)
+        autonomy.start()
+    app = create_app_with_runtime(runtime, autonomy=autonomy)
 
     class QuietHandler(WSGIRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:
             return
 
-    with make_server(host, port, app, handler_class=QuietHandler) as server:
-        server.serve_forever()
+    try:
+        with make_server(host, port, app, handler_class=QuietHandler) as server:
+            server.serve_forever()
+    finally:
+        if autonomy is not None:
+            autonomy.stop()

@@ -7,6 +7,7 @@ consolidated memory and safe proactivity configuration in SQLite.
 
 ```bash
 PYTHONPATH=src python -m nino.server --db data/nino.db --host 127.0.0.1 --port 8000
+PYTHONPATH=src python -m nino.server --db data/nino.db --scheduler-interval 60
 ```
 
 Open the browser UI:
@@ -20,6 +21,8 @@ http://127.0.0.1:8000/app
 ```text
 GET  /health
 GET  /app
+GET  /autonomy/status
+POST /autonomy/run-once
 GET  /agents
 POST /agents/{agent_id}/tick
 GET  /agents/{agent_id}/state

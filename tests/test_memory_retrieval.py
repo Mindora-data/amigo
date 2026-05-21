@@ -32,6 +32,29 @@ def test_retrieval_ignores_recent_irrelevant_episode_without_semantic_overlap() 
 
     assert out.memory_candidates == []
 
+def test_retrieval_ignores_generic_intent_overlap() -> None:
+    store = InMemoryEpisodeStore()
+    now = datetime.now(timezone.utc)
+    store.append(Episode("e1", "a1", now - timedelta(minutes=5), "hola", "chat", 0.9, 0.9))
+
+    retriever = MemoryRetriever(store)
+    req = RetrieveRequest(query_intent="chat me gusta piano", self_state={}, relation_state={}, time_scope="recent")
+    out = retriever.retrieve(agent_id="a1", request=req, top_k=2)
+
+    assert out.memory_candidates == []
+
+def test_retrieval_normalizes_accents_and_basic_synonyms() -> None:
+    store = InMemoryEpisodeStore()
+    now = datetime.now(timezone.utc)
+    store.append(Episode("e1", "a1", now - timedelta(minutes=5), "me calma la música", "music", 0.9, 0.9))
+
+    retriever = MemoryRetriever(store)
+    req = RetrieveRequest(query_intent="musica calma", self_state={}, relation_state={}, time_scope="recent")
+    out = retriever.retrieve(agent_id="a1", request=req, top_k=2)
+
+    assert out.memory_candidates
+    assert out.memory_candidates[0].source_episode_id == "e1"
+
 def test_runtime_tick_persists_state_and_writes_episode() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
 
