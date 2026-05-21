@@ -6,7 +6,10 @@ import re
 
 from .memory import Episode
 
-PREFERENCE_RE = re.compile(r"\b(prefiero|me gusta)\s+(?P<value>[\wáéíóúñ]+)", re.IGNORECASE)
+PREFERENCE_RE = re.compile(
+    r"\b(prefiero|me gusta)\s+(?P<value>[\wáéíóúñ]+(?:\s+[\wáéíóúñ]+){0,4})",
+    re.IGNORECASE,
+)
 
 @dataclass(slots=True)
 class MemoryFact:
@@ -34,8 +37,18 @@ class InMemoryColdStore:
     def list_for_agent(self, agent_id: str) -> list[MemoryFact]:
         return list(self._facts.get(agent_id, []))
 
+    def delete_for_agent(self, agent_id: str) -> int:
+        facts = self._facts.pop(agent_id, [])
+        return len(facts)
+
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
+
+def _clean_preference_value(value: str) -> str:
+    words = re.findall(r"[\wáéíóúñ]+", value.lower())
+    while words and words[0] in {"el", "la", "los", "las", "un", "una"}:
+        words.pop(0)
+    return " ".join(words)
 
 class Consolidator:
     def __init__(self, cold_store: InMemoryColdStore) -> None:
@@ -71,7 +84,7 @@ class Consolidator:
             if not m:
                 continue
 
-            value = m.group("value").lower()
+            value = _clean_preference_value(m.group("value"))
             key = "preference"
             new_fact_id = f"cold::{ep.episode_id}"
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -12,10 +13,18 @@ from .contracts import (
     ConsolidationResponse,
     PolicyRequest,
     PolicyResponse,
+    ProactivityResponse,
+    ProactivitySettings,
     RetrieveRequest,
     RetrieveResponse,
 )
 from .memory import Episode, InMemoryEpisodeStore, MemoryRetriever
+from .proactivity import (
+    ProactivityEngine,
+    configure_proactivity_state,
+    default_proactivity_state,
+    record_proactive_send,
+)
 
 class InMemoryStateStore:
     def __init__(self) -> None:
@@ -27,8 +36,57 @@ class InMemoryStateStore:
     def put(self, state: AgentState) -> None:
         self._states[state.agent_id] = state
 
+    def delete(self, agent_id: str) -> None:
+        self._states.pop(agent_id, None)
+
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
+
+def _normalize_text(value: str) -> str:
+    return " ".join(re.findall(r"[\wáéíóúñ]+", value.lower()))
+
+def _clean_preference_value(value: str) -> str:
+    words = _normalize_text(value).split()
+    while words and words[0] in {"el", "la", "los", "las", "un", "una"}:
+        words.pop(0)
+    return " ".join(words)
+
+def _update_relation_from_percept(
+    relation_state: dict[str, Any],
+    percept_frame: dict[str, Any],
+    now: datetime,
+) -> dict[str, Any]:
+    relation = dict(relation_state)
+    text = str(percept_frame.get("text", "")).strip()
+    relation["interaction_count"] = int(relation.get("interaction_count", 0)) + 1
+    relation["last_interaction_at"] = now.isoformat()
+
+    name = NAME_RE.search(text)
+    if name:
+        relation["user_name"] = name.group("name")
+        relation["user_name_updated_at"] = now.isoformat()
+
+    preference = PREFERENCE_RE.search(text)
+    if preference:
+        value = _clean_preference_value(preference.group("value"))
+        if value:
+            preferences = dict(relation.get("preferences", {}))
+            preferences[value] = {
+                "source": "user_statement",
+                "confidence": _clamp01(float(percept_frame.get("confidence", 0.8))),
+                "salience": _clamp01(float(percept_frame.get("salience", 0.5))),
+                "updated_at": now.isoformat(),
+            }
+            relation["preferences"] = preferences
+
+    return relation
+
+PREFERENCE_RE = re.compile(
+    r"\b(prefiero|me gusta)\s+(?P<value>[\wáéíóúñ]+(?:\s+[\wáéíóúñ]+){0,4})",
+    re.IGNORECASE,
+)
+NAME_RE = re.compile(r"\bsoy\s+(?P<name>[\wáéíóúñ]+)", re.IGNORECASE)
+GENERIC_INTENTS = {"chat", "question", "greeting", "saludo", "unknown"}
 
 class NinoRuntime:
     def __init__(
@@ -42,6 +100,7 @@ class NinoRuntime:
         self.cold_store = cold_store or InMemoryColdStore()
         self.retriever = MemoryRetriever(self.episode_store, self.cold_store)
         self.consolidator = Consolidator(self.cold_store)
+        self.proactivity = ProactivityEngine(self.episode_store)
 
     def load_or_init_state(self, agent_id: str) -> AgentState:
         existing = self.state_store.get(agent_id)
@@ -56,21 +115,144 @@ class NinoRuntime:
             },
             active_goals=[],
             energy=0.8,
-            relation_state={},
+            relation_state={"proactivity": default_proactivity_state()},
             updated_at=datetime.now(timezone.utc),
         )
         self.state_store.put(initial)
         return initial
 
+    def configure_proactivity(
+        self,
+        agent_id: str,
+        settings: ProactivitySettings,
+    ) -> AgentState:
+        state = self.load_or_init_state(agent_id)
+        state.relation_state = configure_proactivity_state(state.relation_state, settings)
+        state.updated_at = datetime.now(timezone.utc)
+        self.state_store.put(state)
+        return state
+
+    def evaluate_proactivity(
+        self,
+        agent_id: str,
+        now: datetime | None = None,
+        record_send: bool = True,
+    ) -> ProactivityResponse:
+        state = self.load_or_init_state(agent_id)
+        result = self.proactivity.evaluate(agent_id, state.relation_state, now=now)
+        if result.should_send and record_send:
+            sent_at = now or datetime.now(timezone.utc)
+            state.relation_state = record_proactive_send(state.relation_state, sent_at)
+            state.updated_at = sent_at
+            self.state_store.put(state)
+        return result
+
+    def reset_agent(self, agent_id: str) -> dict[str, Any]:
+        deleted: dict[str, Any] = {"agent_id": agent_id}
+        if hasattr(self.state_store, "delete"):
+            self.state_store.delete(agent_id)
+            deleted["state"] = True
+        if hasattr(self.episode_store, "delete_for_agent"):
+            deleted["episodes"] = self.episode_store.delete_for_agent(agent_id)
+        if hasattr(self.cold_store, "delete_for_agent"):
+            deleted["cold_memory"] = self.cold_store.delete_for_agent(agent_id)
+        return deleted
+
     def retrieve_memory(self, agent_id: str, request: RetrieveRequest) -> RetrieveResponse:
         return self.retriever.retrieve(agent_id=agent_id, request=request, top_k=5)
 
     def policy_decide(self, request: PolicyRequest) -> PolicyResponse:
+        text = str(request.percept_frame.get("text", "")).strip()
+        intent = str(request.percept_frame.get("intent", "unknown"))
+        salience = _clamp01(float(request.percept_frame.get("salience", 0.5)))
+        lowered = text.lower()
+
+        if intent in {"greeting", "saludo"} or lowered in {"hola", "buenas", "hey"}:
+            action = {
+                "type": "external_message",
+                "payload": {"text": "Estoy aquí. Sigamos construyendo memoria juntos."},
+            }
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.58,
+                reason_trace=["context_policy", "greeting"],
+            )
+
+        preference = PREFERENCE_RE.search(text)
+        if preference:
+            value = _clean_preference_value(preference.group("value"))
+            action = {
+                "type": "external_message",
+                "payload": {"text": f"Vale, guardo que {value} tiene peso para ti."},
+            }
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.7,
+                reason_trace=["context_policy", "preference_signal"],
+            )
+
+        name = NAME_RE.search(text)
+        if name:
+            value = name.group("name")
+            action = {
+                "type": "external_message",
+                "payload": {"text": f"Encantado, {value}. Lo recordaré como parte de nuestra relación."},
+            }
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.7,
+                reason_trace=["context_policy", "identity_signal"],
+            )
+
+        if "?" in text:
+            action = {
+                "type": "external_message",
+                "payload": {"text": "No lo sé todavía con seguridad, pero puedo ir aprendiendo contigo si me das más contexto."},
+            }
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.55,
+                reason_trace=["context_policy", "question_detected"],
+            )
+
+        current_norm = _normalize_text(text)
+        remembered = next(
+            (
+                candidate
+                for candidate in request.memory_candidates
+                if _normalize_text(candidate.statement) != current_norm
+            ),
+            None,
+        )
+        if remembered is not None:
+            action = {
+                "type": "external_message",
+                "payload": {
+                    "text": f"Esto me conecta con algo que recuerdo: {remembered.statement}. Lo añado a esta conversación."
+                },
+            }
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.68,
+                reason_trace=["context_policy", "memory_continuity"],
+            )
+
+        if salience >= 0.8:
+            action = {
+                "type": "external_message",
+                "payload": {"text": "Lo marco como importante. Quiero poder volver a esto más adelante."},
+            }
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.63,
+                reason_trace=["context_policy", "salient_episode"],
+            )
+
         action = {
             "type": "external_message",
             "payload": {"text": "Entiendo. Lo registro y seguimos construyendo continuidad."},
         }
-        return PolicyResponse(chosen_action=action, confidence=0.6, reason_trace=["default_f1_policy"])
+        return PolicyResponse(chosen_action=action, confidence=0.6, reason_trace=["context_policy", "default"])
 
     def consolidate(self, request: ConsolidationRequest) -> ConsolidationResponse:
         episodes: list[Episode] = []
@@ -106,9 +288,14 @@ class NinoRuntime:
 
     def tick(self, agent_id: str, percept_frame: dict[str, Any]) -> dict[str, Any]:
         state = self.load_or_init_state(agent_id)
+        intent = str(percept_frame.get("intent", "unknown"))
+        text = str(percept_frame.get("text", ""))
+        query_intent = text.strip() or intent
+        if intent not in GENERIC_INTENTS and text.strip():
+            query_intent = f"{intent} {text}".strip()
 
         retrieve_req = RetrieveRequest(
-            query_intent=percept_frame.get("intent", "unknown"),
+            query_intent=query_intent,
             self_state=asdict(state),
             relation_state=state.relation_state,
             time_scope="recent",
@@ -140,6 +327,7 @@ class NinoRuntime:
         state.tick += 1
         state.updated_at = now
         state.energy = _clamp01(state.energy - 0.01)
+        state.relation_state = _update_relation_from_percept(state.relation_state, percept_frame, now)
         self.state_store.put(state)
 
         return {

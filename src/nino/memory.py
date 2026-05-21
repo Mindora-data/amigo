@@ -29,6 +29,10 @@ class InMemoryEpisodeStore:
     def list_for_agent(self, agent_id: str) -> list[Episode]:
         return list(self._episodes.get(agent_id, []))
 
+    def delete_for_agent(self, agent_id: str) -> int:
+        episodes = self._episodes.pop(agent_id, [])
+        return len(episodes)
+
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
@@ -64,6 +68,8 @@ class MemoryRetriever:
         # HOT
         for ep in self.episode_store.list_for_agent(agent_id):
             sem = _semantic_overlap(request.query_intent, f"{ep.intent} {ep.text}")
+            if sem <= 0:
+                continue
             rec = _recency_score(ep.timestamp, now, request.time_scope)
             sal = _clamp01(ep.salience)
             conf = _clamp01(ep.confidence)
@@ -86,6 +92,8 @@ class MemoryRetriever:
                     continue
                 statement = f"{getattr(fact, 'key', '')} {getattr(fact, 'value', '')}".strip()
                 sem = _semantic_overlap(request.query_intent, statement)
+                if sem <= 0:
+                    continue
                 rec = _recency_score(getattr(fact, "valid_from"), now, request.time_scope)
                 conf = _clamp01(float(getattr(fact, "confidence", 0.0)))
                 score = _clamp01((0.55 * sem) + (0.15 * rec) + (0.30 * conf))

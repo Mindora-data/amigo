@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 TimeScope = Literal["recent", "medium", "long"]
+ProactivityConsent = Literal["unknown", "allowed", "paused", "denied"]
 
 @dataclass(slots=True)
 class MemoryCandidate:
@@ -49,6 +50,19 @@ class ConsolidationResponse:
     cold_memory_updates: list[dict[str, Any]]
     autobiographical_updates: list[str]
     contradictions: list[dict[str, Any]]
+
+@dataclass(slots=True)
+class ProactivitySettings:
+    consent: ProactivityConsent = "unknown"
+    max_messages_per_day: int = 1
+    min_hours_between: float = 24.0
+
+@dataclass(slots=True)
+class ProactivityResponse:
+    should_send: bool
+    action: dict[str, Any] | None
+    reason_trace: list[str]
+    next_allowed_at: datetime | None = None
 
 @dataclass(slots=True)
 class AgentState:
