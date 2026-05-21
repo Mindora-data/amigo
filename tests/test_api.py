@@ -76,6 +76,16 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert episodes["episodes"][0]["text"] == "me gusta piano"
 
 
+def test_http_api_lists_agents(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(app, "POST", "/agents/api-a/tick", {"intent": "chat", "text": "hola"})
+    _request(app, "POST", "/agents/api-b/proactivity/configure", {"consent": "allowed"})
+    agents = _request(app, "GET", "/agents")
+
+    assert agents["agents"] == ["api-a", "api-b"]
+
+
 def test_http_api_exposes_relation_state(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 
@@ -243,3 +253,38 @@ def test_http_api_reset_agent_clears_persistent_data(tmp_path) -> None:
     assert state["tick"] == 0
     assert episodes["episodes"] == []
     assert "user_name" not in relation["relation_state"]
+
+
+def test_http_api_lists_and_deletes_memory_items(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "chat", "text": "me gusta piano", "salience": 0.9},
+    )
+    _request(app, "POST", "/agents/api-agent/consolidate", {})
+
+    episodes = _request(app, "GET", "/agents/api-agent/episodes")
+    facts = _request(app, "GET", "/agents/api-agent/memory/facts")
+
+    episode_id = episodes["episodes"][0]["episode_id"]
+    fact_id = facts["facts"][0]["fact_id"]
+    deleted_episode = _request(app, "DELETE", f"/agents/api-agent/episodes/{episode_id}")
+    deleted_fact = _request(app, "DELETE", f"/agents/api-agent/memory/facts/{fact_id}")
+
+    assert deleted_episode["deleted"] is True
+    assert deleted_fact["deleted"] is True
+    assert _request(app, "GET", "/agents/api-agent/episodes")["episodes"] == []
+    assert _request(app, "GET", "/agents/api-agent/memory/facts")["facts"] == []
+
+
+def test_http_api_runs_global_scheduled_cycle(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(app, "POST", "/agents/api-agent/proactivity/configure", {"consent": "allowed"})
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "hola"})
+
+    out = _request(app, "POST", "/internal/scheduled", {})
+
+    assert len(out["results"]) == 1
+    assert out["results"][0]["agent_id"] == "api-agent"

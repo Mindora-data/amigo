@@ -20,9 +20,13 @@ http://127.0.0.1:8000/app
 ```text
 GET  /health
 GET  /app
+GET  /agents
 POST /agents/{agent_id}/tick
 GET  /agents/{agent_id}/state
 GET  /agents/{agent_id}/episodes
+DELETE /agents/{agent_id}/episodes/{episode_id}
+GET  /agents/{agent_id}/memory/facts
+DELETE /agents/{agent_id}/memory/facts/{fact_id}
 GET  /agents/{agent_id}/relation
 GET  /agents/{agent_id}/self-model
 GET  /agents/{agent_id}/world-model
@@ -33,6 +37,7 @@ POST /agents/{agent_id}/consolidate
 POST /agents/{agent_id}/internal/cycle
 POST /agents/{agent_id}/internal/dream
 POST /agents/{agent_id}/internal/scheduled
+POST /internal/scheduled
 POST /agents/{agent_id}/proactivity/configure
 POST /agents/{agent_id}/proactivity/evaluate
 ```

@@ -33,6 +33,17 @@ class InMemoryEpisodeStore:
         episodes = self._episodes.pop(agent_id, [])
         return len(episodes)
 
+    def delete_episode(self, agent_id: str, episode_id: str) -> bool:
+        episodes = self._episodes.get(agent_id, [])
+        kept = [ep for ep in episodes if ep.episode_id != episode_id]
+        if len(kept) == len(episodes):
+            return False
+        self._episodes[agent_id] = kept
+        return True
+
+    def list_agent_ids(self) -> list[str]:
+        return sorted(self._episodes.keys())
+
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 

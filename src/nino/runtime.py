@@ -39,6 +39,9 @@ class InMemoryStateStore:
     def delete(self, agent_id: str) -> None:
         self._states.pop(agent_id, None)
 
+    def list_agent_ids(self) -> list[str]:
+        return sorted(self._states.keys())
+
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
@@ -368,6 +371,25 @@ class NinoRuntime:
         if hasattr(self.cold_store, "delete_for_agent"):
             deleted["cold_memory"] = self.cold_store.delete_for_agent(agent_id)
         return deleted
+
+    def list_agents(self) -> list[str]:
+        ids: set[str] = set()
+        for store in (self.state_store, self.episode_store, self.cold_store):
+            if hasattr(store, "list_agent_ids"):
+                ids.update(store.list_agent_ids())
+        return sorted(ids)
+
+    def delete_episode(self, agent_id: str, episode_id: str) -> dict[str, Any]:
+        deleted = False
+        if hasattr(self.episode_store, "delete_episode"):
+            deleted = bool(self.episode_store.delete_episode(agent_id, episode_id))
+        return {"agent_id": agent_id, "episode_id": episode_id, "deleted": deleted}
+
+    def delete_memory_fact(self, agent_id: str, fact_id: str) -> dict[str, Any]:
+        deleted = False
+        if hasattr(self.cold_store, "delete_fact"):
+            deleted = bool(self.cold_store.delete_fact(agent_id, fact_id))
+        return {"agent_id": agent_id, "fact_id": fact_id, "deleted": deleted}
 
     def retrieve_memory(self, agent_id: str, request: RetrieveRequest) -> RetrieveResponse:
         return self.retriever.retrieve(agent_id=agent_id, request=request, top_k=5)

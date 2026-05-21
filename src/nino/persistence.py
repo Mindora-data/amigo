@@ -127,6 +127,10 @@ class SQLiteStateStore:
         self.conn.execute("DELETE FROM agent_states WHERE agent_id = ?", (agent_id,))
         self.conn.commit()
 
+    def list_agent_ids(self) -> list[str]:
+        rows = self.conn.execute("SELECT agent_id FROM agent_states ORDER BY agent_id").fetchall()
+        return [row["agent_id"] for row in rows]
+
 
 class SQLiteEpisodeStore:
     def __init__(self, path: str | Path) -> None:
@@ -191,6 +195,18 @@ class SQLiteEpisodeStore:
         cursor = self.conn.execute("DELETE FROM episodes WHERE agent_id = ?", (agent_id,))
         self.conn.commit()
         return cursor.rowcount
+
+    def delete_episode(self, agent_id: str, episode_id: str) -> bool:
+        cursor = self.conn.execute(
+            "DELETE FROM episodes WHERE agent_id = ? AND episode_id = ?",
+            (agent_id, episode_id),
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def list_agent_ids(self) -> list[str]:
+        rows = self.conn.execute("SELECT DISTINCT agent_id FROM episodes ORDER BY agent_id").fetchall()
+        return [row["agent_id"] for row in rows]
 
 
 class SQLiteColdStore:
@@ -268,6 +284,18 @@ class SQLiteColdStore:
         cursor = self.conn.execute("DELETE FROM memory_facts WHERE agent_id = ?", (agent_id,))
         self.conn.commit()
         return cursor.rowcount
+
+    def delete_fact(self, agent_id: str, fact_id: str) -> bool:
+        cursor = self.conn.execute(
+            "DELETE FROM memory_facts WHERE agent_id = ? AND fact_id = ?",
+            (agent_id, fact_id),
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def list_agent_ids(self) -> list[str]:
+        rows = self.conn.execute("SELECT DISTINCT agent_id FROM memory_facts ORDER BY agent_id").fetchall()
+        return [row["agent_id"] for row in rows]
 
 
 def create_persistent_runtime(path: str | Path) -> NinoRuntime:

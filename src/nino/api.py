@@ -116,6 +116,7 @@ APP_HTML = """<!doctype html>
         </div>
         <button id="dream" class="secondary" style="margin-top:8px;width:100%">Sueño</button>
         <button id="scheduled" class="secondary" style="margin-top:8px;width:100%">Scheduler</button>
+        <button id="agents" class="secondary" style="margin-top:8px;width:100%">Agentes</button>
         <button id="reset" class="secondary" style="margin-top:8px;width:100%">Reset agente</button>
         <pre id="state">{}</pre>
       </div>
@@ -143,6 +144,7 @@ APP_HTML = """<!doctype html>
           <button id="episodes" class="secondary">Episodios</button>
           <button id="relation" class="secondary">Relación</button>
         </div>
+        <button id="facts" class="secondary" style="margin-top:8px;width:100%">Memoria fría</button>
         <div class="row">
           <button id="selfModel" class="secondary">Self</button>
           <button id="worldModel" class="secondary">Mundo</button>
@@ -207,6 +209,7 @@ APP_HTML = """<!doctype html>
       print($("state"), out);
       if (out.proactive_action) addEntry("niño · programado", out.proactive_action.payload.text);
     };
+    $("agents").onclick = async () => print($("state"), await api("/agents"));
     $("reset").onclick = async () => {
       const out = await api(agentPath("/reset"), {method: "POST", body: "{}"});
       log.textContent = "";
@@ -228,6 +231,7 @@ APP_HTML = """<!doctype html>
       if (out.should_send) addEntry("niño · proactivo", out.action.payload.text);
     };
     $("episodes").onclick = async () => print($("memory"), await api(agentPath("/episodes")));
+    $("facts").onclick = async () => print($("memory"), await api(agentPath("/memory/facts")));
     $("relation").onclick = async () => print($("memory"), await api(agentPath("/relation")));
     $("selfModel").onclick = async () => print($("memory"), await api(agentPath("/self-model")));
     $("worldModel").onclick = async () => print($("memory"), await api(agentPath("/world-model")));
@@ -276,6 +280,9 @@ class NinoService:
     def health(self) -> dict[str, Any]:
         return {"ok": True, "service": "nino"}
 
+    def list_agents(self) -> dict[str, Any]:
+        return {"agents": self.runtime.list_agents()}
+
     def tick(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.tick(agent_id, payload))
 
@@ -285,6 +292,16 @@ class NinoService:
     def list_episodes(self, agent_id: str) -> dict[str, Any]:
         episodes = self.runtime.episode_store.list_for_agent(agent_id)
         return {"episodes": _to_jsonable(episodes)}
+
+    def list_memory_facts(self, agent_id: str) -> dict[str, Any]:
+        facts = self.runtime.cold_store.list_for_agent(agent_id)
+        return {"facts": _to_jsonable(facts)}
+
+    def delete_episode(self, agent_id: str, episode_id: str) -> dict[str, Any]:
+        return self.runtime.delete_episode(agent_id, episode_id)
+
+    def delete_memory_fact(self, agent_id: str, fact_id: str) -> dict[str, Any]:
+        return self.runtime.delete_memory_fact(agent_id, fact_id)
 
     def get_relation(self, agent_id: str) -> dict[str, Any]:
         state = self.runtime.load_or_init_state(agent_id)
@@ -357,6 +374,14 @@ class NinoService:
         out = self.scheduler.run_pending(agent_id, now=now)
         return _to_jsonable(out)
 
+    def scheduled_all(self, payload: dict[str, Any]) -> dict[str, Any]:
+        now = _parse_datetime(payload["now"]) if "now" in payload else None
+        results = [
+            self.scheduler.run_pending(agent_id, now=now)
+            for agent_id in self.runtime.list_agents()
+        ]
+        return {"results": _to_jsonable(results)}
+
 
 class NinoHttpApp:
     def __init__(self, service: NinoService) -> None:
@@ -412,6 +437,7 @@ class NinoHttpApp:
                     "POST /agents/{agent_id}/tick",
                     "GET /agents/{agent_id}/state",
                     "GET /agents/{agent_id}/episodes",
+                    "GET /agents/{agent_id}/memory/facts",
                     "GET /agents/{agent_id}/relation",
                     "GET /agents/{agent_id}/self-model",
                     "GET /agents/{agent_id}/world-model",
@@ -429,7 +455,13 @@ class NinoHttpApp:
         if method == "GET" and path == "/health":
             return "200 OK", self.service.health()
 
+        if method == "POST" and path == "/internal/scheduled":
+            return "200 OK", self.service.scheduled_all(payload)
+
         parts = [part for part in path.split("/") if part]
+        if method == "GET" and parts == ["agents"]:
+            return "200 OK", self.service.list_agents()
+
         if len(parts) < 2 or parts[0] != "agents":
             return "404 Not Found", {"error": "not_found"}
 
@@ -442,6 +474,12 @@ class NinoHttpApp:
             return "200 OK", self.service.get_state(agent_id)
         if method == "GET" and tail == ["episodes"]:
             return "200 OK", self.service.list_episodes(agent_id)
+        if method == "DELETE" and len(tail) == 2 and tail[0] == "episodes":
+            return "200 OK", self.service.delete_episode(agent_id, tail[1])
+        if method == "GET" and tail == ["memory", "facts"]:
+            return "200 OK", self.service.list_memory_facts(agent_id)
+        if method == "DELETE" and len(tail) == 3 and tail[:2] == ["memory", "facts"]:
+            return "200 OK", self.service.delete_memory_fact(agent_id, tail[2])
         if method == "GET" and tail == ["relation"]:
             return "200 OK", self.service.get_relation(agent_id)
         if method == "GET" and tail == ["self-model"]:

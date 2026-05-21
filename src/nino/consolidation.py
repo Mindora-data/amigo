@@ -41,6 +41,17 @@ class InMemoryColdStore:
         facts = self._facts.pop(agent_id, [])
         return len(facts)
 
+    def delete_fact(self, agent_id: str, fact_id: str) -> bool:
+        facts = self._facts.get(agent_id, [])
+        kept = [fact for fact in facts if fact.fact_id != fact_id]
+        if len(kept) == len(facts):
+            return False
+        self._facts[agent_id] = kept
+        return True
+
+    def list_agent_ids(self) -> list[str]:
+        return sorted(self._facts.keys())
+
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
