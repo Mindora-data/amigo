@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Literal
+
+TimeScope = Literal["recent", "medium", "long"]
+
+@dataclass(slots=True)
+class MemoryCandidate:
+    fact_id: str
+    statement: str
+    score: float
+    source_episode_id: str
+    confidence: float
+
+@dataclass(slots=True)
+class RetrieveRequest:
+    query_intent: str
+    self_state: dict[str, Any]
+    relation_state: dict[str, Any]
+    time_scope: TimeScope
+
+@dataclass(slots=True)
+class RetrieveResponse:
+    memory_candidates: list[MemoryCandidate] = field(default_factory=list)
+
+@dataclass(slots=True)
+class PolicyRequest:
+    percept_frame: dict[str, Any]
+    drive_vector: dict[str, float]
+    memory_candidates: list[MemoryCandidate]
+    predicted_outcomes: list[dict[str, Any]]
+    safety_rules: list[str]
+
+@dataclass(slots=True)
+class PolicyResponse:
+    chosen_action: dict[str, Any]
+    confidence: float
+    reason_trace: list[str]
+
+@dataclass(slots=True)
+class ConsolidationRequest:
+    agent_id: str
+    episodes: list[dict[str, Any]]
+
+@dataclass(slots=True)
+class ConsolidationResponse:
+    cold_memory_updates: list[dict[str, Any]]
+    autobiographical_updates: list[str]
+    contradictions: list[dict[str, Any]]
+
+@dataclass(slots=True)
+class AgentState:
+    agent_id: str
+    tick: int
+    drive_vector: dict[str, float]
+    active_goals: list[str]
+    energy: float
+    relation_state: dict[str, Any]
+    updated_at: datetime
