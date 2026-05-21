@@ -175,6 +175,23 @@ def test_http_api_internal_cycle_consolidates_memory(tmp_path) -> None:
     assert any(candidate["fact_id"].startswith("cold::") for candidate in memory["memory_candidates"])
 
 
+def test_http_api_internal_dream_creates_reflection(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "music", "text": "me gusta el piano", "salience": 0.9, "confidence": 0.9},
+    )
+    dream = _request(app, "POST", "/agents/api-agent/internal/dream", {})
+    self_model = _request(app, "GET", "/agents/api-agent/self-model")
+
+    assert dream["reflection_count"] == 1
+    assert dream["maturity"] > 0
+    assert self_model["self_model"]["dream_reflections"]
+
+
 def test_http_api_reset_agent_clears_persistent_data(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

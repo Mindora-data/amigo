@@ -30,6 +30,7 @@ POST /agents/{agent_id}/reset
 POST /agents/{agent_id}/memory/retrieve
 POST /agents/{agent_id}/consolidate
 POST /agents/{agent_id}/internal/cycle
+POST /agents/{agent_id}/internal/dream
 POST /agents/{agent_id}/proactivity/configure
 POST /agents/{agent_id}/proactivity/evaluate
 ```

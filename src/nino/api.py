@@ -113,6 +113,7 @@ APP_HTML = """<!doctype html>
           <button id="refresh" class="secondary">Actualizar</button>
           <button id="cycle" class="secondary">Ciclo interno</button>
         </div>
+        <button id="dream" class="secondary" style="margin-top:8px;width:100%">Sueño</button>
         <button id="reset" class="secondary" style="margin-top:8px;width:100%">Reset agente</button>
         <pre id="state">{}</pre>
       </div>
@@ -192,6 +193,11 @@ APP_HTML = """<!doctype html>
       const out = await api(agentPath("/internal/cycle"), {method: "POST", body: "{}"});
       print($("state"), out);
       if (out.proactive_action) addEntry("niño · proactivo", out.proactive_action.payload.text);
+    };
+    $("dream").onclick = async () => {
+      const out = await api(agentPath("/internal/dream"), {method: "POST", body: "{}"});
+      print($("state"), out);
+      await refreshState();
     };
     $("reset").onclick = async () => {
       const out = await api(agentPath("/reset"), {method: "POST", body: "{}"});
@@ -328,6 +334,11 @@ class NinoService:
         )
         return _to_jsonable(out)
 
+    def dream_cycle(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        now = _parse_datetime(payload["now"]) if "now" in payload else None
+        out = self.internal_loop.dream_cycle(agent_id, now=now)
+        return _to_jsonable(out)
+
 
 class NinoHttpApp:
     def __init__(self, service: NinoService) -> None:
@@ -390,6 +401,7 @@ class NinoHttpApp:
                     "POST /agents/{agent_id}/memory/retrieve",
                     "POST /agents/{agent_id}/consolidate",
                     "POST /agents/{agent_id}/internal/cycle",
+                    "POST /agents/{agent_id}/internal/dream",
                     "POST /agents/{agent_id}/proactivity/configure",
                     "POST /agents/{agent_id}/proactivity/evaluate",
                 ],
@@ -428,6 +440,8 @@ class NinoHttpApp:
             return "200 OK", self.service.evaluate_proactivity(agent_id, payload)
         if method == "POST" and tail == ["internal", "cycle"]:
             return "200 OK", self.service.internal_cycle(agent_id, payload)
+        if method == "POST" and tail == ["internal", "dream"]:
+            return "200 OK", self.service.dream_cycle(agent_id, payload)
 
         return "404 Not Found", {"error": "not_found"}
 
