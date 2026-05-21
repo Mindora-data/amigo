@@ -33,6 +33,9 @@ class PolicyRequest:
     memory_candidates: list[MemoryCandidate]
     predicted_outcomes: list[dict[str, Any]]
     safety_rules: list[str]
+    relation_state: dict[str, Any] = field(default_factory=dict)
+    self_model: dict[str, Any] = field(default_factory=dict)
+    world_model: dict[str, Any] = field(default_factory=dict)
 
 @dataclass(slots=True)
 class PolicyResponse:
@@ -72,4 +75,7 @@ class AgentState:
     active_goals: list[str]
     energy: float
     relation_state: dict[str, Any]
+    cognitive_time: dict[str, float]
+    self_model: dict[str, Any]
+    world_model: dict[str, Any]
     updated_at: datetime

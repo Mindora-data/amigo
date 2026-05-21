@@ -10,6 +10,17 @@ from .contracts import AgentState
 from .memory import Episode
 from .runtime import NinoRuntime
 
+DEFAULT_COGNITIVE_TIME_JSON = '{"age_ticks": 0.0, "experience_mass": 0.0, "maturity": 0.0}'
+DEFAULT_SELF_MODEL_JSON = (
+    '{"identity_stage": "early_childhood", "interaction_count": 0, '
+    '"known_capabilities": ["remember_episodes", "retrieve_context", "safe_proactivity"], '
+    '"known_limits": ["minimal_language_policy", "no_background_daemon_yet"], '
+    '"autobiographical_timeline": []}'
+)
+DEFAULT_WORLD_MODEL_JSON = (
+    '{"concept_counts": {}, "intent_counts": {}, "open_questions": [], "causal_observations": []}'
+)
+
 
 def _connect(path: str | Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(path))
@@ -39,11 +50,23 @@ class SQLiteStateStore:
                 active_goals_json TEXT NOT NULL,
                 energy REAL NOT NULL,
                 relation_state_json TEXT NOT NULL,
+                cognitive_time_json TEXT NOT NULL,
+                self_model_json TEXT NOT NULL,
+                world_model_json TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
             """
         )
+        self._ensure_column("cognitive_time_json", f"TEXT NOT NULL DEFAULT '{DEFAULT_COGNITIVE_TIME_JSON}'")
+        self._ensure_column("self_model_json", f"TEXT NOT NULL DEFAULT '{DEFAULT_SELF_MODEL_JSON}'")
+        self._ensure_column("world_model_json", f"TEXT NOT NULL DEFAULT '{DEFAULT_WORLD_MODEL_JSON}'")
         self.conn.commit()
+
+    def _ensure_column(self, name: str, definition: str) -> None:
+        rows = self.conn.execute("PRAGMA table_info(agent_states)").fetchall()
+        existing = {row["name"] for row in rows}
+        if name not in existing:
+            self.conn.execute(f"ALTER TABLE agent_states ADD COLUMN {name} {definition}")
 
     def get(self, agent_id: str) -> AgentState | None:
         row = self.conn.execute(
@@ -59,6 +82,9 @@ class SQLiteStateStore:
             active_goals=json.loads(row["active_goals_json"]),
             energy=float(row["energy"]),
             relation_state=json.loads(row["relation_state_json"]),
+            cognitive_time=json.loads(row["cognitive_time_json"]),
+            self_model=json.loads(row["self_model_json"]),
+            world_model=json.loads(row["world_model_json"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
 
@@ -67,15 +93,19 @@ class SQLiteStateStore:
             """
             INSERT INTO agent_states (
                 agent_id, tick, drive_vector_json, active_goals_json,
-                energy, relation_state_json, updated_at
+                energy, relation_state_json, cognitive_time_json,
+                self_model_json, world_model_json, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(agent_id) DO UPDATE SET
                 tick = excluded.tick,
                 drive_vector_json = excluded.drive_vector_json,
                 active_goals_json = excluded.active_goals_json,
                 energy = excluded.energy,
                 relation_state_json = excluded.relation_state_json,
+                cognitive_time_json = excluded.cognitive_time_json,
+                self_model_json = excluded.self_model_json,
+                world_model_json = excluded.world_model_json,
                 updated_at = excluded.updated_at
             """,
             (
@@ -85,6 +115,9 @@ class SQLiteStateStore:
                 json.dumps(state.active_goals, sort_keys=True),
                 state.energy,
                 json.dumps(state.relation_state, sort_keys=True),
+                json.dumps(state.cognitive_time, sort_keys=True),
+                json.dumps(state.self_model, sort_keys=True),
+                json.dumps(state.world_model, sort_keys=True),
                 state.updated_at.isoformat(),
             ),
         )

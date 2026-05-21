@@ -140,6 +140,10 @@ APP_HTML = """<!doctype html>
           <button id="episodes" class="secondary">Episodios</button>
           <button id="relation" class="secondary">Relación</button>
         </div>
+        <div class="row">
+          <button id="selfModel" class="secondary">Self</button>
+          <button id="worldModel" class="secondary">Mundo</button>
+        </div>
         <pre id="memory">{}</pre>
       </div>
     </aside>
@@ -211,6 +215,8 @@ APP_HTML = """<!doctype html>
     };
     $("episodes").onclick = async () => print($("memory"), await api(agentPath("/episodes")));
     $("relation").onclick = async () => print($("memory"), await api(agentPath("/relation")));
+    $("selfModel").onclick = async () => print($("memory"), await api(agentPath("/self-model")));
+    $("worldModel").onclick = async () => print($("memory"), await api(agentPath("/world-model")));
     refreshState();
   </script>
 </body>
@@ -267,6 +273,14 @@ class NinoService:
     def get_relation(self, agent_id: str) -> dict[str, Any]:
         state = self.runtime.load_or_init_state(agent_id)
         return {"relation_state": _to_jsonable(state.relation_state)}
+
+    def get_self_model(self, agent_id: str) -> dict[str, Any]:
+        state = self.runtime.load_or_init_state(agent_id)
+        return {"self_model": _to_jsonable(state.self_model)}
+
+    def get_world_model(self, agent_id: str) -> dict[str, Any]:
+        state = self.runtime.load_or_init_state(agent_id)
+        return {"world_model": _to_jsonable(state.world_model)}
 
     def reset_agent(self, agent_id: str) -> dict[str, Any]:
         return self.runtime.reset_agent(agent_id)
@@ -370,6 +384,8 @@ class NinoHttpApp:
                     "GET /agents/{agent_id}/state",
                     "GET /agents/{agent_id}/episodes",
                     "GET /agents/{agent_id}/relation",
+                    "GET /agents/{agent_id}/self-model",
+                    "GET /agents/{agent_id}/world-model",
                     "POST /agents/{agent_id}/reset",
                     "POST /agents/{agent_id}/memory/retrieve",
                     "POST /agents/{agent_id}/consolidate",
@@ -396,6 +412,10 @@ class NinoHttpApp:
             return "200 OK", self.service.list_episodes(agent_id)
         if method == "GET" and tail == ["relation"]:
             return "200 OK", self.service.get_relation(agent_id)
+        if method == "GET" and tail == ["self-model"]:
+            return "200 OK", self.service.get_self_model(agent_id)
+        if method == "GET" and tail == ["world-model"]:
+            return "200 OK", self.service.get_world_model(agent_id)
         if method == "POST" and tail == ["reset"]:
             return "200 OK", self.service.reset_agent(agent_id)
         if method == "POST" and tail == ["memory", "retrieve"]:

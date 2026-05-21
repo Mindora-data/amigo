@@ -87,6 +87,23 @@ def test_http_api_exposes_relation_state(tmp_path) -> None:
     assert "piano" in relation["relation_state"]["preferences"]
 
 
+def test_http_api_exposes_self_and_world_models(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "music", "text": "me gusta el piano", "salience": 0.9},
+    )
+    self_model = _request(app, "GET", "/agents/api-agent/self-model")
+    world_model = _request(app, "GET", "/agents/api-agent/world-model")
+
+    assert self_model["self_model"]["interaction_count"] == 1
+    assert self_model["self_model"]["identity_stage"] == "early_childhood"
+    assert world_model["world_model"]["concept_counts"]["piano"] == 1
+
+
 def test_http_api_proactivity_consent_and_frequency(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)

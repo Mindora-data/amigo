@@ -87,6 +87,97 @@ PREFERENCE_RE = re.compile(
 )
 NAME_RE = re.compile(r"\bsoy\s+(?P<name>[\wáéíóúñ]+)", re.IGNORECASE)
 GENERIC_INTENTS = {"chat", "question", "greeting", "saludo", "unknown"}
+STOPWORDS = {
+    "el", "la", "los", "las", "un", "una", "de", "del", "que", "y", "a", "en",
+    "me", "mi", "mis", "tu", "tus", "soy", "eres", "gusta", "prefiero",
+    "hablemos", "hola", "buenas", "con", "por", "para",
+}
+
+def _default_cognitive_time() -> dict[str, float]:
+    return {"age_ticks": 0.0, "experience_mass": 0.0, "maturity": 0.0}
+
+def _default_self_model() -> dict[str, Any]:
+    return {
+        "identity_stage": "early_childhood",
+        "interaction_count": 0,
+        "known_capabilities": ["remember_episodes", "retrieve_context", "safe_proactivity"],
+        "known_limits": ["minimal_language_policy", "no_background_daemon_yet"],
+        "autobiographical_timeline": [],
+    }
+
+def _default_world_model() -> dict[str, Any]:
+    return {
+        "concept_counts": {},
+        "intent_counts": {},
+        "open_questions": [],
+        "causal_observations": [],
+    }
+
+def _tokens_for_model(text: str) -> list[str]:
+    return [
+        token
+        for token in re.findall(r"[\wáéíóúñ]+", text.lower())
+        if len(token) > 2 and token not in STOPWORDS
+    ]
+
+def _update_cognitive_models(
+    state: AgentState,
+    percept_frame: dict[str, Any],
+    now: datetime,
+) -> None:
+    text = str(percept_frame.get("text", "")).strip()
+    intent = str(percept_frame.get("intent", "unknown"))
+    salience = _clamp01(float(percept_frame.get("salience", 0.5)))
+    confidence = _clamp01(float(percept_frame.get("confidence", 0.8)))
+
+    cognitive_time = dict(state.cognitive_time)
+    cognitive_time["age_ticks"] = float(cognitive_time.get("age_ticks", 0.0)) + 1.0
+    delta = salience * confidence
+    cognitive_time["experience_mass"] = round(float(cognitive_time.get("experience_mass", 0.0)) + delta, 6)
+    cognitive_time["maturity"] = round(_clamp01(cognitive_time["experience_mass"] / 80.0), 6)
+    state.cognitive_time = cognitive_time
+
+    world_model = dict(state.world_model)
+    intent_counts = dict(world_model.get("intent_counts", {}))
+    intent_counts[intent] = int(intent_counts.get(intent, 0)) + 1
+    world_model["intent_counts"] = intent_counts
+
+    concept_counts = dict(world_model.get("concept_counts", {}))
+    for token in _tokens_for_model(f"{intent} {text}"):
+        concept_counts[token] = int(concept_counts.get(token, 0)) + 1
+    world_model["concept_counts"] = concept_counts
+
+    if "?" in text:
+        open_questions = list(world_model.get("open_questions", []))
+        open_questions.append({"text": text, "observed_at": now.isoformat()})
+        world_model["open_questions"] = open_questions[-20:]
+    if "porque" in text.lower():
+        causal = list(world_model.get("causal_observations", []))
+        causal.append({"text": text, "observed_at": now.isoformat()})
+        world_model["causal_observations"] = causal[-20:]
+    state.world_model = world_model
+
+    self_model = dict(state.self_model)
+    self_model["interaction_count"] = int(self_model.get("interaction_count", 0)) + 1
+    self_model["last_experienced_intent"] = intent
+    self_model["identity_stage"] = (
+        "early_childhood"
+        if cognitive_time["maturity"] < 0.25
+        else "developing_childhood"
+    )
+    if salience >= 0.75:
+        timeline = list(self_model.get("autobiographical_timeline", []))
+        timeline.append(
+            {
+                "tick": state.tick,
+                "intent": intent,
+                "summary": text[:160],
+                "salience": salience,
+                "recorded_at": now.isoformat(),
+            }
+        )
+        self_model["autobiographical_timeline"] = timeline[-30:]
+    state.self_model = self_model
 
 class NinoRuntime:
     def __init__(
@@ -116,6 +207,9 @@ class NinoRuntime:
             active_goals=[],
             energy=0.8,
             relation_state={"proactivity": default_proactivity_state()},
+            cognitive_time=_default_cognitive_time(),
+            self_model=_default_self_model(),
+            world_model=_default_world_model(),
             updated_at=datetime.now(timezone.utc),
         )
         self.state_store.put(initial)
@@ -166,11 +260,16 @@ class NinoRuntime:
         intent = str(request.percept_frame.get("intent", "unknown"))
         salience = _clamp01(float(request.percept_frame.get("salience", 0.5)))
         lowered = text.lower()
+        relation = request.relation_state
+        self_model = request.self_model
+        world_model = request.world_model
 
         if intent in {"greeting", "saludo"} or lowered in {"hola", "buenas", "hey"}:
+            name = relation.get("user_name")
+            greeting = f"Estoy aquí, {name}." if name else "Estoy aquí."
             action = {
                 "type": "external_message",
-                "payload": {"text": "Estoy aquí. Sigamos construyendo memoria juntos."},
+                "payload": {"text": f"{greeting} Sigamos construyendo memoria juntos."},
             }
             return PolicyResponse(
                 chosen_action=action,
@@ -202,6 +301,45 @@ class NinoRuntime:
                 chosen_action=action,
                 confidence=0.7,
                 reason_trace=["context_policy", "identity_signal"],
+            )
+
+        if "quién soy" in lowered or "quien soy" in lowered:
+            name = relation.get("user_name")
+            preferences = sorted(relation.get("preferences", {}).keys())
+            if name:
+                detail = f"Te tengo como {name}"
+                if preferences:
+                    detail += f", y recuerdo que te interesa {preferences[0]}"
+                detail += "."
+            else:
+                detail = "Todavía no tengo tu nombre guardado."
+            action = {"type": "external_message", "payload": {"text": detail}}
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.72,
+                reason_trace=["context_policy", "relation_self_query"],
+            )
+
+        if "quién eres" in lowered or "quien eres" in lowered:
+            stage = self_model.get("identity_stage", "early_childhood")
+            maturity = request.percept_frame.get("maturity")
+            concepts = sorted(
+                world_model.get("concept_counts", {}).items(),
+                key=lambda item: item[1],
+                reverse=True,
+            )[:3]
+            concept_text = ", ".join(key for key, _ in concepts) if concepts else "pocas cosas todavía"
+            text_out = (
+                f"Soy NIÑO, una mente persistente en etapa {stage}. "
+                f"Estoy aprendiendo de nuestra continuidad; ahora mi mundo gira alrededor de {concept_text}."
+            )
+            if maturity is not None:
+                text_out += f" Mi madurez cognitiva estimada es {maturity:.3f}."
+            action = {"type": "external_message", "payload": {"text": text_out}}
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.66,
+                reason_trace=["context_policy", "self_model_query"],
             )
 
         if "?" in text:
@@ -303,11 +441,17 @@ class NinoRuntime:
         retrieved = self.retrieve_memory(agent_id, retrieve_req)
 
         policy_req = PolicyRequest(
-            percept_frame=percept_frame,
+            percept_frame={
+                **percept_frame,
+                "maturity": state.cognitive_time.get("maturity", 0.0),
+            },
             drive_vector=state.drive_vector,
             memory_candidates=retrieved.memory_candidates,
             predicted_outcomes=[],
             safety_rules=["respect_privacy", "non_intrusive_proactivity"],
+            relation_state=state.relation_state,
+            self_model=state.self_model,
+            world_model=state.world_model,
         )
         decision = self.policy_decide(policy_req)
 
@@ -328,6 +472,7 @@ class NinoRuntime:
         state.updated_at = now
         state.energy = _clamp01(state.energy - 0.01)
         state.relation_state = _update_relation_from_percept(state.relation_state, percept_frame, now)
+        _update_cognitive_models(state, percept_frame, now)
         self.state_store.put(state)
 
         return {
@@ -336,4 +481,5 @@ class NinoRuntime:
             "confidence": decision.confidence,
             "reason_trace": decision.reason_trace,
             "retrieved_memory_count": len(retrieved.memory_candidates),
+            "maturity": state.cognitive_time["maturity"],
         }
