@@ -192,6 +192,24 @@ def test_http_api_internal_dream_creates_reflection(tmp_path) -> None:
     assert self_model["self_model"]["dream_reflections"]
 
 
+def test_http_api_scheduled_cycle_runs_pending_work(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+
+    _request(app, "POST", "/agents/api-agent/proactivity/configure", {"consent": "allowed"})
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6},
+    )
+    out = _request(app, "POST", "/agents/api-agent/internal/scheduled", {"now": now.isoformat()})
+
+    assert out["ran_dream"] is True
+    assert out["ran_proactivity"] is True
+    assert out["proactive_action"] is not None
+
+
 def test_http_api_reset_agent_clears_persistent_data(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

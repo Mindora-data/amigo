@@ -45,6 +45,16 @@ def _clamp01(value: float) -> float:
 def _normalize_text(value: str) -> str:
     return " ".join(re.findall(r"[\wáéíóúñ]+", value.lower()))
 
+def _without_accents(value: str) -> str:
+    return (
+        value.lower()
+        .replace("á", "a")
+        .replace("é", "e")
+        .replace("í", "i")
+        .replace("ó", "o")
+        .replace("ú", "u")
+    )
+
 def _clean_preference_value(value: str) -> str:
     words = _normalize_text(value).split()
     while words and words[0] in {"el", "la", "los", "las", "un", "una"}:
@@ -330,9 +340,11 @@ class NinoRuntime:
         intent = str(request.percept_frame.get("intent", "unknown"))
         salience = _clamp01(float(request.percept_frame.get("salience", 0.5)))
         lowered = text.lower()
+        plain = _without_accents(text)
         relation = request.relation_state
         self_model = request.self_model
         world_model = request.world_model
+        drives = request.drive_vector
 
         if intent in {"greeting", "saludo"} or lowered in {"hola", "buenas", "hey"}:
             name = relation.get("user_name")
@@ -410,6 +422,57 @@ class NinoRuntime:
                 chosen_action=action,
                 confidence=0.66,
                 reason_trace=["context_policy", "self_model_query"],
+            )
+
+        if "que te gusta" in plain or "que prefieres" in plain or "que te interesa" in plain:
+            concepts = sorted(
+                world_model.get("concept_counts", {}).items(),
+                key=lambda item: item[1],
+                reverse=True,
+            )[:3]
+            concept_text = ", ".join(key for key, _ in concepts)
+            if concept_text:
+                answer = (
+                    f"Ahora mismo me interesa entender mejor {concept_text}. "
+                    "No es un gusto humano; es una inclinación de curiosidad formada por lo que vivimos."
+                )
+            else:
+                answer = (
+                    "Todavía estoy formando mis preferencias. Me atrae explorar, recordar y entender lo que compartimos."
+                )
+            action = {"type": "external_message", "payload": {"text": answer}}
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.64,
+                reason_trace=["context_policy", "internal_preference_query"],
+            )
+
+        if "que quieres" in plain or "que buscas" in plain or "cual es tu objetivo" in plain:
+            goals = request.percept_frame.get("active_goals") or []
+            if goals:
+                answer = f"Ahora estoy orientado a: {', '.join(goals)}."
+            else:
+                answer = "Quiero construir continuidad: recordar, entenderte mejor y ordenar mi propia experiencia."
+            action = {"type": "external_message", "payload": {"text": answer}}
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.64,
+                reason_trace=["context_policy", "goal_query"],
+            )
+
+        if "como estas" in plain or "como te sientes" in plain:
+            energy = drives.get("energy", 0.0)
+            curiosity = drives.get("curiosity", 0.0)
+            coherence = drives.get("coherence", 0.0)
+            answer = (
+                f"Estoy estable: energía {energy:.2f}, curiosidad {curiosity:.2f}, coherencia {coherence:.2f}. "
+                "Lo traduzco como ganas de seguir aprendiendo sin perder continuidad."
+            )
+            action = {"type": "external_message", "payload": {"text": answer}}
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.62,
+                reason_trace=["context_policy", "internal_state_query"],
             )
 
         if "?" in text:
@@ -514,6 +577,7 @@ class NinoRuntime:
             percept_frame={
                 **percept_frame,
                 "maturity": state.cognitive_time.get("maturity", 0.0),
+                "active_goals": list(state.active_goals),
             },
             drive_vector=state.drive_vector,
             memory_candidates=retrieved.memory_candidates,

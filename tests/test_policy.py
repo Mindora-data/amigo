@@ -81,3 +81,36 @@ def test_policy_ignores_repeated_same_memory_on_followup() -> None:
 
     assert "me gusta piano" in out["action"]["payload"]["text"]
     assert "hablemos de piano. Lo añado" not in out["action"]["payload"]["text"]
+
+
+def test_policy_answers_internal_preference_query() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    runtime.tick("agent-policy", {"intent": "music", "text": "me gusta el piano", "salience": 0.9})
+
+    out = runtime.tick("agent-policy", {"intent": "question", "text": "que te gusta"})
+
+    assert "me interesa entender mejor" in out["action"]["payload"]["text"]
+    assert "piano" in out["action"]["payload"]["text"]
+    assert "internal_preference_query" in out["reason_trace"]
+
+
+def test_policy_answers_goal_query() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    runtime.tick("agent-policy", {"intent": "question", "text": "por qué me calma la música?", "salience": 0.9})
+
+    out = runtime.tick("agent-policy", {"intent": "question", "text": "que quieres"})
+
+    assert "orientado a" in out["action"]["payload"]["text"]
+    assert "reduce_uncertainty" in out["action"]["payload"]["text"]
+    assert "goal_query" in out["reason_trace"]
+
+
+def test_policy_answers_internal_state_query() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    runtime.tick("agent-policy", {"intent": "chat", "text": "hola"})
+
+    out = runtime.tick("agent-policy", {"intent": "question", "text": "como estas"})
+
+    assert "energía" in out["action"]["payload"]["text"]
+    assert "curiosidad" in out["action"]["payload"]["text"]
+    assert "internal_state_query" in out["reason_trace"]

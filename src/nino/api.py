@@ -13,6 +13,7 @@ from .internal_loop import InternalLoop
 from .memory import Episode
 from .persistence import create_persistent_runtime
 from .runtime import NinoRuntime
+from .scheduler import NinoScheduler
 
 
 APP_HTML = """<!doctype html>
@@ -114,6 +115,7 @@ APP_HTML = """<!doctype html>
           <button id="cycle" class="secondary">Ciclo interno</button>
         </div>
         <button id="dream" class="secondary" style="margin-top:8px;width:100%">Sueño</button>
+        <button id="scheduled" class="secondary" style="margin-top:8px;width:100%">Scheduler</button>
         <button id="reset" class="secondary" style="margin-top:8px;width:100%">Reset agente</button>
         <pre id="state">{}</pre>
       </div>
@@ -199,6 +201,11 @@ APP_HTML = """<!doctype html>
       print($("state"), out);
       await refreshState();
     };
+    $("scheduled").onclick = async () => {
+      const out = await api(agentPath("/internal/scheduled"), {method: "POST", body: "{}"});
+      print($("state"), out);
+      if (out.proactive_action) addEntry("niño · programado", out.proactive_action.payload.text);
+    };
     $("reset").onclick = async () => {
       const out = await api(agentPath("/reset"), {method: "POST", body: "{}"});
       log.textContent = "";
@@ -262,6 +269,7 @@ class NinoService:
     def __init__(self, runtime: NinoRuntime) -> None:
         self.runtime = runtime
         self.internal_loop = InternalLoop(runtime)
+        self.scheduler = NinoScheduler(runtime)
 
     def health(self) -> dict[str, Any]:
         return {"ok": True, "service": "nino"}
@@ -339,6 +347,11 @@ class NinoService:
         out = self.internal_loop.dream_cycle(agent_id, now=now)
         return _to_jsonable(out)
 
+    def scheduled_cycle(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        now = _parse_datetime(payload["now"]) if "now" in payload else None
+        out = self.scheduler.run_pending(agent_id, now=now)
+        return _to_jsonable(out)
+
 
 class NinoHttpApp:
     def __init__(self, service: NinoService) -> None:
@@ -402,6 +415,7 @@ class NinoHttpApp:
                     "POST /agents/{agent_id}/consolidate",
                     "POST /agents/{agent_id}/internal/cycle",
                     "POST /agents/{agent_id}/internal/dream",
+                    "POST /agents/{agent_id}/internal/scheduled",
                     "POST /agents/{agent_id}/proactivity/configure",
                     "POST /agents/{agent_id}/proactivity/evaluate",
                 ],
@@ -442,6 +456,8 @@ class NinoHttpApp:
             return "200 OK", self.service.internal_cycle(agent_id, payload)
         if method == "POST" and tail == ["internal", "dream"]:
             return "200 OK", self.service.dream_cycle(agent_id, payload)
+        if method == "POST" and tail == ["internal", "scheduled"]:
+            return "200 OK", self.service.scheduled_cycle(agent_id, payload)
 
         return "404 Not Found", {"error": "not_found"}
 
