@@ -94,3 +94,37 @@ def test_proactivity_blocks_sensitive_topics_even_with_consent() -> None:
 
     assert out.should_send is False
     assert "sensitive_topic_blocked" in out.reason_trace
+
+
+def test_proactivity_follows_up_open_question_from_world_model() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime.configure_proactivity("agent-p", ProactivitySettings(consent="allowed"))
+    runtime.tick(
+        "agent-p",
+        {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6, "confidence": 0.9},
+    )
+
+    out = runtime.evaluate_proactivity("agent-p", now=now)
+
+    assert out.should_send is True
+    assert out.action is not None
+    assert "música me calma" in out.action["payload"]["text"]
+    assert "open_question_follow_up" in out.reason_trace
+
+
+def test_proactivity_can_follow_relation_preference_without_salient_episode() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime.configure_proactivity("agent-p", ProactivitySettings(consent="allowed"))
+    runtime.tick(
+        "agent-p",
+        {"intent": "chat", "text": "me gusta el piano", "salience": 0.4, "confidence": 0.9},
+    )
+
+    out = runtime.evaluate_proactivity("agent-p", now=now)
+
+    assert out.should_send is True
+    assert out.action is not None
+    assert "piano" in out.action["payload"]["text"]
+    assert "preference_continuity_follow_up" in out.reason_trace

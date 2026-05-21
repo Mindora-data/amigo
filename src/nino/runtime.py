@@ -179,6 +179,68 @@ def _update_cognitive_models(
         self_model["autobiographical_timeline"] = timeline[-30:]
     state.self_model = self_model
 
+def _regulate_drives(state: AgentState, percept_frame: dict[str, Any]) -> None:
+    text = str(percept_frame.get("text", "")).strip()
+    salience = _clamp01(float(percept_frame.get("salience", 0.5)))
+    confidence = _clamp01(float(percept_frame.get("confidence", 0.8)))
+    known_concepts = set(state.world_model.get("concept_counts", {}).keys())
+    tokens = set(_tokens_for_model(text))
+    novelty = len(tokens.difference(known_concepts)) / max(len(tokens), 1)
+    open_question_pressure = min(len(state.world_model.get("open_questions", [])) / 10.0, 1.0)
+    relation_depth = min(int(state.relation_state.get("interaction_count", 0)) / 50.0, 1.0)
+    maturity = _clamp01(float(state.cognitive_time.get("maturity", 0.0)))
+
+    drives = dict(state.drive_vector)
+    drives["curiosity"] = _clamp01(
+        drives.get("curiosity", 0.5)
+        + (0.05 * novelty)
+        + (0.03 * open_question_pressure)
+        - (0.02 * maturity)
+    )
+    drives["attachment"] = _clamp01(
+        drives.get("attachment", 0.5)
+        + (0.03 * relation_depth)
+        + (0.02 if state.relation_state.get("user_name") else 0.0)
+    )
+    drives["coherence"] = _clamp01(
+        drives.get("coherence", 0.5)
+        + (0.04 * maturity)
+        + (0.04 * confidence)
+        - (0.02 * novelty)
+    )
+    drives["exploration"] = _clamp01(
+        drives.get("exploration", 0.5)
+        + (0.04 * drives["curiosity"])
+        - (0.02 * drives.get("safety", 0.5))
+    )
+    drives["safety"] = _clamp01(
+        drives.get("safety", 0.5)
+        + (0.02 * (1.0 - confidence))
+        - (0.01 * relation_depth)
+    )
+    drives["energy"] = _clamp01(
+        drives.get("energy", state.energy)
+        - 0.01
+        - (0.01 * salience)
+        + (0.005 * maturity)
+    )
+    state.drive_vector = drives
+
+def _derive_active_goals(state: AgentState) -> list[str]:
+    goals: list[str] = []
+    drives = state.drive_vector
+    if drives.get("curiosity", 0.0) >= 0.58 or state.world_model.get("open_questions"):
+        goals.append("reduce_uncertainty")
+    if drives.get("attachment", 0.0) >= 0.58 or state.relation_state.get("user_name"):
+        goals.append("maintain_relationship_continuity")
+    if drives.get("coherence", 0.0) >= 0.55:
+        goals.append("consolidate_self_narrative")
+    if state.relation_state.get("preferences"):
+        goals.append("revisit_user_preferences")
+    if drives.get("energy", 1.0) <= 0.25:
+        goals.append("recover_energy")
+    return goals[:5]
+
 class NinoRuntime:
     def __init__(
         self,
@@ -233,7 +295,15 @@ class NinoRuntime:
         record_send: bool = True,
     ) -> ProactivityResponse:
         state = self.load_or_init_state(agent_id)
-        result = self.proactivity.evaluate(agent_id, state.relation_state, now=now)
+        result = self.proactivity.evaluate(
+            agent_id,
+            state.relation_state,
+            now=now,
+            self_model=state.self_model,
+            world_model=state.world_model,
+            drive_vector=state.drive_vector,
+            active_goals=state.active_goals,
+        )
         if result.should_send and record_send:
             sent_at = now or datetime.now(timezone.utc)
             state.relation_state = record_proactive_send(state.relation_state, sent_at)
@@ -470,9 +540,11 @@ class NinoRuntime:
 
         state.tick += 1
         state.updated_at = now
-        state.energy = _clamp01(state.energy - 0.01)
         state.relation_state = _update_relation_from_percept(state.relation_state, percept_frame, now)
+        _regulate_drives(state, percept_frame)
         _update_cognitive_models(state, percept_frame, now)
+        state.active_goals = _derive_active_goals(state)
+        state.energy = _clamp01(state.drive_vector.get("energy", state.energy))
         self.state_store.put(state)
 
         return {
@@ -482,4 +554,5 @@ class NinoRuntime:
             "reason_trace": decision.reason_trace,
             "retrieved_memory_count": len(retrieved.memory_candidates),
             "maturity": state.cognitive_time["maturity"],
+            "active_goals": list(state.active_goals),
         }

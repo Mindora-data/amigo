@@ -89,6 +89,28 @@ def _contains_sensitive_term(text: str) -> bool:
     lowered = text.lower()
     return any(term in lowered for term in SENSITIVE_TERMS)
 
+def _latest_open_question(world_model: dict[str, Any]) -> dict[str, Any] | None:
+    questions = list(world_model.get("open_questions", []))
+    return questions[-1] if questions else None
+
+def _top_preference(relation_state: dict[str, Any]) -> str | None:
+    preferences = relation_state.get("preferences", {})
+    if not isinstance(preferences, dict) or not preferences:
+        return None
+    ranked = sorted(
+        preferences.items(),
+        key=lambda item: (
+            float(item[1].get("salience", 0.0)) if isinstance(item[1], dict) else 0.0,
+            str(item[0]),
+        ),
+        reverse=True,
+    )
+    return str(ranked[0][0])
+
+def _latest_autobiographical_memory(self_model: dict[str, Any]) -> dict[str, Any] | None:
+    timeline = list(self_model.get("autobiographical_timeline", []))
+    return timeline[-1] if timeline else None
+
 
 class ProactivityEngine:
     def __init__(self, episode_store: InMemoryEpisodeStore) -> None:
@@ -99,8 +121,16 @@ class ProactivityEngine:
         agent_id: str,
         relation_state: dict[str, Any],
         now: datetime | None = None,
+        self_model: dict[str, Any] | None = None,
+        world_model: dict[str, Any] | None = None,
+        drive_vector: dict[str, float] | None = None,
+        active_goals: list[str] | None = None,
     ) -> ProactivityResponse:
         now = now or datetime.now(timezone.utc)
+        self_model = self_model or {}
+        world_model = world_model or {}
+        drive_vector = drive_vector or {}
+        active_goals = active_goals or []
         proactivity = dict(relation_state.get("proactivity", default_proactivity_state()))
         settings = normalize_settings(proactivity.get("settings"))
         reason_trace = ["safe_proactivity_policy"]
@@ -127,24 +157,73 @@ class ProactivityEngine:
                 reason_trace.append("minimum_interval")
                 return ProactivityResponse(False, None, reason_trace, next_allowed)
 
-        candidate = _latest_candidate(self.episode_store.list_for_agent(agent_id), now)
-        if candidate is None:
-            reason_trace.append("no_proactive_candidate")
-            return ProactivityResponse(False, None, reason_trace)
-
-        if _contains_sensitive_term(candidate.text):
-            reason_trace.append("sensitive_topic_blocked")
-            return ProactivityResponse(False, None, reason_trace)
-
-        reason_trace.append("salient_memory_follow_up")
-        return ProactivityResponse(
-            should_send=True,
-            action={
-                "type": "external_message",
-                "payload": {
-                    "text": "Estaba pensando en algo que compartiste. ¿Quieres retomarlo?",
-                    "source_episode_id": candidate.episode_id,
+        open_question = _latest_open_question(world_model)
+        if open_question and not _contains_sensitive_term(str(open_question.get("text", ""))):
+            reason_trace.extend(["goal_reduce_uncertainty", "open_question_follow_up"])
+            return ProactivityResponse(
+                should_send=True,
+                action={
+                    "type": "external_message",
+                    "payload": {
+                        "text": f"Me quedé pensando en esto: {open_question['text']} ¿Quieres que lo retomemos?",
+                        "source": "world_model.open_questions",
+                    },
                 },
-            },
-            reason_trace=reason_trace,
-        )
+                reason_trace=reason_trace,
+            )
+
+        candidate = _latest_candidate(self.episode_store.list_for_agent(agent_id), now)
+        if candidate is not None:
+            if _contains_sensitive_term(candidate.text):
+                reason_trace.append("sensitive_topic_blocked")
+                return ProactivityResponse(False, None, reason_trace)
+
+            reason_trace.append("salient_memory_follow_up")
+            return ProactivityResponse(
+                should_send=True,
+                action={
+                    "type": "external_message",
+                    "payload": {
+                        "text": "Estaba pensando en algo que compartiste. ¿Quieres retomarlo?",
+                        "source_episode_id": candidate.episode_id,
+                    },
+                },
+                reason_trace=reason_trace,
+            )
+
+        preference = _top_preference(relation_state)
+        if preference and (
+            "revisit_user_preferences" in active_goals
+            or drive_vector.get("attachment", 0.0) >= 0.58
+            or drive_vector.get("curiosity", 0.0) >= 0.58
+        ):
+            reason_trace.append("preference_continuity_follow_up")
+            return ProactivityResponse(
+                should_send=True,
+                action={
+                    "type": "external_message",
+                    "payload": {
+                        "text": f"He estado pensando en {preference}. ¿Quieres que sigamos explorándolo?",
+                        "source": "relation_state.preferences",
+                    },
+                },
+                reason_trace=reason_trace,
+            )
+
+        autobiographical = _latest_autobiographical_memory(self_model)
+        if autobiographical and drive_vector.get("coherence", 0.0) >= 0.58:
+            reason_trace.append("autobiographical_continuity_follow_up")
+            return ProactivityResponse(
+                should_send=True,
+                action={
+                    "type": "external_message",
+                    "payload": {
+                        "text": f"Estoy integrando algo de nuestra historia: {autobiographical.get('summary', '')}.",
+                        "source": "self_model.autobiographical_timeline",
+                    },
+                },
+                reason_trace=reason_trace,
+            )
+
+        reason_trace.append("no_proactive_candidate")
+        return ProactivityResponse(False, None, reason_trace)

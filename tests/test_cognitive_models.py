@@ -23,6 +23,21 @@ def test_tick_advances_cognitive_time_and_world_model() -> None:
     assert len(state.self_model["autobiographical_timeline"]) == 2
 
 
+def test_tick_regulates_drives_and_active_goals() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+
+    out = runtime.tick(
+        "agent-cog",
+        {"intent": "question", "text": "por qué la música me calma?", "salience": 0.9, "confidence": 0.7},
+    )
+    state = runtime.load_or_init_state("agent-cog")
+
+    assert state.drive_vector["curiosity"] > 0.5
+    assert state.drive_vector["coherence"] > 0.5
+    assert "reduce_uncertainty" in state.active_goals
+    assert "reduce_uncertainty" in out["active_goals"]
+
+
 def test_policy_answers_self_model_question() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     runtime.tick("agent-cog", {"intent": "music", "text": "me gusta el piano", "salience": 0.9})
