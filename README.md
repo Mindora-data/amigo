@@ -26,6 +26,7 @@ GET  /agents/{agent_id}/episodes
 GET  /agents/{agent_id}/relation
 GET  /agents/{agent_id}/self-model
 GET  /agents/{agent_id}/world-model
+GET  /agents/{agent_id}/narrative
 POST /agents/{agent_id}/reset
 POST /agents/{agent_id}/memory/retrieve
 POST /agents/{agent_id}/consolidate

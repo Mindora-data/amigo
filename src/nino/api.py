@@ -147,6 +147,7 @@ APP_HTML = """<!doctype html>
           <button id="selfModel" class="secondary">Self</button>
           <button id="worldModel" class="secondary">Mundo</button>
         </div>
+        <button id="narrative" class="secondary" style="margin-top:8px;width:100%">Narrativa</button>
         <pre id="memory">{}</pre>
       </div>
     </aside>
@@ -230,6 +231,7 @@ APP_HTML = """<!doctype html>
     $("relation").onclick = async () => print($("memory"), await api(agentPath("/relation")));
     $("selfModel").onclick = async () => print($("memory"), await api(agentPath("/self-model")));
     $("worldModel").onclick = async () => print($("memory"), await api(agentPath("/world-model")));
+    $("narrative").onclick = async () => print($("memory"), await api(agentPath("/narrative")));
     refreshState();
   </script>
 </body>
@@ -295,6 +297,9 @@ class NinoService:
     def get_world_model(self, agent_id: str) -> dict[str, Any]:
         state = self.runtime.load_or_init_state(agent_id)
         return {"world_model": _to_jsonable(state.world_model)}
+
+    def get_narrative(self, agent_id: str) -> dict[str, Any]:
+        return {"narrative": _to_jsonable(self.runtime.build_narrative(agent_id))}
 
     def reset_agent(self, agent_id: str) -> dict[str, Any]:
         return self.runtime.reset_agent(agent_id)
@@ -410,6 +415,7 @@ class NinoHttpApp:
                     "GET /agents/{agent_id}/relation",
                     "GET /agents/{agent_id}/self-model",
                     "GET /agents/{agent_id}/world-model",
+                    "GET /agents/{agent_id}/narrative",
                     "POST /agents/{agent_id}/reset",
                     "POST /agents/{agent_id}/memory/retrieve",
                     "POST /agents/{agent_id}/consolidate",
@@ -442,6 +448,8 @@ class NinoHttpApp:
             return "200 OK", self.service.get_self_model(agent_id)
         if method == "GET" and tail == ["world-model"]:
             return "200 OK", self.service.get_world_model(agent_id)
+        if method == "GET" and tail == ["narrative"]:
+            return "200 OK", self.service.get_narrative(agent_id)
         if method == "POST" and tail == ["reset"]:
             return "200 OK", self.service.reset_agent(agent_id)
         if method == "POST" and tail == ["memory", "retrieve"]:

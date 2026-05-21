@@ -61,6 +61,12 @@ def _clean_preference_value(value: str) -> str:
         words.pop(0)
     return " ".join(words)
 
+def _detect_emotional_tone(text: str) -> str | None:
+    for tone, pattern in EMOTION_PATTERNS.items():
+        if pattern.search(text):
+            return tone
+    return None
+
 def _update_relation_from_percept(
     relation_state: dict[str, Any],
     percept_frame: dict[str, Any],
@@ -89,6 +95,19 @@ def _update_relation_from_percept(
             }
             relation["preferences"] = preferences
 
+    emotional_tone = _detect_emotional_tone(text)
+    if emotional_tone is not None:
+        signals = list(relation.get("emotional_signals", []))
+        signals.append(
+            {
+                "tone": emotional_tone,
+                "text": text[:160],
+                "observed_at": now.isoformat(),
+            }
+        )
+        relation["emotional_signals"] = signals[-30:]
+        relation["last_emotional_tone"] = emotional_tone
+
     return relation
 
 PREFERENCE_RE = re.compile(
@@ -96,6 +115,11 @@ PREFERENCE_RE = re.compile(
     re.IGNORECASE,
 )
 NAME_RE = re.compile(r"\bsoy\s+(?P<name>[\wáéíóúñ]+)", re.IGNORECASE)
+EMOTION_PATTERNS = {
+    "sad": re.compile(r"\b(triste|solo|sola|mal|baj[oó]n|abatido|abatida)\b", re.IGNORECASE),
+    "happy": re.compile(r"\b(contento|contenta|feliz|bien|alegre|motivado|motivada)\b", re.IGNORECASE),
+    "stressed": re.compile(r"\b(estresado|estresada|agobiado|agobiada|preocupado|preocupada|cansado|cansada)\b", re.IGNORECASE),
+}
 GENERIC_INTENTS = {"chat", "question", "greeting", "saludo", "unknown"}
 STOPWORDS = {
     "el", "la", "los", "las", "un", "una", "de", "del", "que", "y", "a", "en",
@@ -110,6 +134,7 @@ def _default_self_model() -> dict[str, Any]:
     return {
         "identity_stage": "early_childhood",
         "interaction_count": 0,
+        "affect_state": {"mood": "stable", "intensity": 0.2},
         "known_capabilities": ["remember_episodes", "retrieve_context", "safe_proactivity"],
         "known_limits": ["minimal_language_policy", "no_background_daemon_yet"],
         "autobiographical_timeline": [],
@@ -187,6 +212,18 @@ def _update_cognitive_models(
             }
         )
         self_model["autobiographical_timeline"] = timeline[-30:]
+    emotional_tone = _detect_emotional_tone(text)
+    if emotional_tone is not None:
+        affect = dict(self_model.get("affect_state", {}))
+        affect["mood"] = {
+            "sad": "concerned",
+            "happy": "warm",
+            "stressed": "attentive",
+        }[emotional_tone]
+        affect["intensity"] = round(max(float(affect.get("intensity", 0.2)), salience), 3)
+        affect["source"] = "user_emotional_signal"
+        affect["updated_at"] = now.isoformat()
+        self_model["affect_state"] = affect
     state.self_model = self_model
 
 def _regulate_drives(state: AgentState, percept_frame: dict[str, Any]) -> None:
@@ -335,6 +372,48 @@ class NinoRuntime:
     def retrieve_memory(self, agent_id: str, request: RetrieveRequest) -> RetrieveResponse:
         return self.retriever.retrieve(agent_id=agent_id, request=request, top_k=5)
 
+    def build_narrative(self, agent_id: str) -> dict[str, Any]:
+        state = self.load_or_init_state(agent_id)
+        relation = state.relation_state
+        self_model = state.self_model
+        world_model = state.world_model
+        name = relation.get("user_name", "el usuario")
+        preferences = sorted(relation.get("preferences", {}).keys())
+        concepts = sorted(
+            world_model.get("concept_counts", {}).items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )[:5]
+        concept_names = [key for key, _ in concepts]
+        reflections = list(self_model.get("dream_reflections", []))
+        affect = self_model.get("affect_state", {})
+
+        summary_parts = [
+            f"Soy NIÑO en etapa {self_model.get('identity_stage', 'early_childhood')}.",
+            f"He vivido {int(state.cognitive_time.get('age_ticks', 0))} ticks con {name}.",
+        ]
+        if preferences:
+            summary_parts.append(f"Recuerdo preferencias como: {', '.join(preferences[:4])}.")
+        if concept_names:
+            summary_parts.append(f"Mi mundo reciente se organiza alrededor de: {', '.join(concept_names)}.")
+        if reflections:
+            summary_parts.append(f"Última reflexión de sueño: {reflections[-1].get('summary', '')}")
+        if affect:
+            summary_parts.append(f"Mi estado afectivo interno está en modo {affect.get('mood', 'stable')}.")
+
+        return {
+            "agent_id": agent_id,
+            "summary": " ".join(summary_parts),
+            "identity_stage": self_model.get("identity_stage", "early_childhood"),
+            "maturity": state.cognitive_time.get("maturity", 0.0),
+            "active_goals": list(state.active_goals),
+            "known_user": name,
+            "preferences": preferences,
+            "dominant_concepts": concept_names,
+            "dream_reflection_count": len(reflections),
+            "affect_state": affect,
+        }
+
     def policy_decide(self, request: PolicyRequest) -> PolicyResponse:
         text = str(request.percept_frame.get("text", "")).strip()
         intent = str(request.percept_frame.get("intent", "unknown"))
@@ -345,6 +424,7 @@ class NinoRuntime:
         self_model = request.self_model
         world_model = request.world_model
         drives = request.drive_vector
+        emotional_tone = _detect_emotional_tone(text)
 
         if intent in {"greeting", "saludo"} or lowered in {"hola", "buenas", "hey"}:
             name = relation.get("user_name")
@@ -383,6 +463,20 @@ class NinoRuntime:
                 chosen_action=action,
                 confidence=0.7,
                 reason_trace=["context_policy", "identity_signal"],
+            )
+
+        if emotional_tone is not None:
+            if emotional_tone == "sad":
+                answer = "Te noto triste. No voy a invadir, pero me quedo cerca y lo guardo como algo importante de este momento."
+            elif emotional_tone == "stressed":
+                answer = "Te noto con carga. Puedo acompañarte despacio y recordar que ahora necesitas menos ruido, no más presión."
+            else:
+                answer = "Me gusta registrar que estás bien. Ese tipo de momentos también forman nuestra historia."
+            action = {"type": "external_message", "payload": {"text": answer}}
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.66,
+                reason_trace=["context_policy", "emotional_signal"],
             )
 
         if "quién soy" in lowered or "quien soy" in lowered:

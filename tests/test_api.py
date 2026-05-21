@@ -104,6 +104,18 @@ def test_http_api_exposes_self_and_world_models(tmp_path) -> None:
     assert world_model["world_model"]["concept_counts"]["piano"] == 1
 
 
+def test_http_api_exposes_narrative(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "soy Pablo", "salience": 0.8})
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "music", "text": "me gusta el piano", "salience": 0.9})
+    narrative = _request(app, "GET", "/agents/api-agent/narrative")
+
+    assert narrative["narrative"]["known_user"] == "Pablo"
+    assert "piano" in narrative["narrative"]["preferences"]
+    assert "Soy NIÑO" in narrative["narrative"]["summary"]
+
+
 def test_http_api_proactivity_consent_and_frequency(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
