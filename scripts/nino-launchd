@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LABEL="${NINO_LAUNCHD_LABEL:-local.nino.server}"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+PYTHON_BIN="${NINO_PYTHON:-$ROOT_DIR/.venv/bin/python}"
+DB_PATH="${NINO_DB_PATH:-$ROOT_DIR/data/nino.db}"
+HOST="${NINO_HOST:-127.0.0.1}"
+PORT="${NINO_PORT:-8000}"
+SCHEDULER_INTERVAL="${NINO_SCHEDULER_INTERVAL:-60}"
+LOG_FILE="${NINO_LOG_FILE:-$ROOT_DIR/data/nino-launchd.log}"
+ERR_FILE="${NINO_ERR_FILE:-$ROOT_DIR/data/nino-launchd.err.log}"
+
+usage() {
+  cat <<EOF
+Usage: scripts/nino-launchd <command>
+
+Commands:
+  install    Install and start NIÑO as a macOS user service.
+  uninstall  Stop and remove the user service.
+  start      Start the installed service.
+  stop       Stop the installed service.
+  status     Show launchd status.
+  print      Print the generated plist path.
+EOF
+}
+
+install() {
+  mkdir -p "$HOME/Library/LaunchAgents" "$ROOT_DIR/data"
+  cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$LABEL</string>
+  <key>WorkingDirectory</key>
+  <string>$ROOT_DIR</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$PYTHON_BIN</string>
+    <string>-m</string>
+    <string>nino.server</string>
+    <string>--db</string>
+    <string>$DB_PATH</string>
+    <string>--host</string>
+    <string>$HOST</string>
+    <string>--port</string>
+    <string>$PORT</string>
+    <string>--scheduler-interval</string>
+    <string>$SCHEDULER_INTERVAL</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONPATH</key>
+    <string>$ROOT_DIR/src</string>
+    <key>NINO_LLM_PROVIDER</key>
+    <string>${NINO_LLM_PROVIDER:-}</string>
+    <key>NINO_CLAUDE_MODEL</key>
+    <string>${NINO_CLAUDE_MODEL:-claude-sonnet-4-5}</string>
+    <key>ANTHROPIC_API_KEY</key>
+    <string>${ANTHROPIC_API_KEY:-}</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>$LOG_FILE</string>
+  <key>StandardErrorPath</key>
+  <string>$ERR_FILE</string>
+</dict>
+</plist>
+EOF
+  launchctl unload "$PLIST" >/dev/null 2>&1 || true
+  launchctl load "$PLIST"
+  echo "Installed: $PLIST"
+}
+
+uninstall() {
+  launchctl unload "$PLIST" >/dev/null 2>&1 || true
+  rm -f "$PLIST"
+  echo "Removed: $PLIST"
+}
+
+case "${1:-}" in
+  install) install ;;
+  uninstall) uninstall ;;
+  start) launchctl load "$PLIST" ;;
+  stop) launchctl unload "$PLIST" ;;
+  status) launchctl list "$LABEL" ;;
+  print) echo "$PLIST" ;;
+  -h|--help|help|"") usage ;;
+  *)
+    echo "Unknown command: ${1:-}" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

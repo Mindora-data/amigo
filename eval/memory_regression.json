@@ -1,0 +1,40 @@
+{
+  "name": "memory_regression",
+  "agent_id": "eval-memory",
+  "steps": [
+    {
+      "intent": "chat",
+      "text": "soy Pablo",
+      "salience": 0.8,
+      "confidence": 0.9
+    },
+    {
+      "intent": "preference",
+      "text": "prefiero trabajar por sprints claros",
+      "salience": 0.9,
+      "confidence": 0.95
+    },
+    {
+      "intent": "project",
+      "text": "el proyecto bebe esta en Sprint 6 con Claude y memoria persistente",
+      "salience": 0.9,
+      "confidence": 0.9
+    }
+  ],
+  "queries": [
+    {
+      "query_intent": "sprints",
+      "expected_terms": ["sprints"]
+    },
+    {
+      "query_intent": "Claude memoria",
+      "expected_terms": ["claude", "memoria"]
+    }
+  ],
+  "conversation_questions": [
+    {
+      "text": "que recuerdas de mi?",
+      "expected_terms": ["pablo", "sprints"]
+    }
+  ]
+}

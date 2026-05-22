@@ -3,6 +3,7 @@ from __future__ import annotations
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import json
+from pathlib import Path
 
 from nino.api import create_app
 from nino.api import create_app_with_runtime
@@ -57,6 +58,33 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"Salud" in body
     assert b"Perfil" in body
     assert b"Export seguro" in body
+    assert b"metricTick" in body
+    assert b"Consolidar" in body
+    assert b"loadConversation" in body
+    assert b"/conversation" in body
+    assert b"/llm/status" in body
+    assert b"/llm/probe" in body
+    assert b"Marcar entregado" in body
+    assert b"clear-delivered" in body
+    assert b"/operations/backup" in body
+    assert b"Backup DB" in body
+    assert b"Descargar seguro" in body
+    assert b"Descargar completo" in body
+    assert b"Importar" in body
+    assert b"/agents/import" in body
+    assert b"/agents/prune" in body
+    assert b"Limpiar coincidentes" in body
+    assert b"Guardar calidad" in body
+    assert b"/eval/conversation/history" in body
+    assert b"/audit" in body
+    assert b"/permissions/configure" in body
+    assert b"Permisos" in body
+    assert b"Tareas" in body
+    assert b"/tasks/run-next" in body
+    assert b"activeStart" in body
+    assert b"activeEnd" in body
+    assert b"/operations/mode" in body
+    assert b"/operations/claude" in body
 
 
 def test_http_api_ticks_and_restores_state(tmp_path) -> None:
@@ -64,6 +92,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
 
     root = _request(app, "GET", "/")
     health = _request(app, "GET", "/health")
+    mode = _request(app, "GET", "/operations/mode")
+    claude = _request(app, "GET", "/operations/claude")
     tick = _request(
         app,
         "POST",
@@ -72,28 +102,85 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     )
     state = _request(app, "GET", "/agents/api-agent/state")
     episodes = _request(app, "GET", "/agents/api-agent/episodes")
+    conversation = _request(app, "GET", "/agents/api-agent/conversation")
+    llm = _request(app, "GET", "/agents/api-agent/llm/status")
+    probe = _request(app, "POST", "/agents/api-agent/llm/probe", {})
+    audit = _request(app, "GET", "/agents/api-agent/audit")
+    permissions = _request(app, "GET", "/agents/api-agent/permissions")
+    configured_permission = _request(
+        app,
+        "POST",
+        "/agents/api-agent/permissions/configure",
+        {"action_type": "tool_call", "allowed": True, "delivery": "inbox_only"},
+    )
+    queued_task = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tasks",
+        {"text": "recordar respirar", "description": "recordatorio"},
+    )
+    tasks_before_run = _request(app, "GET", "/agents/api-agent/tasks")
+    ran_task = _request(app, "POST", "/agents/api-agent/tasks/run-next", {})
+    tasks_after_run = _request(app, "GET", "/agents/api-agent/tasks")
 
     assert root["service"] == "nino"
     assert "GET /health" in root["endpoints"]
+    assert "GET /operations/mode" in root["endpoints"]
+    assert "GET /operations/claude" in root["endpoints"]
+    assert "POST /agents/{agent_id}/tasks/run-next" in root["endpoints"]
     assert health == {"ok": True, "service": "nino"}
+    assert mode["local_first"] is True
+    assert mode["network_required_for_core"] is False
+    assert mode["external_llm"]["enabled"] is False
+    assert mode["external_llm"]["config"]["enabled"] is False
+    assert "memory" in mode["offline_capabilities"]
+    assert claude["configured"] is False
+    assert claude["api_key_present"] is False
+    assert "NINO_LLM_PROVIDER" in claude["missing"]
     assert tick["tick"] == 1
     assert state["tick"] == 1
     assert len(episodes["episodes"]) == 1
     assert episodes["episodes"][0]["text"] == "me gusta piano"
+    assert [turn["role"] for turn in conversation["turns"]] == ["user", "assistant"]
+    assert llm["llm"]["enabled"] is False
+    assert probe["probe"]["error"] == "llm_not_configured"
+    assert audit["audit"][0]["type"] == "tick_decision"
+    assert permissions["permissions"]["tool_call"]["allowed"] is False
+    assert configured_permission["permissions"]["tool_call"]["allowed"] is True
+    assert queued_task["ok"] is True
+    assert tasks_before_run["tasks"][0]["status"] == "pending"
+    assert ran_task["ok"] is True
+    assert tasks_after_run["tasks"][0]["status"] == "completed"
+
+
+def test_http_api_creates_database_backup(tmp_path) -> None:
+    db_path = tmp_path / "nino.db"
+    app = create_app(db_path)
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "hola"})
+
+    backup = _request(app, "POST", "/operations/backup", {})
+
+    assert backup["ok"] is True
+    assert (tmp_path / "backups").exists()
+    assert Path(backup["path"]).exists()
 
 
 def test_http_api_exposes_autonomy_status_and_run_once(tmp_path) -> None:
-    runtime = create_persistent_runtime(tmp_path / "nino.db")
+    db_path = tmp_path / "nino.db"
+    runtime = create_persistent_runtime(db_path)
     runtime.tick("api-auto", {"intent": "chat", "text": "hola"})
     autonomy = BackgroundAutonomy(runtime, interval_seconds=10)
-    app = create_app_with_runtime(runtime, autonomy=autonomy)
+    app = create_app_with_runtime(runtime, autonomy=autonomy, db_path=db_path)
 
     status = _request(app, "GET", "/autonomy/status")
     run_once = _request(app, "POST", "/autonomy/run-once", {"now": "2026-05-21T10:00:00+00:00"})
+    mode = _request(app, "GET", "/operations/mode")
 
     assert status["enabled"] is True
     assert run_once["enabled"] is True
     assert run_once["results"][0]["agent_id"] == "api-auto"
+    assert mode["storage"]["type"] == "sqlite"
+    assert mode["storage"]["path"] == str(db_path)
 
 
 def test_http_api_lists_agents(tmp_path) -> None:
@@ -191,11 +278,15 @@ def test_http_api_privacy_inbox_decay_and_quality(tmp_path) -> None:
     inbox = _request(app, "GET", "/agents/api-agent/proactivity/inbox")
     decay = _request(app, "POST", "/agents/api-agent/memory/decay", {"factor": 0.5})
     quality = _request(app, "GET", "/agents/api-agent/eval/conversation")
+    recorded = _request(app, "POST", "/agents/api-agent/eval/conversation/record", {})
+    history = _request(app, "GET", "/agents/api-agent/eval/conversation/history")
 
     assert safe["export"]["redacted"] is True
     assert inbox["inbox"]
     assert decay["factor"] == 0.5
     assert quality["quality"]["episode_count"] == 2
+    assert recorded["history_count"] == 1
+    assert len(history["history"]) == 1
 
 
 def test_http_api_inbox_delivery_memory_search_and_snapshot(tmp_path) -> None:
@@ -221,11 +312,17 @@ def test_http_api_proactivity_consent_and_frequency(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
 
-    _request(
+    configured = _request(
         app,
         "POST",
         "/agents/api-agent/proactivity/configure",
-        {"consent": "allowed", "max_messages_per_day": 1, "min_hours_between": 0},
+        {
+            "consent": "allowed",
+            "max_messages_per_day": 1,
+            "min_hours_between": 0,
+            "active_hours_start": 9,
+            "active_hours_end": 18,
+        },
     )
     _request(
         app,
@@ -254,6 +351,7 @@ def test_http_api_proactivity_consent_and_frequency(tmp_path) -> None:
     assert first["should_send"] is True
     assert second["should_send"] is False
     assert "daily_frequency_cap" in second["reason_trace"]
+    assert configured["state"]["relation_state"]["proactivity"]["settings"]["active_hours_start"] == 9
 
 
 def test_http_api_internal_cycle_consolidates_memory(tmp_path) -> None:

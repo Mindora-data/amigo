@@ -37,6 +37,8 @@ def normalize_settings(raw: dict[str, Any] | None) -> ProactivitySettings:
         consent=consent,
         max_messages_per_day=max(0, int(raw.get("max_messages_per_day", 1))),
         min_hours_between=max(0.0, float(raw.get("min_hours_between", 24.0))),
+        active_hours_start=min(23, max(0, int(raw.get("active_hours_start", 0)))),
+        active_hours_end=min(24, max(1, int(raw.get("active_hours_end", 24)))),
     )
 
 
@@ -70,6 +72,29 @@ def _parse_sent_at(values: list[str]) -> list[datetime]:
         except ValueError:
             continue
     return parsed
+
+def _inside_active_hours(now: datetime, settings: ProactivitySettings) -> bool:
+    start = settings.active_hours_start
+    end = settings.active_hours_end
+    if start == 0 and end == 24:
+        return True
+    current = now.hour
+    if start < end:
+        return start <= current < end
+    if start > end:
+        return current >= start or current < end
+    return False
+
+def _next_active_hour(now: datetime, settings: ProactivitySettings) -> datetime | None:
+    if _inside_active_hours(now, settings):
+        return None
+    start = settings.active_hours_start
+    candidate = now.replace(hour=start, minute=0, second=0, microsecond=0)
+    if candidate <= now:
+        candidate += timedelta(days=1)
+    if settings.active_hours_start > settings.active_hours_end and now.hour < settings.active_hours_end:
+        candidate -= timedelta(days=1)
+    return candidate
 
 
 def _latest_candidate(episodes: list[Episode], now: datetime) -> Episode | None:
@@ -142,6 +167,10 @@ class ProactivityEngine:
                 else f"proactivity_{settings.consent}"
             )
             return ProactivityResponse(False, None, reason_trace)
+
+        if not _inside_active_hours(now, settings):
+            reason_trace.append("outside_active_hours")
+            return ProactivityResponse(False, None, reason_trace, _next_active_hour(now, settings))
 
         sent_at = _parse_sent_at(list(proactivity.get("sent_at", [])))
         recent_sent = [sent for sent in sent_at if sent >= now - timedelta(hours=24)]

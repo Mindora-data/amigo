@@ -59,6 +59,8 @@ class ProactivitySettings:
     consent: ProactivityConsent = "unknown"
     max_messages_per_day: int = 1
     min_hours_between: float = 24.0
+    active_hours_start: int = 0
+    active_hours_end: int = 24
 
 @dataclass(slots=True)
 class ProactivityResponse:

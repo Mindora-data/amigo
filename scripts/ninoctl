@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DATA_DIR="${NINO_DATA_DIR:-$ROOT_DIR/data}"
+DB_PATH="${NINO_DB_PATH:-$DATA_DIR/nino.db}"
+HOST="${NINO_HOST:-127.0.0.1}"
+PORT="${NINO_PORT:-8000}"
+SCHEDULER_INTERVAL="${NINO_SCHEDULER_INTERVAL:-60}"
+PID_FILE="${NINO_PID_FILE:-$DATA_DIR/nino.pid}"
+LOG_FILE="${NINO_LOG_FILE:-$DATA_DIR/nino-server.log}"
+BACKUP_DIR="${NINO_BACKUP_DIR:-$DATA_DIR/backups}"
+PYTHON_BIN="${NINO_PYTHON:-$ROOT_DIR/.venv/bin/python}"
+BASE_URL="http://$HOST:$PORT"
+
+usage() {
+  cat <<EOF
+Usage: scripts/ninoctl <command>
+
+Commands:
+  start       Start the NIÑO server in the background.
+  stop        Stop the background server started by ninoctl.
+  restart     Stop and start the server.
+  status      Show process and health status.
+  health      Request GET /health.
+  deep-health Request GET /health/deep.
+  mode        Request GET /operations/mode.
+  claude      Show Claude configuration status without sending a prompt.
+  agents      Request GET /agents.
+  snapshot    Request GET /development/snapshot.
+  doctor      Run health, agents, snapshot and nino LLM status checks.
+  logs        Show recent logs. Use: scripts/ninoctl logs -f
+  backup      Create a timestamped SQLite backup.
+
+Environment overrides:
+  NINO_HOST, NINO_PORT, NINO_DB_PATH, NINO_SCHEDULER_INTERVAL, NINO_PYTHON
+EOF
+}
+
+ensure_dirs() {
+  mkdir -p "$DATA_DIR" "$BACKUP_DIR"
+}
+
+pid_is_running() {
+  [[ -f "$PID_FILE" ]] || return 1
+  local pid
+  pid="$(cat "$PID_FILE")"
+  [[ -n "$pid" ]] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+discover_pid() {
+  pgrep -f "python.*-m nino.server.*--port $PORT" 2>/dev/null | head -n 1 || true
+}
+
+adopt_running_pid() {
+  local pid
+  pid="$(discover_pid)"
+  if [[ -n "$pid" ]]; then
+    echo "$pid" > "$PID_FILE"
+    return 0
+  fi
+  return 1
+}
+
+server_responds() {
+  curl -fsS "$BASE_URL/health" >/dev/null 2>&1
+}
+
+start() {
+  ensure_dirs
+  if pid_is_running; then
+    echo "NIÑO already running with pid $(cat "$PID_FILE")"
+    return 0
+  fi
+  if server_responds; then
+    if adopt_running_pid; then
+      echo "NIÑO already responds at $BASE_URL; adopted pid $(cat "$PID_FILE")"
+    else
+      echo "NIÑO already responds at $BASE_URL, but pid file is not managed by ninoctl."
+    fi
+    return 0
+  fi
+  if [[ ! -x "$PYTHON_BIN" ]]; then
+    echo "Python executable not found: $PYTHON_BIN" >&2
+    return 1
+  fi
+
+  cd "$ROOT_DIR"
+  nohup env PYTHONPATH=src "$PYTHON_BIN" -m nino.server \
+    --db "$DB_PATH" \
+    --host "$HOST" \
+    --port "$PORT" \
+    --scheduler-interval "$SCHEDULER_INTERVAL" \
+    >> "$LOG_FILE" 2>&1 &
+
+  echo $! > "$PID_FILE"
+  sleep 1
+
+  if server_responds; then
+    echo "NIÑO started at $BASE_URL with pid $(cat "$PID_FILE")"
+    echo "Logs: $LOG_FILE"
+    return 0
+  fi
+
+  echo "NIÑO did not respond after start. Check logs: $LOG_FILE" >&2
+  return 1
+}
+
+stop() {
+  if ! pid_is_running; then
+    if server_responds && adopt_running_pid; then
+      echo "Adopted running NIÑO pid $(cat "$PID_FILE") before stopping."
+    else
+      rm -f "$PID_FILE"
+      echo "NIÑO is not running under ninoctl."
+      return 0
+    fi
+  fi
+
+  local pid
+  pid="$(cat "$PID_FILE")"
+  kill "$pid"
+
+  for _ in {1..20}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      rm -f "$PID_FILE"
+      echo "NIÑO stopped."
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "NIÑO did not stop gracefully; pid $pid is still running." >&2
+  return 1
+}
+
+status() {
+  if ! pid_is_running && server_responds; then
+    adopt_running_pid || true
+  fi
+
+  if pid_is_running; then
+    echo "process: running, pid $(cat "$PID_FILE")"
+  else
+    echo "process: not running under ninoctl"
+  fi
+
+  if server_responds; then
+    echo "health: ok at $BASE_URL"
+  else
+    echo "health: not responding at $BASE_URL"
+  fi
+
+  echo "db: $DB_PATH"
+  echo "log: $LOG_FILE"
+}
+
+request() {
+  local path="$1"
+  curl -fsS "$BASE_URL$path"
+  echo
+}
+
+logs() {
+  ensure_dirs
+  touch "$LOG_FILE"
+  if [[ "${1:-}" == "-f" ]]; then
+    tail -f "$LOG_FILE"
+  else
+    tail -80 "$LOG_FILE"
+  fi
+}
+
+backup() {
+  ensure_dirs
+  if [[ ! -f "$DB_PATH" ]]; then
+    echo "Database not found: $DB_PATH" >&2
+    return 1
+  fi
+
+  local stamp backup_path
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  backup_path="$BACKUP_DIR/nino-$stamp.db"
+
+  if command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 "$DB_PATH" ".backup '$backup_path'"
+  else
+    cp "$DB_PATH" "$backup_path"
+  fi
+
+  echo "Backup created: $backup_path"
+}
+
+doctor() {
+  echo "== status =="
+  status
+  echo
+  echo "== health =="
+  request "/health" || true
+  echo "== mode =="
+  request "/operations/mode" || true
+  echo "== claude =="
+  request "/operations/claude" || true
+  echo "== agents =="
+  request "/agents" || true
+  echo "== snapshot =="
+  request "/development/snapshot" || true
+  echo "== nino llm =="
+  request "/agents/nino/llm/status" || true
+}
+
+command="${1:-}"
+shift || true
+
+case "$command" in
+  start) start ;;
+  stop) stop ;;
+  restart) stop && start ;;
+  status) status ;;
+  health) request "/health" ;;
+  deep-health) request "/health/deep" ;;
+  mode) request "/operations/mode" ;;
+  claude) request "/operations/claude" ;;
+  agents) request "/agents" ;;
+  snapshot) request "/development/snapshot" ;;
+  doctor) doctor ;;
+  logs) logs "${1:-}" ;;
+  backup) backup ;;
+  -h|--help|help|"") usage ;;
+  *)
+    echo "Unknown command: $command" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

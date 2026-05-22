@@ -19,6 +19,7 @@ from .contracts import (
     RetrieveRequest,
     RetrieveResponse,
 )
+from .llm import LLMClient, build_configured_llm, build_nino_prompt
 from .memory import Episode, InMemoryEpisodeStore, MemoryRetriever
 from .proactivity import (
     ProactivityEngine,
@@ -333,12 +334,72 @@ def _derive_active_goals(state: AgentState) -> list[str]:
         goals.append("recover_energy")
     return goals[:5]
 
+def _append_response_history(
+    relation_state: dict[str, Any],
+    *,
+    text: str,
+    now: datetime,
+    source: str,
+) -> dict[str, Any]:
+    history = list(relation_state.get("response_history", []))
+    history.append(
+        {
+            "id": str(uuid4()),
+            "role": "assistant",
+            "text": text,
+            "timestamp": now.isoformat(),
+            "source": source,
+        }
+    )
+    return {**relation_state, "response_history": history[-100:]}
+
+def _append_audit_event(
+    relation_state: dict[str, Any],
+    *,
+    now: datetime,
+    event_type: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    log = list(relation_state.get("audit_log", []))
+    log.append(
+        {
+            "id": str(uuid4()),
+            "at": now.isoformat(),
+            "type": event_type,
+            "payload": payload,
+        }
+    )
+    return {**relation_state, "audit_log": log[-200:]}
+
+DEFAULT_ACTION_PERMISSIONS = {
+    "external_message": {"allowed": True, "delivery": "inbox_only"},
+    "tool_call": {"allowed": False, "delivery": "blocked"},
+    "network_request": {"allowed": False, "delivery": "blocked"},
+    "file_write": {"allowed": False, "delivery": "blocked"},
+}
+
+def _default_permissions() -> dict[str, Any]:
+    return {key: dict(value) for key, value in DEFAULT_ACTION_PERMISSIONS.items()}
+
+def _permission_decision(relation_state: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+    permissions = dict(relation_state.get("action_permissions", _default_permissions()))
+    action_type = str(action.get("type", "unknown"))
+    policy = dict(permissions.get(action_type, {"allowed": False, "delivery": "blocked"}))
+    allowed = bool(policy.get("allowed", False))
+    return {
+        "action_type": action_type,
+        "allowed": allowed,
+        "delivery": policy.get("delivery", "blocked"),
+        "reason": "permission_allowed" if allowed else "permission_denied",
+    }
+
 class NinoRuntime:
     def __init__(
         self,
         state_store: InMemoryStateStore,
         episode_store: InMemoryEpisodeStore | None = None,
         cold_store: InMemoryColdStore | None = None,
+        llm_client: LLMClient | None = None,
     ) -> None:
         self.state_store = state_store
         self.episode_store = episode_store or InMemoryEpisodeStore()
@@ -346,6 +407,7 @@ class NinoRuntime:
         self.retriever = MemoryRetriever(self.episode_store, self.cold_store)
         self.consolidator = Consolidator(self.cold_store)
         self.proactivity = ProactivityEngine(self.episode_store)
+        self.llm_client = llm_client if llm_client is not None else build_configured_llm()
 
     def load_or_init_state(self, agent_id: str) -> AgentState:
         existing = self.state_store.get(agent_id)
@@ -360,7 +422,10 @@ class NinoRuntime:
             },
             active_goals=[],
             energy=0.8,
-            relation_state={"proactivity": default_proactivity_state()},
+            relation_state={
+                "proactivity": default_proactivity_state(),
+                "action_permissions": _default_permissions(),
+            },
             cognitive_time=_default_cognitive_time(),
             self_model=_default_self_model(),
             world_model=_default_world_model(),
@@ -368,6 +433,105 @@ class NinoRuntime:
         )
         self.state_store.put(initial)
         return initial
+
+    def action_permissions(self, agent_id: str) -> dict[str, Any]:
+        state = self.load_or_init_state(agent_id)
+        return dict(state.relation_state.get("action_permissions", _default_permissions()))
+
+    def configure_action_permission(
+        self,
+        agent_id: str,
+        action_type: str,
+        *,
+        allowed: bool,
+        delivery: str = "inbox_only",
+    ) -> dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        state = self.load_or_init_state(agent_id)
+        permissions = dict(state.relation_state.get("action_permissions", _default_permissions()))
+        permissions[action_type] = {"allowed": bool(allowed), "delivery": delivery}
+        state.relation_state = {**state.relation_state, "action_permissions": permissions}
+        state.relation_state = _append_audit_event(
+            state.relation_state,
+            now=now,
+            event_type="permission_configured",
+            payload={"action_type": action_type, "allowed": bool(allowed), "delivery": delivery},
+        )
+        state.updated_at = now
+        self.state_store.put(state)
+        return {"agent_id": agent_id, "permissions": permissions}
+
+    def enqueue_task(
+        self,
+        agent_id: str,
+        action: dict[str, Any],
+        *,
+        description: str = "",
+        max_pending: int = 20,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        state = self.load_or_init_state(agent_id)
+        queue = list(state.relation_state.get("task_queue", []))
+        pending_count = len([item for item in queue if item.get("status") == "pending"])
+        if pending_count >= max_pending:
+            state.relation_state = _append_audit_event(
+                state.relation_state,
+                now=now,
+                event_type="task_rejected",
+                payload={"reason": "task_queue_limit", "max_pending": max_pending},
+            )
+            state.updated_at = now
+            self.state_store.put(state)
+            return {"ok": False, "error": "task_queue_limit", "max_pending": max_pending}
+        permission = _permission_decision(state.relation_state, action)
+        task = {
+            "id": str(uuid4()),
+            "created_at": now.isoformat(),
+            "status": "pending" if permission["allowed"] else "blocked",
+            "description": description,
+            "action": action,
+            "permission": permission,
+        }
+        queue.append(task)
+        state.relation_state = {**state.relation_state, "task_queue": queue[-100:]}
+        state.relation_state = _append_audit_event(
+            state.relation_state,
+            now=now,
+            event_type="task_enqueued" if permission["allowed"] else "task_blocked",
+            payload={"task_id": task["id"], "permission": permission, "action_type": action.get("type")},
+        )
+        state.updated_at = now
+        self.state_store.put(state)
+        return {"ok": permission["allowed"], "task": task}
+
+    def list_tasks(self, agent_id: str) -> list[dict[str, Any]]:
+        state = self.load_or_init_state(agent_id)
+        return list(state.relation_state.get("task_queue", []))
+
+    def run_next_task(self, agent_id: str, now: datetime | None = None) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        state = self.load_or_init_state(agent_id)
+        queue = list(state.relation_state.get("task_queue", []))
+        for task in queue:
+            if task.get("status") != "pending":
+                continue
+            action_result = self.enqueue_proactive_action(agent_id, dict(task.get("action", {})), now=now)
+            task["status"] = "blocked" if action_result.get("blocked") else "completed"
+            task["completed_at"] = now.isoformat()
+            task["result"] = action_result
+            state = self.load_or_init_state(agent_id)
+            state.relation_state = {**state.relation_state, "task_queue": queue}
+            state.relation_state = _append_audit_event(
+                state.relation_state,
+                now=now,
+                event_type="task_ran",
+                payload={"task_id": task["id"], "status": task["status"]},
+            )
+            state.updated_at = now
+            self.state_store.put(state)
+            return {"ok": task["status"] == "completed", "task": task}
+        return {"ok": False, "error": "no_pending_task"}
 
     def configure_proactivity(
         self,
@@ -628,15 +792,33 @@ class NinoRuntime:
     def enqueue_proactive_action(self, agent_id: str, action: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
         now = now or datetime.now(timezone.utc)
         state = self.load_or_init_state(agent_id)
+        permission = _permission_decision(state.relation_state, action)
+        if not permission["allowed"]:
+            state.relation_state = _append_audit_event(
+                state.relation_state,
+                now=now,
+                event_type="action_blocked",
+                payload={"action": action, "permission": permission},
+            )
+            state.updated_at = now
+            self.state_store.put(state)
+            return {"blocked": True, "permission": permission, "action": action}
         inbox = list(state.relation_state.get("proactive_inbox", []))
         item = {
             "id": str(uuid4()),
             "created_at": now.isoformat(),
             "action": action,
             "delivered": False,
+            "permission": permission,
         }
         inbox.append(item)
         state.relation_state = {**state.relation_state, "proactive_inbox": inbox[-50:]}
+        state.relation_state = _append_audit_event(
+            state.relation_state,
+            now=now,
+            event_type="action_enqueued",
+            payload={"item_id": item["id"], "permission": permission, "action_type": action.get("type")},
+        )
         state.updated_at = now
         self.state_store.put(state)
         return item
@@ -644,6 +826,51 @@ class NinoRuntime:
     def list_proactive_inbox(self, agent_id: str) -> list[dict[str, Any]]:
         state = self.load_or_init_state(agent_id)
         return list(state.relation_state.get("proactive_inbox", []))
+
+    def llm_status(self, agent_id: str) -> dict[str, Any]:
+        state = self.load_or_init_state(agent_id)
+        client = self.llm_client
+        return {
+            "agent_id": agent_id,
+            "enabled": client is not None,
+            "provider": "claude" if client is not None else None,
+            "model": getattr(client, "model", None) if client is not None else None,
+            "max_tokens": getattr(client, "max_tokens", None) if client is not None else None,
+            "last_response": state.relation_state.get("last_llm_response"),
+        }
+
+    def llm_probe(self, agent_id: str) -> dict[str, Any]:
+        client = self.llm_client
+        if client is None:
+            return {
+                "agent_id": agent_id,
+                "ok": False,
+                "provider": None,
+                "model": None,
+                "error": "llm_not_configured",
+            }
+        prompt = {
+            "system": "Responde solo con una frase breve en español.",
+            "user": "Di que Claude esta conectado a NIÑO.",
+        }
+        try:
+            text = client.complete(prompt)
+        except Exception as exc:
+            return {
+                "agent_id": agent_id,
+                "ok": False,
+                "provider": "claude",
+                "model": getattr(client, "model", None),
+                "error": exc.__class__.__name__,
+            }
+        return {
+            "agent_id": agent_id,
+            "ok": bool(text),
+            "provider": "claude",
+            "model": getattr(client, "model", None),
+            "text": text,
+            "error": None,
+        }
 
     def mark_proactive_item_delivered(self, agent_id: str, item_id: str, now: datetime | None = None) -> dict[str, Any]:
         now = now or datetime.now(timezone.utc)
@@ -699,6 +926,54 @@ class NinoRuntime:
             "relation_depth": int(state.relation_state.get("interaction_count", 0)),
             "open_question_count": len(state.world_model.get("open_questions", [])),
         }
+
+    def record_conversation_quality(self, agent_id: str, now: datetime | None = None) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        state = self.load_or_init_state(agent_id)
+        quality = self.evaluate_conversation_quality(agent_id)
+        history = list(state.relation_state.get("quality_history", []))
+        item = {"recorded_at": now.isoformat(), "quality": quality}
+        history.append(item)
+        state.relation_state = {**state.relation_state, "quality_history": history[-100:]}
+        state.updated_at = now
+        self.state_store.put(state)
+        return {"agent_id": agent_id, "recorded": item, "history_count": len(history[-100:])}
+
+    def quality_history(self, agent_id: str) -> list[dict[str, Any]]:
+        state = self.load_or_init_state(agent_id)
+        return list(state.relation_state.get("quality_history", []))
+
+    def audit_log(self, agent_id: str) -> list[dict[str, Any]]:
+        state = self.load_or_init_state(agent_id)
+        return list(state.relation_state.get("audit_log", []))
+
+    def conversation(self, agent_id: str) -> list[dict[str, Any]]:
+        episodes = self.episode_store.list_for_agent(agent_id)
+        state = self.load_or_init_state(agent_id)
+        turns = [
+            {
+                "id": episode.episode_id,
+                "role": "user",
+                "text": episode.text,
+                "intent": episode.intent,
+                "timestamp": episode.timestamp,
+            }
+            for episode in episodes
+        ]
+        turns.extend(
+            {
+                "id": item.get("id", ""),
+                "role": "assistant",
+                "text": item.get("text", ""),
+                "intent": item.get("source", "assistant_response"),
+                "timestamp": _parse_datetime(item.get("timestamp")),
+            }
+            for item in state.relation_state.get("response_history", [])
+            if item.get("text") and item.get("timestamp")
+        )
+        role_order = {"user": 0, "assistant": 1}
+        turns.sort(key=lambda item: (item["timestamp"], role_order.get(item["role"], 9)))
+        return turns
 
     def development_snapshot(self) -> dict[str, Any]:
         agents = self.list_agents()
@@ -1031,6 +1306,17 @@ class NinoRuntime:
             time_scope="recent",
         )
         retrieved = self.retrieve_memory(agent_id, retrieve_req)
+        llm_retrieved = retrieved
+        if self.llm_client is not None and text.strip():
+            llm_retrieved = self.retrieve_memory(
+                agent_id,
+                RetrieveRequest(
+                    query_intent=query_intent,
+                    self_state=asdict(state),
+                    relation_state=state.relation_state,
+                    time_scope="long",
+                ),
+            )
 
         policy_req = PolicyRequest(
             percept_frame={
@@ -1047,6 +1333,30 @@ class NinoRuntime:
             world_model=state.world_model,
         )
         decision = self.policy_decide(policy_req)
+        llm_error: str | None = None
+        if self.llm_client is not None and text.strip():
+            try:
+                prompt = build_nino_prompt(
+                    agent_id=agent_id,
+                    text=text,
+                    intent=intent,
+                    relation_state=state.relation_state,
+                    self_model=state.self_model,
+                    world_model=state.world_model,
+                    active_goals=list(state.active_goals),
+                    memory_candidates=llm_retrieved.memory_candidates,
+                    recent_turns=self.conversation(agent_id)[-8:],
+                    cold_facts=self.cold_store.list_for_agent(agent_id),
+                )
+                llm_text = self.llm_client.complete(prompt)
+                if llm_text:
+                    decision = PolicyResponse(
+                        chosen_action={"type": "external_message", "payload": {"text": llm_text}},
+                        confidence=0.72,
+                        reason_trace=[*decision.reason_trace, "llm_provider_claude"],
+                    )
+            except Exception as exc:
+                llm_error = exc.__class__.__name__
 
         now = datetime.now(timezone.utc)
         self.episode_store.append(
@@ -1064,6 +1374,38 @@ class NinoRuntime:
         state.tick += 1
         state.updated_at = now
         state.relation_state = _update_relation_from_percept(state.relation_state, percept_frame, now)
+        response_text = str(decision.chosen_action.get("payload", {}).get("text", "")).strip()
+        if response_text:
+            source = "llm_claude" if "llm_provider_claude" in decision.reason_trace else "policy"
+            state.relation_state = _append_response_history(
+                state.relation_state,
+                text=response_text,
+                now=now,
+                source=source,
+            )
+            state.relation_state = {
+                **state.relation_state,
+                "last_llm_response": {
+                    "provider": "claude" if self.llm_client is not None else None,
+                    "source": source,
+                    "error": llm_error,
+                    "at": now.isoformat(),
+                },
+            }
+        state.relation_state = _append_audit_event(
+            state.relation_state,
+            now=now,
+            event_type="tick_decision",
+            payload={
+                "intent": intent,
+                "action_type": decision.chosen_action.get("type"),
+                "response_source": "llm_claude" if "llm_provider_claude" in decision.reason_trace else "policy",
+                "confidence": decision.confidence,
+                "reason_trace": decision.reason_trace,
+                "llm_error": llm_error,
+                "retrieved_memory_count": len(retrieved.memory_candidates),
+            },
+        )
         _regulate_drives(state, percept_frame)
         _update_cognitive_models(state, percept_frame, now)
         state.active_goals = _derive_active_goals(state)
@@ -1078,4 +1420,6 @@ class NinoRuntime:
             "retrieved_memory_count": len(retrieved.memory_candidates),
             "maturity": state.cognitive_time["maturity"],
             "active_goals": list(state.active_goals),
+            "llm_provider": "claude" if self.llm_client is not None else None,
+            "llm_error": llm_error,
         }

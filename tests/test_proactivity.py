@@ -82,6 +82,53 @@ def test_proactivity_minimum_interval_blocks_until_next_allowed_time() -> None:
     assert second.next_allowed_at == now + timedelta(hours=6)
 
 
+def test_proactivity_respects_active_hours_window() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 8, tzinfo=timezone.utc)
+    runtime.configure_proactivity(
+        "agent-p",
+        ProactivitySettings(
+            consent="allowed",
+            max_messages_per_day=3,
+            min_hours_between=0,
+            active_hours_start=9,
+            active_hours_end=18,
+        ),
+    )
+    runtime.episode_store.append(
+        Episode("e1", "agent-p", now - timedelta(hours=2), "mañana tengo examen", "school", 0.9, 0.9)
+    )
+
+    out = runtime.evaluate_proactivity("agent-p", now=now)
+
+    assert out.should_send is False
+    assert "outside_active_hours" in out.reason_trace
+    assert out.next_allowed_at == now.replace(hour=9, minute=0, second=0, microsecond=0)
+
+
+def test_proactivity_respects_overnight_active_hours_window() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 23, tzinfo=timezone.utc)
+    runtime.configure_proactivity(
+        "agent-p",
+        ProactivitySettings(
+            consent="allowed",
+            max_messages_per_day=3,
+            min_hours_between=0,
+            active_hours_start=22,
+            active_hours_end=7,
+        ),
+    )
+    runtime.episode_store.append(
+        Episode("e1", "agent-p", now - timedelta(hours=2), "mañana tengo examen", "school", 0.9, 0.9)
+    )
+
+    out = runtime.evaluate_proactivity("agent-p", now=now)
+
+    assert out.should_send is True
+    assert out.action is not None
+
+
 def test_proactivity_blocks_sensitive_topics_even_with_consent() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
