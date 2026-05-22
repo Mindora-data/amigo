@@ -53,6 +53,17 @@ Restart:
 scripts/ninoctl restart
 ```
 
+Run the local product smoke test:
+
+```bash
+scripts/nino-smoke
+scripts/nino-smoke --json
+```
+
+The smoke test uses a temporary SQLite database and validates the local-first
+flow: `/app`, memory, conversation history, Claude diagnostics, permissions,
+task queue, proactive inbox, safe export and backup.
+
 Install as a macOS user service:
 
 ```bash
@@ -204,6 +215,12 @@ PYTHONPATH=src .venv/bin/python - <<'PY'
 from nino.eval_runner import run_eval_dir
 print(run_eval_dir("eval"))
 PY
+```
+
+Run the broader local product gate:
+
+```bash
+scripts/nino-smoke --json
 ```
 
 Proactivity is closed by default. Enable it explicitly:

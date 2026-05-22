@@ -2,9 +2,9 @@
 
 Estado confirmado el 2026-05-22:
 
-- Base GitHub confirmada en `ff2b176`; el trabajo actual vive en cambios locales pendientes de commit.
+- GitHub se mantiene sincronizado desde los commits de sprint; confirmar hash exacto con `git rev-parse HEAD`.
 - Rama activa: `main`.
-- Suite actual: 100 tests pasando.
+- Suite actual: 105 tests pasando.
 - La memoria viva local (`data/nino.db`) no se versiona en GitHub.
 - El producto publicado es el motor, API, UI minima y pruebas; no incluye datos de uso real.
 
@@ -171,6 +171,7 @@ Hecho:
 - Evaluaciones repetibles de continuidad conversacional. Hecho inicial: `nino.eval_runner`.
 - Dataset local de conversaciones de prueba. Hecho inicial: `eval/memory_regression.json`.
 - Pruebas de regresion para memoria realista. Hecho inicial: tests del eval runner.
+- Smoke test local de producto. Hecho inicial: `scripts/nino-smoke` valida UI servida, memoria, permisos, tareas, inbox, export seguro y backup con SQLite temporal.
 - Metricas de calidad historicas. Hecho inicial: guardar y consultar historial de evaluacion conversacional por agente.
 - Comparativa antes/despues por sprint. Hecho inicial: runner determinista y dataset local.
 - Deteccion de contradicciones mas explicable. Hecho inicial: contradicciones en consolidacion y razonamiento auditable.
@@ -225,6 +226,7 @@ Auditoria final de producto 100% local:
 12. Hecho inicial: preparacion para empaquetado local.
 13. Hecho inicial: validado con servidor real local: `/health`, `/operations/mode`, `/tasks`, `/permissions` y `/app`.
 14. Hecho inicial: diagnostico de Claude sin llamada externa mediante `/operations/claude`.
-15. Siguiente: prueba manual de conversacion con Claude real cuando exista `ANTHROPIC_API_KEY`.
+15. Hecho inicial: puerta local de producto con `scripts/nino-smoke`.
+16. Siguiente: prueba manual de conversacion con Claude real cuando exista `ANTHROPIC_API_KEY`.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
