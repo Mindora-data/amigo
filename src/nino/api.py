@@ -147,6 +147,10 @@ APP_HTML = """<!doctype html>
         </div>
         <button id="facts" class="secondary" style="margin-top:8px;width:100%">Memoria fría</button>
         <div class="row">
+          <input id="memoryQuery" value="piano" aria-label="buscar memoria">
+          <button id="memorySearch" class="secondary">Buscar</button>
+        </div>
+        <div class="row">
           <button id="selfModel" class="secondary">Self</button>
           <button id="worldModel" class="secondary">Mundo</button>
         </div>
@@ -211,6 +215,7 @@ APP_HTML = """<!doctype html>
       if (out.proactive_action) addEntry("niño · programado", out.proactive_action.payload.text);
     };
     $("agents").onclick = async () => print($("state"), await api("/agents"));
+    $("agents").ondblclick = async () => print($("state"), await api("/development/snapshot"));
     $("reset").onclick = async () => {
       const out = await api(agentPath("/reset"), {method: "POST", body: "{}"});
       log.textContent = "";
@@ -233,6 +238,10 @@ APP_HTML = """<!doctype html>
     };
     $("episodes").onclick = async () => print($("memory"), await api(agentPath("/episodes")));
     $("facts").onclick = async () => print($("memory"), await api(agentPath("/memory/facts")));
+    $("memorySearch").onclick = async () => {
+      const query = $("memoryQuery").value || "";
+      print($("memory"), await api(agentPath("/memory/search"), {method: "POST", body: JSON.stringify({query_intent: query, time_scope: "long"})}));
+    };
     $("relation").onclick = async () => print($("memory"), await api(agentPath("/relation")));
     $("selfModel").onclick = async () => print($("memory"), await api(agentPath("/self-model")));
     $("worldModel").onclick = async () => print($("memory"), await api(agentPath("/world-model")));
@@ -296,6 +305,9 @@ class NinoService:
     def list_agents(self) -> dict[str, Any]:
         return {"agents": self.runtime.list_agents()}
 
+    def development_snapshot(self) -> dict[str, Any]:
+        return {"snapshot": self.runtime.development_snapshot()}
+
     def tick(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.tick(agent_id, payload))
 
@@ -348,11 +360,25 @@ class NinoService:
     def proactive_inbox(self, agent_id: str) -> dict[str, Any]:
         return {"inbox": _to_jsonable(self.runtime.list_proactive_inbox(agent_id))}
 
+    def mark_proactive_delivered(self, agent_id: str, item_id: str) -> dict[str, Any]:
+        return self.runtime.mark_proactive_item_delivered(agent_id, item_id)
+
+    def clear_delivered_proactive(self, agent_id: str) -> dict[str, Any]:
+        return self.runtime.clear_delivered_proactive_items(agent_id)
+
     def decay_memory(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self.runtime.apply_memory_decay(agent_id, factor=float(payload.get("factor", 0.98)))
 
     def conversation_quality(self, agent_id: str) -> dict[str, Any]:
         return {"quality": self.runtime.evaluate_conversation_quality(agent_id)}
+
+    def search_memory(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.retrieve_memory(agent_id, {
+            "query_intent": payload.get("query_intent", payload.get("query", "")),
+            "time_scope": payload.get("time_scope", "long"),
+            "self_state": payload.get("self_state", {}),
+            "relation_state": payload.get("relation_state", {}),
+        })
 
     def reset_agent(self, agent_id: str) -> dict[str, Any]:
         return self.runtime.reset_agent(agent_id)
@@ -472,6 +498,7 @@ class NinoHttpApp:
                     "GET /health",
                     "GET /autonomy/status",
                     "POST /autonomy/run-once",
+                    "GET /development/snapshot",
                     "POST /agents/{agent_id}/tick",
                     "GET /agents/{agent_id}/state",
                     "GET /agents/{agent_id}/episodes",
@@ -484,7 +511,10 @@ class NinoHttpApp:
                     "GET /agents/{agent_id}/export",
                     "GET /agents/{agent_id}/export-safe",
                     "GET /agents/{agent_id}/proactivity/inbox",
+                    "POST /agents/{agent_id}/proactivity/inbox/{item_id}/delivered",
+                    "POST /agents/{agent_id}/proactivity/inbox/clear-delivered",
                     "POST /agents/{agent_id}/memory/decay",
+                    "POST /agents/{agent_id}/memory/search",
                     "GET /agents/{agent_id}/eval/conversation",
                     "POST /agents/import",
                     "POST /agents/{agent_id}/reset",
@@ -503,6 +533,8 @@ class NinoHttpApp:
             return "200 OK", self.service.autonomy_status()
         if method == "POST" and path == "/autonomy/run-once":
             return "200 OK", self.service.autonomy_run_once(payload)
+        if method == "GET" and path == "/development/snapshot":
+            return "200 OK", self.service.development_snapshot()
 
         if method == "POST" and path == "/internal/scheduled":
             return "200 OK", self.service.scheduled_all(payload)
@@ -547,8 +579,14 @@ class NinoHttpApp:
             return "200 OK", self.service.export_agent_safe(agent_id)
         if method == "GET" and tail == ["proactivity", "inbox"]:
             return "200 OK", self.service.proactive_inbox(agent_id)
+        if method == "POST" and len(tail) == 4 and tail[:2] == ["proactivity", "inbox"] and tail[3] == "delivered":
+            return "200 OK", self.service.mark_proactive_delivered(agent_id, tail[2])
+        if method == "POST" and tail == ["proactivity", "inbox", "clear-delivered"]:
+            return "200 OK", self.service.clear_delivered_proactive(agent_id)
         if method == "POST" and tail == ["memory", "decay"]:
             return "200 OK", self.service.decay_memory(agent_id, payload)
+        if method == "POST" and tail == ["memory", "search"]:
+            return "200 OK", self.service.search_memory(agent_id, payload)
         if method == "GET" and tail == ["eval", "conversation"]:
             return "200 OK", self.service.conversation_quality(agent_id)
         if method == "POST" and tail == ["reset"]:

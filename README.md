@@ -23,6 +23,7 @@ GET  /health
 GET  /app
 GET  /autonomy/status
 POST /autonomy/run-once
+GET  /development/snapshot
 GET  /agents
 POST /agents/{agent_id}/tick
 GET  /agents/{agent_id}/state
@@ -38,7 +39,10 @@ GET  /agents/{agent_id}/metrics
 GET  /agents/{agent_id}/export
 GET  /agents/{agent_id}/export-safe
 GET  /agents/{agent_id}/proactivity/inbox
+POST /agents/{agent_id}/proactivity/inbox/{item_id}/delivered
+POST /agents/{agent_id}/proactivity/inbox/clear-delivered
 POST /agents/{agent_id}/memory/decay
+POST /agents/{agent_id}/memory/search
 GET  /agents/{agent_id}/eval/conversation
 POST /agents/import
 POST /agents/{agent_id}/reset

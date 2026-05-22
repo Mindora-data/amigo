@@ -174,6 +174,25 @@ def test_http_api_privacy_inbox_decay_and_quality(tmp_path) -> None:
     assert quality["quality"]["episode_count"] == 2
 
 
+def test_http_api_inbox_delivery_memory_search_and_snapshot(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(app, "POST", "/agents/api-agent/proactivity/configure", {"consent": "allowed", "max_messages_per_day": 3, "min_hours_between": 0})
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6})
+    _request(app, "POST", "/agents/api-agent/proactivity/evaluate", {})
+    inbox = _request(app, "GET", "/agents/api-agent/proactivity/inbox")
+    item_id = inbox["inbox"][0]["id"]
+
+    marked = _request(app, "POST", f"/agents/api-agent/proactivity/inbox/{item_id}/delivered", {})
+    cleared = _request(app, "POST", "/agents/api-agent/proactivity/inbox/clear-delivered", {})
+    search = _request(app, "POST", "/agents/api-agent/memory/search", {"query": "música"})
+    snapshot = _request(app, "GET", "/development/snapshot")
+
+    assert marked["updated"] is True
+    assert cleared["cleared"] == 1
+    assert search["memory_candidates"]
+    assert snapshot["snapshot"]["agent_count"] == 1
+
+
 def test_http_api_proactivity_consent_and_frequency(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)

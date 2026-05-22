@@ -616,6 +616,31 @@ class NinoRuntime:
         state = self.load_or_init_state(agent_id)
         return list(state.relation_state.get("proactive_inbox", []))
 
+    def mark_proactive_item_delivered(self, agent_id: str, item_id: str, now: datetime | None = None) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        state = self.load_or_init_state(agent_id)
+        inbox = list(state.relation_state.get("proactive_inbox", []))
+        updated = False
+        for item in inbox:
+            if item.get("id") == item_id:
+                item["delivered"] = True
+                item["delivered_at"] = now.isoformat()
+                updated = True
+                break
+        state.relation_state = {**state.relation_state, "proactive_inbox": inbox}
+        state.updated_at = now
+        self.state_store.put(state)
+        return {"agent_id": agent_id, "item_id": item_id, "updated": updated}
+
+    def clear_delivered_proactive_items(self, agent_id: str) -> dict[str, Any]:
+        state = self.load_or_init_state(agent_id)
+        inbox = list(state.relation_state.get("proactive_inbox", []))
+        kept = [item for item in inbox if not item.get("delivered", False)]
+        state.relation_state = {**state.relation_state, "proactive_inbox": kept}
+        state.updated_at = datetime.now(timezone.utc)
+        self.state_store.put(state)
+        return {"agent_id": agent_id, "cleared": len(inbox) - len(kept), "remaining": len(kept)}
+
     def apply_memory_decay(self, agent_id: str, factor: float = 0.98) -> dict[str, Any]:
         factor = _clamp01(factor)
         state = self.load_or_init_state(agent_id)
@@ -644,6 +669,20 @@ class NinoRuntime:
             "memory_density": round(len(self.cold_store.list_for_agent(agent_id)) / total, 6),
             "relation_depth": int(state.relation_state.get("interaction_count", 0)),
             "open_question_count": len(state.world_model.get("open_questions", [])),
+        }
+
+    def development_snapshot(self) -> dict[str, Any]:
+        agents = self.list_agents()
+        metrics = [self.metrics(agent_id) for agent_id in agents]
+        if not metrics:
+            return {"agent_count": 0, "agents": [], "average_maturity": 0.0, "total_episodes": 0}
+        return {
+            "agent_count": len(agents),
+            "agents": agents,
+            "average_maturity": round(sum(item["maturity"] for item in metrics) / len(metrics), 6),
+            "total_episodes": sum(item["episode_count"] for item in metrics),
+            "total_cold_memory": sum(item["cold_memory_count"] for item in metrics),
+            "total_open_questions": sum(item["open_question_count"] for item in metrics),
         }
 
     def policy_decide(self, request: PolicyRequest) -> PolicyResponse:
