@@ -181,10 +181,14 @@ def test_http_api_creates_database_backup(tmp_path) -> None:
     _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "hola"})
 
     backup = _request(app, "POST", "/operations/backup", {})
+    backups = _request(app, "GET", "/operations/backups")
 
     assert backup["ok"] is True
     assert (tmp_path / "backups").exists()
     assert Path(backup["path"]).exists()
+    assert backups["ok"] is True
+    assert backups["backups"][0]["path"] == backup["path"]
+    assert backups["backups"][0]["size_bytes"] > 0
 
 
 def test_http_api_exposes_autonomy_status_and_run_once(tmp_path) -> None:

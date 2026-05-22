@@ -116,7 +116,7 @@ Hecho:
 - Flujo de conversacion diaria desde la UI. Hecho inicial: consola `/app` centrada en agente vivo.
 - Pantalla de estado entendible: energia, relacion, memoria, proactividad, madurez. Hecho inicial: metricas principales visibles.
 - Historial conversacional legible. Hecho inicial: `/app` carga episodios persistidos al abrir o cambiar de agente.
-- Backups locales de `data/nino.db`. Hecho inicial: `scripts/ninoctl backup`, `scripts/ninoctl backups`, `scripts/ninoctl restore` y `POST /operations/backup` desde UI.
+- Backups locales de `data/nino.db`. Hecho inicial: `scripts/ninoctl backup`, `scripts/ninoctl backups`, `scripts/ninoctl restore`, `POST /operations/backup` y `GET /operations/backups` desde UI.
 - Logs operativos claros. Hecho inicial: `scripts/ninoctl logs`.
 - Comando de diagnostico: salud, modo local-first, agentes, episodios, memoria, inbox y ultimo ciclo. Hecho inicial: `scripts/ninoctl doctor`.
 - Validar continuidad entre sesiones reales. Hecho inicial: `nino` conserva episodios y memoria tras reinicio.

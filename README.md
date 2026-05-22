@@ -178,6 +178,7 @@ POST /autonomy/run-once
 GET  /development/snapshot
 GET  /operations/mode
 GET  /operations/claude
+GET  /operations/backups
 POST /operations/backup
 GET  /agents
 POST /agents/{agent_id}/tick

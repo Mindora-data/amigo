@@ -64,7 +64,7 @@ def run_smoke(db_path: str | Path) -> SmokeResult:
     _require(status.startswith("200") and claude["api_key_present"] is False, checks, "claude_diagnostic")
 
     status, html = _request(app, "GET", "/app")
-    _require(status.startswith("200") and "/operations/claude" in html and "/tasks/run-next" in html, checks, "browser_app")
+    _require(status.startswith("200") and "/operations/backups" in html and "/tasks/run-next" in html, checks, "browser_app")
 
     status, first = _request(
         app,
@@ -110,6 +110,8 @@ def run_smoke(db_path: str | Path) -> SmokeResult:
 
     status, backup = _request(app, "POST", "/operations/backup", {})
     _require(status.startswith("200") and backup["ok"] is True and Path(backup["path"]).exists(), checks, "sqlite_backup")
+    status, backups = _request(app, "GET", "/operations/backups")
+    _require(status.startswith("200") and backups["backups"], checks, "sqlite_backup_list")
 
     return SmokeResult(ok=True, checks=checks, db_path=str(db_path))
 

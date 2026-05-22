@@ -33,7 +33,7 @@ scripts/nino-claude-live --require-key --json
 | Controles de seguridad | permisos por accion, bloqueo por defecto, export seguro, audit log | Cumplido |
 | Tareas autonomas controladas | smoke `task_enqueue`, `task_run`, `proactive_inbox` | Cumplido |
 | Proactividad limitada | consentimiento, intervalo minimo, maximo diario y ventanas horarias | Cumplido |
-| Backups | `scripts/ninoctl backup`, `scripts/ninoctl backups`, `scripts/ninoctl restore`, `/operations/backup`, smoke `sqlite_backup` | Cumplido |
+| Backups | `scripts/ninoctl backup`, `scripts/ninoctl backups`, `scripts/ninoctl restore`, `/operations/backup`, `/operations/backups`, smoke `sqlite_backup` y `sqlite_backup_list` | Cumplido |
 | Operacion local | `scripts/ninoctl`, `scripts/nino-launchd`, `nino-server`, `nino-smoke` | Cumplido |
 | Empaquetado local | `pyproject.toml`, console scripts `nino-server` y `nino-smoke` | Cumplido |
 | Contrato API | `GET /openapi.json`, `openapi/README.md`, tests de alineacion con `GET /` | Cumplido |

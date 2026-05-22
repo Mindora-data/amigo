@@ -301,9 +301,13 @@ APP_HTML = """<!doctype html>
           <button id="backup" class="secondary">Backup DB</button>
         </div>
         <div class="row">
+          <button id="backups" class="secondary">Ver backups</button>
           <button id="mode" class="secondary">Modo</button>
+        </div>
+        <div class="row">
           <button id="reset" class="danger">Reset agente</button>
         </div>
+        <div class="output"><pre id="backupsOut">{}</pre></div>
       </div>
       <div class="panel">
         <div class="panelHead">
@@ -513,7 +517,14 @@ APP_HTML = """<!doctype html>
       const out = await api("/operations/backup", {method: "POST", body: "{}"});
       print($("state"), out);
       status(out.ok ? `Backup creado: ${out.path}` : `Backup fallido: ${out.error}`);
+      await loadBackups();
     };
+    async function loadBackups() {
+      const out = await api("/operations/backups");
+      print($("backupsOut"), out);
+      return out;
+    }
+    $("backups").onclick = loadBackups;
     $("mode").onclick = async () => print($("state"), await api("/operations/mode"));
     $("saveProactivity").onclick = async () => {
       const payload = {
@@ -657,6 +668,7 @@ APP_HTML = """<!doctype html>
       .then(loadMemorySearch)
       .then(loadConversation)
       .then(loadLLMStatus)
+      .then(loadBackups)
       .then(() => $("permissions").click())
       .then(() => $("tasks").click())
       .catch((err) => status(err.message));
@@ -676,6 +688,7 @@ API_ENDPOINTS = [
     "GET /development/snapshot",
     "GET /operations/mode",
     "GET /operations/claude",
+    "GET /operations/backups",
     "POST /operations/backup",
     "GET /agents",
     "POST /agents/prune",
@@ -852,6 +865,25 @@ class NinoService:
         finally:
             source.close()
         return {"ok": True, "path": str(backup_path)}
+
+    def list_backups(self) -> dict[str, Any]:
+        if self.db_path is None:
+            return {"ok": False, "error": "db_path_unavailable", "backups": []}
+        backup_dir = self.db_path.parent / "backups"
+        if not backup_dir.exists():
+            return {"ok": True, "backup_dir": str(backup_dir), "backups": []}
+        backups = []
+        for path in sorted(backup_dir.glob("*.db"), key=lambda item: item.stat().st_mtime, reverse=True):
+            stat = path.stat()
+            backups.append(
+                {
+                    "path": str(path),
+                    "name": path.name,
+                    "size_bytes": stat.st_size,
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                }
+            )
+        return {"ok": True, "backup_dir": str(backup_dir), "backups": backups}
 
     def operating_mode(self) -> dict[str, Any]:
         llm_client = self.runtime.llm_client
@@ -1151,6 +1183,8 @@ class NinoHttpApp:
             return "200 OK", self.service.operating_mode()
         if method == "GET" and path == "/operations/claude":
             return "200 OK", self.service.claude_config()
+        if method == "GET" and path == "/operations/backups":
+            return "200 OK", self.service.list_backups()
         if method == "POST" and path == "/operations/backup":
             return "200 OK", self.service.backup()
 
