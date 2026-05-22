@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from .consolidation import Consolidator, InMemoryColdStore
+from .consolidation import MemoryFact
 from .contracts import (
     AgentState,
     ConsolidationRequest,
@@ -57,6 +58,31 @@ def _without_accents(value: str) -> str:
         .replace("ó", "o")
         .replace("ú", "u")
     )
+
+def _parse_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(str(value))
+
+def _redact_text(value: str) -> str:
+    value = re.sub(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", "[email]", value)
+    value = re.sub(r"\b\d{3,}\b", "[number]", value)
+    return value
+
+def _semantic_tags(text: str) -> list[str]:
+    plain = _without_accents(text)
+    tags = []
+    if any(word in plain for word in ("piano", "musica", "guitarra")):
+        tags.append("music")
+    if any(word in plain for word in ("triste", "agobiado", "feliz", "contento", "estresado")):
+        tags.append("emotion")
+    if any(word in plain for word in ("examen", "trabajo", "proyecto", "estudio")):
+        tags.append("work_learning")
+    if any(word in plain for word in ("prefiero", "me gusta")):
+        tags.append("preference")
+    if "?" in text:
+        tags.append("question")
+    return sorted(set(tags))
 
 def _clean_preference_value(value: str) -> str:
     words = _normalize_text(value).split()
@@ -110,6 +136,12 @@ def _update_relation_from_percept(
         )
         relation["emotional_signals"] = signals[-30:]
         relation["last_emotional_tone"] = emotional_tone
+    tags = _semantic_tags(text)
+    if tags:
+        tag_counts = dict(relation.get("semantic_tag_counts", {}))
+        for tag in tags:
+            tag_counts[tag] = int(tag_counts.get(tag, 0)) + 1
+        relation["semantic_tag_counts"] = tag_counts
 
     return relation
 
@@ -184,6 +216,12 @@ def _update_cognitive_models(
     for token in _tokens_for_model(f"{intent} {text}"):
         concept_counts[token] = int(concept_counts.get(token, 0)) + 1
     world_model["concept_counts"] = concept_counts
+    tags = _semantic_tags(text)
+    if tags:
+        tag_counts = dict(world_model.get("tag_counts", {}))
+        for tag in tags:
+            tag_counts[tag] = int(tag_counts.get(tag, 0)) + 1
+        world_model["tag_counts"] = tag_counts
 
     if "?" in text:
         open_questions = list(world_model.get("open_questions", []))
@@ -356,6 +394,9 @@ class NinoRuntime:
         )
         if result.should_send and record_send:
             sent_at = now or datetime.now(timezone.utc)
+            if result.action is not None:
+                self.enqueue_proactive_action(agent_id, result.action, now=sent_at)
+                state = self.load_or_init_state(agent_id)
             state.relation_state = record_proactive_send(state.relation_state, sent_at)
             state.updated_at = sent_at
             self.state_store.put(state)
@@ -434,6 +475,175 @@ class NinoRuntime:
             "dominant_concepts": concept_names,
             "dream_reflection_count": len(reflections),
             "affect_state": affect,
+        }
+
+    def export_agent(self, agent_id: str) -> dict[str, Any]:
+        state = self.load_or_init_state(agent_id)
+        episodes = self.episode_store.list_for_agent(agent_id)
+        facts = self.cold_store.list_for_agent(agent_id)
+        return {
+            "schema_version": 1,
+            "agent_id": agent_id,
+            "state": asdict(state),
+            "episodes": [asdict(episode) for episode in episodes],
+            "memory_facts": [asdict(fact) for fact in facts],
+        }
+
+    def export_agent_safe(self, agent_id: str) -> dict[str, Any]:
+        payload = self.export_agent(agent_id)
+        safe = {
+            "schema_version": payload["schema_version"],
+            "agent_id": payload["agent_id"],
+            "state": payload["state"],
+            "episodes": [],
+            "memory_facts": payload["memory_facts"],
+            "redacted": True,
+        }
+        relation = dict(safe["state"].get("relation_state", {}))
+        relation.pop("user_name", None)
+        relation.pop("user_name_updated_at", None)
+        safe["state"]["relation_state"] = relation
+        for episode in payload["episodes"]:
+            redacted = dict(episode)
+            redacted["text"] = _redact_text(redacted.get("text", ""))
+            safe["episodes"].append(redacted)
+        return safe
+
+    def import_agent(self, payload: dict[str, Any], replace: bool = False) -> dict[str, Any]:
+        agent_id = str(payload["agent_id"])
+        if replace:
+            self.reset_agent(agent_id)
+
+        raw_state = payload.get("state")
+        if raw_state:
+            state = AgentState(
+                agent_id=agent_id,
+                tick=int(raw_state.get("tick", 0)),
+                drive_vector=dict(raw_state.get("drive_vector", {})),
+                active_goals=list(raw_state.get("active_goals", [])),
+                energy=float(raw_state.get("energy", 0.8)),
+                relation_state=dict(raw_state.get("relation_state", {})),
+                cognitive_time=dict(raw_state.get("cognitive_time", {})),
+                self_model=dict(raw_state.get("self_model", {})),
+                world_model=dict(raw_state.get("world_model", {})),
+                updated_at=_parse_datetime(raw_state.get("updated_at")),
+            )
+            self.state_store.put(state)
+
+        episode_count = 0
+        for raw in payload.get("episodes", []):
+            self.episode_store.append(
+                Episode(
+                    episode_id=str(raw["episode_id"]),
+                    agent_id=agent_id,
+                    timestamp=_parse_datetime(raw["timestamp"]),
+                    text=str(raw.get("text", "")),
+                    intent=str(raw.get("intent", "unknown")),
+                    salience=float(raw.get("salience", 0.5)),
+                    confidence=float(raw.get("confidence", 0.8)),
+                )
+            )
+            episode_count += 1
+
+        fact_count = 0
+        for raw in payload.get("memory_facts", []):
+            self.cold_store.upsert(
+                MemoryFact(
+                    fact_id=str(raw["fact_id"]),
+                    agent_id=agent_id,
+                    key=str(raw["key"]),
+                    value=str(raw["value"]),
+                    confidence=float(raw.get("confidence", 0.8)),
+                    source_episode_id=str(raw.get("source_episode_id", "")),
+                    valid_from=_parse_datetime(raw["valid_from"]),
+                    valid_to=_parse_datetime(raw.get("valid_to")) if raw.get("valid_to") else None,
+                )
+            )
+            fact_count += 1
+
+        return {
+            "agent_id": agent_id,
+            "imported_state": raw_state is not None,
+            "imported_episodes": episode_count,
+            "imported_memory_facts": fact_count,
+            "replace": replace,
+        }
+
+    def metrics(self, agent_id: str) -> dict[str, Any]:
+        state = self.load_or_init_state(agent_id)
+        episodes = self.episode_store.list_for_agent(agent_id)
+        facts = self.cold_store.list_for_agent(agent_id)
+        relation = state.relation_state
+        self_model = state.self_model
+        world_model = state.world_model
+        return {
+            "agent_id": agent_id,
+            "tick": state.tick,
+            "maturity": state.cognitive_time.get("maturity", 0.0),
+            "experience_mass": state.cognitive_time.get("experience_mass", 0.0),
+            "episode_count": len(episodes),
+            "cold_memory_count": len(facts),
+            "active_cold_memory_count": len([fact for fact in facts if fact.valid_to is None]),
+            "preference_count": len(relation.get("preferences", {})),
+            "emotional_signal_count": len(relation.get("emotional_signals", [])),
+            "dream_reflection_count": len(self_model.get("dream_reflections", [])),
+            "autobiographical_event_count": len(self_model.get("autobiographical_timeline", [])),
+            "concept_count": len(world_model.get("concept_counts", {})),
+            "open_question_count": len(world_model.get("open_questions", [])),
+            "active_goals": list(state.active_goals),
+            "energy": state.energy,
+            "affect_mood": self_model.get("affect_state", {}).get("mood", "stable"),
+            "tag_counts": dict(world_model.get("tag_counts", {})),
+        }
+
+    def enqueue_proactive_action(self, agent_id: str, action: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        state = self.load_or_init_state(agent_id)
+        inbox = list(state.relation_state.get("proactive_inbox", []))
+        item = {
+            "id": str(uuid4()),
+            "created_at": now.isoformat(),
+            "action": action,
+            "delivered": False,
+        }
+        inbox.append(item)
+        state.relation_state = {**state.relation_state, "proactive_inbox": inbox[-50:]}
+        state.updated_at = now
+        self.state_store.put(state)
+        return item
+
+    def list_proactive_inbox(self, agent_id: str) -> list[dict[str, Any]]:
+        state = self.load_or_init_state(agent_id)
+        return list(state.relation_state.get("proactive_inbox", []))
+
+    def apply_memory_decay(self, agent_id: str, factor: float = 0.98) -> dict[str, Any]:
+        factor = _clamp01(factor)
+        state = self.load_or_init_state(agent_id)
+        world = dict(state.world_model)
+        concept_counts = {
+            key: round(float(value) * factor, 6)
+            for key, value in world.get("concept_counts", {}).items()
+            if float(value) * factor >= 0.01
+        }
+        world["concept_counts"] = concept_counts
+        world["decay_factor"] = factor
+        world["last_decay_at"] = datetime.now(timezone.utc).isoformat()
+        state.world_model = world
+        self.state_store.put(state)
+        return {"agent_id": agent_id, "factor": factor, "concept_count": len(concept_counts)}
+
+    def evaluate_conversation_quality(self, agent_id: str) -> dict[str, Any]:
+        episodes = self.episode_store.list_for_agent(agent_id)
+        state = self.load_or_init_state(agent_id)
+        total = max(len(episodes), 1)
+        meaningful = len([ep for ep in episodes if ep.salience >= 0.7 or ep.confidence >= 0.8])
+        return {
+            "agent_id": agent_id,
+            "episode_count": len(episodes),
+            "meaningful_ratio": round(meaningful / total, 6),
+            "memory_density": round(len(self.cold_store.list_for_agent(agent_id)) / total, 6),
+            "relation_depth": int(state.relation_state.get("interaction_count", 0)),
+            "open_question_count": len(state.world_model.get("open_questions", [])),
         }
 
     def policy_decide(self, request: PolicyRequest) -> PolicyResponse:

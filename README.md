@@ -34,6 +34,13 @@ GET  /agents/{agent_id}/relation
 GET  /agents/{agent_id}/self-model
 GET  /agents/{agent_id}/world-model
 GET  /agents/{agent_id}/narrative
+GET  /agents/{agent_id}/metrics
+GET  /agents/{agent_id}/export
+GET  /agents/{agent_id}/export-safe
+GET  /agents/{agent_id}/proactivity/inbox
+POST /agents/{agent_id}/memory/decay
+GET  /agents/{agent_id}/eval/conversation
+POST /agents/import
 POST /agents/{agent_id}/reset
 POST /agents/{agent_id}/memory/retrieve
 POST /agents/{agent_id}/consolidate

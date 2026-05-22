@@ -143,6 +143,37 @@ def test_http_api_exposes_narrative(tmp_path) -> None:
     assert "Soy NIÑO" in narrative["narrative"]["summary"]
 
 
+def test_http_api_exports_imports_and_reports_metrics(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "soy Pablo", "salience": 0.8})
+    exported = _request(app, "GET", "/agents/api-agent/export")
+    metrics = _request(app, "GET", "/agents/api-agent/metrics")
+    imported = _request(app, "POST", "/agents/import", {"export": exported["export"], "replace": True})
+
+    assert exported["export"]["agent_id"] == "api-agent"
+    assert metrics["metrics"]["episode_count"] == 1
+    assert imported["agent_id"] == "api-agent"
+    assert imported["imported_episodes"] == 1
+
+
+def test_http_api_privacy_inbox_decay_and_quality(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(app, "POST", "/agents/api-agent/proactivity/configure", {"consent": "allowed", "max_messages_per_day": 3, "min_hours_between": 0})
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "soy Pablo", "salience": 0.8})
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6})
+    _request(app, "POST", "/agents/api-agent/proactivity/evaluate", {})
+
+    safe = _request(app, "GET", "/agents/api-agent/export-safe")
+    inbox = _request(app, "GET", "/agents/api-agent/proactivity/inbox")
+    decay = _request(app, "POST", "/agents/api-agent/memory/decay", {"factor": 0.5})
+    quality = _request(app, "GET", "/agents/api-agent/eval/conversation")
+
+    assert safe["export"]["redacted"] is True
+    assert inbox["inbox"]
+    assert decay["factor"] == 0.5
+    assert quality["quality"]["episode_count"] == 2
+
+
 def test_http_api_proactivity_consent_and_frequency(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)

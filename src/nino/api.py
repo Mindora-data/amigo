@@ -331,6 +331,29 @@ class NinoService:
     def get_narrative(self, agent_id: str) -> dict[str, Any]:
         return {"narrative": _to_jsonable(self.runtime.build_narrative(agent_id))}
 
+    def export_agent(self, agent_id: str) -> dict[str, Any]:
+        return {"export": _to_jsonable(self.runtime.export_agent(agent_id))}
+
+    def export_agent_safe(self, agent_id: str) -> dict[str, Any]:
+        return {"export": _to_jsonable(self.runtime.export_agent_safe(agent_id))}
+
+    def import_agent(self, payload: dict[str, Any]) -> dict[str, Any]:
+        replace = bool(payload.get("replace", False))
+        export_payload = payload.get("export", payload)
+        return self.runtime.import_agent(export_payload, replace=replace)
+
+    def metrics(self, agent_id: str) -> dict[str, Any]:
+        return {"metrics": _to_jsonable(self.runtime.metrics(agent_id))}
+
+    def proactive_inbox(self, agent_id: str) -> dict[str, Any]:
+        return {"inbox": _to_jsonable(self.runtime.list_proactive_inbox(agent_id))}
+
+    def decay_memory(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.runtime.apply_memory_decay(agent_id, factor=float(payload.get("factor", 0.98)))
+
+    def conversation_quality(self, agent_id: str) -> dict[str, Any]:
+        return {"quality": self.runtime.evaluate_conversation_quality(agent_id)}
+
     def reset_agent(self, agent_id: str) -> dict[str, Any]:
         return self.runtime.reset_agent(agent_id)
 
@@ -457,6 +480,13 @@ class NinoHttpApp:
                     "GET /agents/{agent_id}/self-model",
                     "GET /agents/{agent_id}/world-model",
                     "GET /agents/{agent_id}/narrative",
+                    "GET /agents/{agent_id}/metrics",
+                    "GET /agents/{agent_id}/export",
+                    "GET /agents/{agent_id}/export-safe",
+                    "GET /agents/{agent_id}/proactivity/inbox",
+                    "POST /agents/{agent_id}/memory/decay",
+                    "GET /agents/{agent_id}/eval/conversation",
+                    "POST /agents/import",
                     "POST /agents/{agent_id}/reset",
                     "POST /agents/{agent_id}/memory/retrieve",
                     "POST /agents/{agent_id}/consolidate",
@@ -480,6 +510,8 @@ class NinoHttpApp:
         parts = [part for part in path.split("/") if part]
         if method == "GET" and parts == ["agents"]:
             return "200 OK", self.service.list_agents()
+        if method == "POST" and parts == ["agents", "import"]:
+            return "200 OK", self.service.import_agent(payload)
 
         if len(parts) < 2 or parts[0] != "agents":
             return "404 Not Found", {"error": "not_found"}
@@ -507,6 +539,18 @@ class NinoHttpApp:
             return "200 OK", self.service.get_world_model(agent_id)
         if method == "GET" and tail == ["narrative"]:
             return "200 OK", self.service.get_narrative(agent_id)
+        if method == "GET" and tail == ["metrics"]:
+            return "200 OK", self.service.metrics(agent_id)
+        if method == "GET" and tail == ["export"]:
+            return "200 OK", self.service.export_agent(agent_id)
+        if method == "GET" and tail == ["export-safe"]:
+            return "200 OK", self.service.export_agent_safe(agent_id)
+        if method == "GET" and tail == ["proactivity", "inbox"]:
+            return "200 OK", self.service.proactive_inbox(agent_id)
+        if method == "POST" and tail == ["memory", "decay"]:
+            return "200 OK", self.service.decay_memory(agent_id, payload)
+        if method == "GET" and tail == ["eval", "conversation"]:
+            return "200 OK", self.service.conversation_quality(agent_id)
         if method == "POST" and tail == ["reset"]:
             return "200 OK", self.service.reset_agent(agent_id)
         if method == "POST" and tail == ["memory", "retrieve"]:
