@@ -172,6 +172,7 @@ Hecho:
 - Dataset local de conversaciones de prueba. Hecho inicial: `eval/memory_regression.json`.
 - Pruebas de regresion para memoria realista. Hecho inicial: tests del eval runner.
 - Smoke test local de producto. Hecho inicial: `scripts/nino-smoke` valida UI servida, memoria, permisos, tareas, inbox, export seguro y backup con SQLite temporal.
+- Puerta de readiness local. Hecho inicial: `scripts/nino-readiness` ejecuta tests y smoke end-to-end.
 - Metricas de calidad historicas. Hecho inicial: guardar y consultar historial de evaluacion conversacional por agente.
 - Comparativa antes/despues por sprint. Hecho inicial: runner determinista y dataset local.
 - Deteccion de contradicciones mas explicable. Hecho inicial: contradicciones en consolidacion y razonamiento auditable.
@@ -227,6 +228,7 @@ Auditoria final de producto 100% local:
 13. Hecho inicial: validado con servidor real local: `/health`, `/operations/mode`, `/tasks`, `/permissions` y `/app`.
 14. Hecho inicial: diagnostico de Claude sin llamada externa mediante `/operations/claude`.
 15. Hecho inicial: puerta local de producto con `scripts/nino-smoke`.
-16. Siguiente: prueba manual de conversacion con Claude real cuando exista `ANTHROPIC_API_KEY`.
+16. Hecho inicial: checklist de producto en `PRODUCT_READINESS.md` y puerta `scripts/nino-readiness`.
+17. Siguiente: prueba manual de conversacion con Claude real cuando exista `ANTHROPIC_API_KEY`.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

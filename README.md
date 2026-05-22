@@ -64,6 +64,14 @@ The smoke test uses a temporary SQLite database and validates the local-first
 flow: `/app`, memory, conversation history, Claude diagnostics, permissions,
 task queue, proactive inbox, safe export and backup.
 
+Run the full local readiness gate:
+
+```bash
+scripts/nino-readiness
+```
+
+See `PRODUCT_READINESS.md` for the requirement-by-requirement product checklist.
+
 Install as a macOS user service:
 
 ```bash
