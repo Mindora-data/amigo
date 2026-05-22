@@ -17,6 +17,8 @@ Environment overrides:
 
 The installer copies source code, scripts and docs. It keeps an existing target
 data/nino.db and .env.local, and only seeds them from the source when missing.
+Configure Claude in the target with:
+  cd "$INSTALL_DIR" && scripts/nino-configure-claude
 EOF
 }
 

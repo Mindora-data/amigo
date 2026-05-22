@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${NINO_ENV_FILE:-$ROOT_DIR/.env.local}"
+MODEL="${NINO_CLAUDE_MODEL:-claude-sonnet-4-5}"
+KEY="${ANTHROPIC_API_KEY:-}"
+READ_STDIN=false
+
+usage() {
+  cat <<EOF
+Usage: scripts/nino-configure-claude [--model MODEL] [--key-stdin] [--env-file PATH]
+
+Writes Claude settings to a local untracked env file with mode 600.
+The key is never printed. Prefer --key-stdin or an interactive prompt over
+passing secrets as command-line arguments.
+
+Examples:
+  scripts/nino-configure-claude
+  printf '%s' "\$ANTHROPIC_API_KEY" | scripts/nino-configure-claude --key-stdin
+  scripts/nino-configure-claude --model claude-sonnet-4-5
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model)
+      MODEL="${2:-}"
+      shift 2
+      ;;
+    --env-file)
+      ENV_FILE="${2:-}"
+      shift 2
+      ;;
+    --key-stdin)
+      READ_STDIN=true
+      shift
+      ;;
+    -h|--help|help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$MODEL" ]]; then
+  echo "Model cannot be empty." >&2
+  exit 2
+fi
+
+if [[ "$READ_STDIN" == true ]]; then
+  IFS= read -r KEY || true
+elif [[ -z "$KEY" ]]; then
+  if [[ -t 0 ]]; then
+    printf "ANTHROPIC_API_KEY: " >&2
+    stty -echo
+    IFS= read -r KEY || true
+    stty echo
+    printf "\n" >&2
+  else
+    echo "Set ANTHROPIC_API_KEY or pass --key-stdin." >&2
+    exit 2
+  fi
+fi
+
+if [[ -z "$KEY" ]]; then
+  echo "ANTHROPIC_API_KEY cannot be empty." >&2
+  exit 2
+fi
+
+mkdir -p "$(dirname "$ENV_FILE")"
+tmp="$(mktemp)"
+if [[ -f "$ENV_FILE" ]]; then
+  grep -vE '^(NINO_LLM_PROVIDER|NINO_CLAUDE_MODEL|ANTHROPIC_API_KEY)=' "$ENV_FILE" > "$tmp" || true
+fi
+{
+  echo "NINO_LLM_PROVIDER=claude"
+  echo "NINO_CLAUDE_MODEL=$MODEL"
+  echo "ANTHROPIC_API_KEY=$KEY"
+} >> "$tmp"
+mv "$tmp" "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
+echo "Claude configuration written: $ENV_FILE"
+echo "Provider: claude"
+echo "Model: $MODEL"
+echo "API key: present"

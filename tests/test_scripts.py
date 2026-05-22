@@ -172,3 +172,32 @@ def test_install_local_copies_runtime_and_keeps_existing_data(tmp_path) -> None:
     assert (install_dir / "scripts" / "nino-launchd").exists()
     assert (install_dir / "README.md").exists()
     assert existing_db.read_text(encoding="utf-8") == "keep-target-db"
+
+
+def test_configure_claude_writes_untracked_env_without_printing_key(tmp_path) -> None:
+    env_file = tmp_path / ".env.local"
+    env_file.write_text("NINO_PORT=8010\nANTHROPIC_API_KEY=old-key\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            "scripts/nino-configure-claude",
+            "--env-file",
+            str(env_file),
+            "--model",
+            "claude-test",
+            "--key-stdin",
+        ],
+        check=True,
+        input="new-secret-key\n",
+        capture_output=True,
+        text=True,
+    )
+    content = env_file.read_text(encoding="utf-8")
+
+    assert "new-secret-key" in content
+    assert "old-key" not in content
+    assert "NINO_PORT=8010" in content
+    assert "NINO_LLM_PROVIDER=claude" in content
+    assert "NINO_CLAUDE_MODEL=claude-test" in content
+    assert "new-secret-key" not in result.stdout
+    assert oct(env_file.stat().st_mode & 0o777) == "0o600"

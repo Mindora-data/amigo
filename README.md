@@ -130,11 +130,17 @@ NIÑO uses local rule-based responses by default. To enable Claude for natural
 responses while keeping NIÑO memory and state local, set:
 
 ```bash
-cp .env.example .env.local
-# edit .env.local and set ANTHROPIC_API_KEY
+scripts/nino-configure-claude
 ```
 
-Then start the server:
+For a non-interactive setup:
+
+```bash
+printf '%s' "$ANTHROPIC_API_KEY" | scripts/nino-configure-claude --key-stdin
+```
+
+The script writes `.env.local` with file mode `600`, preserves unrelated local
+overrides, and never prints the key. Then start the server:
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m nino.server --db data/nino.db --host 127.0.0.1 --port 8000 --scheduler-interval 60
@@ -144,6 +150,16 @@ Or with `ninoctl`:
 
 ```bash
 scripts/ninoctl start
+```
+
+If using the macOS service copy, configure Claude in that installed folder and
+restart launchd:
+
+```bash
+cd ~/Developer/bebe
+scripts/nino-configure-claude
+scripts/nino-launchd stop
+scripts/nino-launchd start
 ```
 
 Check configuration without sending a Claude prompt:

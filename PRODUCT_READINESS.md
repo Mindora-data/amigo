@@ -28,7 +28,7 @@ scripts/nino-claude-live --require-key --json
 | Runtime persistente local | SQLite via `data/nino.db`; `/operations/mode` reporta `sqlite` | Cumplido |
 | UI operativa | `/app` cubierta por tests y smoke `browser_app` | Cumplido |
 | Memoria conversacional | `conversation_history`, `memory_search`, tests de retrieval y persistencia | Cumplido |
-| Claude opcional | `NINO_LLM_PROVIDER=claude`, `ANTHROPIC_API_KEY`, `/operations/claude`, `/llm/probe` | Implementado; prueba viva requiere key real |
+| Claude opcional | `scripts/nino-configure-claude`, `NINO_LLM_PROVIDER=claude`, `ANTHROPIC_API_KEY`, `/operations/claude`, `/llm/probe` | Implementado; prueba viva requiere key real |
 | Local-first offline | `/operations/mode`, smoke `local_first_mode`, core sin red | Cumplido |
 | Controles de seguridad | permisos por accion, bloqueo por defecto, export seguro, audit log | Cumplido |
 | Tareas autonomas controladas | smoke `task_enqueue`, `task_run`, `proactive_inbox` | Cumplido |
@@ -63,7 +63,8 @@ scripts/nino-claude-live --require-key --json
 No se debe commitear `ANTHROPIC_API_KEY`.
 
 Para uso diario, guardar esos valores en `.env.local` a partir de `.env.example`.
-`scripts/ninoctl` y `scripts/nino-launchd` cargan `.env.local`
+`scripts/nino-configure-claude` escribe `.env.local` con permisos `600` sin
+imprimir la key. `scripts/ninoctl` y `scripts/nino-launchd` cargan `.env.local`
 automaticamente, y `.env.local` esta ignorado por Git.
 El plist de launchd no incrusta `ANTHROPIC_API_KEY`; llama a
 `scripts/nino-launchd run` y este carga el env local en runtime.
