@@ -54,6 +54,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert content_type.startswith("text/html")
     assert b"<title>NI" in body
     assert b"/internal/cycle" in body
+    assert b"Salud" in body
+    assert b"Perfil" in body
+    assert b"Export seguro" in body
 
 
 def test_http_api_ticks_and_restores_state(tmp_path) -> None:
@@ -101,6 +104,27 @@ def test_http_api_lists_agents(tmp_path) -> None:
     agents = _request(app, "GET", "/agents")
 
     assert agents["agents"] == ["api-a", "api-b"]
+
+
+def test_http_api_deep_health_profile_and_prune_agents(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(app, "POST", "/agents/demo-one/tick", {"intent": "chat", "text": "soy Pablo", "salience": 0.8})
+    _request(app, "POST", "/agents/keep-one/tick", {"intent": "music", "text": "me gusta piano", "salience": 0.9})
+
+    health = _request(app, "GET", "/health/deep")
+    profile = _request(app, "GET", "/agents/demo-one/profile")
+    dry_run = _request(app, "POST", "/agents/prune", {"prefixes": ["demo-"], "dry_run": True})
+    pruned = _request(app, "POST", "/agents/prune", {"prefixes": ["demo-"], "dry_run": False})
+    agents = _request(app, "GET", "/agents")
+
+    assert health["ok"] is True
+    assert health["agent_count"] == 2
+    assert profile["profile"]["known_user"] == "Pablo"
+    assert profile["profile"]["episode_count"] == 1
+    assert dry_run["matched"] == ["demo-one"]
+    assert pruned["deleted"][0]["agent_id"] == "demo-one"
+    assert agents["agents"] == ["keep-one"]
 
 
 def test_http_api_exposes_relation_state(tmp_path) -> None:

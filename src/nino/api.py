@@ -117,7 +117,15 @@ APP_HTML = """<!doctype html>
         </div>
         <button id="dream" class="secondary" style="margin-top:8px;width:100%">Sueño</button>
         <button id="scheduled" class="secondary" style="margin-top:8px;width:100%">Scheduler</button>
-        <button id="agents" class="secondary" style="margin-top:8px;width:100%">Agentes</button>
+        <div class="row">
+          <button id="agents" class="secondary">Agentes</button>
+          <button id="healthDeep" class="secondary">Salud</button>
+        </div>
+        <div class="row">
+          <button id="snapshot" class="secondary">Snapshot</button>
+          <button id="profile" class="secondary">Perfil</button>
+        </div>
+        <button id="metrics" class="secondary" style="margin-top:8px;width:100%">Métricas</button>
         <button id="reset" class="secondary" style="margin-top:8px;width:100%">Reset agente</button>
         <pre id="state">{}</pre>
       </div>
@@ -137,6 +145,7 @@ APP_HTML = """<!doctype html>
           <button id="saveProactivity" class="secondary">Guardar</button>
           <button id="evalProactivity" class="secondary">Evaluar</button>
         </div>
+        <button id="inbox" class="secondary" style="margin-top:8px;width:100%">Inbox</button>
         <pre id="proactivity">{}</pre>
       </div>
       <div class="panel">
@@ -155,6 +164,10 @@ APP_HTML = """<!doctype html>
           <button id="worldModel" class="secondary">Mundo</button>
         </div>
         <button id="narrative" class="secondary" style="margin-top:8px;width:100%">Narrativa</button>
+        <div class="row">
+          <button id="exportSafe" class="secondary">Export seguro</button>
+          <button id="quality" class="secondary">Calidad</button>
+        </div>
         <pre id="memory">{}</pre>
       </div>
     </aside>
@@ -215,7 +228,10 @@ APP_HTML = """<!doctype html>
       if (out.proactive_action) addEntry("niño · programado", out.proactive_action.payload.text);
     };
     $("agents").onclick = async () => print($("state"), await api("/agents"));
-    $("agents").ondblclick = async () => print($("state"), await api("/development/snapshot"));
+    $("healthDeep").onclick = async () => print($("state"), await api("/health/deep"));
+    $("snapshot").onclick = async () => print($("state"), await api("/development/snapshot"));
+    $("profile").onclick = async () => print($("state"), await api(agentPath("/profile")));
+    $("metrics").onclick = async () => print($("state"), await api(agentPath("/metrics")));
     $("reset").onclick = async () => {
       const out = await api(agentPath("/reset"), {method: "POST", body: "{}"});
       log.textContent = "";
@@ -236,6 +252,7 @@ APP_HTML = """<!doctype html>
       print($("proactivity"), out);
       if (out.should_send) addEntry("niño · proactivo", out.action.payload.text);
     };
+    $("inbox").onclick = async () => print($("proactivity"), await api(agentPath("/proactivity/inbox")));
     $("episodes").onclick = async () => print($("memory"), await api(agentPath("/episodes")));
     $("facts").onclick = async () => print($("memory"), await api(agentPath("/memory/facts")));
     $("memorySearch").onclick = async () => {
@@ -246,6 +263,8 @@ APP_HTML = """<!doctype html>
     $("selfModel").onclick = async () => print($("memory"), await api(agentPath("/self-model")));
     $("worldModel").onclick = async () => print($("memory"), await api(agentPath("/world-model")));
     $("narrative").onclick = async () => print($("memory"), await api(agentPath("/narrative")));
+    $("exportSafe").onclick = async () => print($("memory"), await api(agentPath("/export-safe")));
+    $("quality").onclick = async () => print($("memory"), await api(agentPath("/eval/conversation")));
     refreshState();
   </script>
 </body>
@@ -291,6 +310,18 @@ class NinoService:
     def health(self) -> dict[str, Any]:
         return {"ok": True, "service": "nino"}
 
+    def deep_health(self) -> dict[str, Any]:
+        snapshot = self.runtime.development_snapshot()
+        autonomy = self.autonomy_status()
+        return {
+            "ok": True,
+            "service": "nino",
+            "storage": "ok",
+            "agent_count": snapshot["agent_count"],
+            "total_episodes": snapshot.get("total_episodes", 0),
+            "autonomy": autonomy,
+        }
+
     def autonomy_status(self) -> dict[str, Any]:
         if self.autonomy is None:
             return {"enabled": False, "running": False}
@@ -304,6 +335,13 @@ class NinoService:
 
     def list_agents(self) -> dict[str, Any]:
         return {"agents": self.runtime.list_agents()}
+
+    def prune_agents(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.runtime.prune_agents(
+            prefixes=list(payload.get("prefixes") or []),
+            agent_ids=list(payload.get("agent_ids") or []),
+            dry_run=bool(payload.get("dry_run", True)),
+        )
 
     def development_snapshot(self) -> dict[str, Any]:
         return {"snapshot": self.runtime.development_snapshot()}
@@ -342,6 +380,9 @@ class NinoService:
 
     def get_narrative(self, agent_id: str) -> dict[str, Any]:
         return {"narrative": _to_jsonable(self.runtime.build_narrative(agent_id))}
+
+    def get_profile(self, agent_id: str) -> dict[str, Any]:
+        return {"profile": _to_jsonable(self.runtime.agent_profile(agent_id))}
 
     def export_agent(self, agent_id: str) -> dict[str, Any]:
         return {"export": _to_jsonable(self.runtime.export_agent(agent_id))}
@@ -496,9 +537,13 @@ class NinoHttpApp:
                 "status": "ok",
                 "endpoints": [
                     "GET /health",
+                    "GET /health/deep",
                     "GET /autonomy/status",
                     "POST /autonomy/run-once",
                     "GET /development/snapshot",
+                    "GET /agents",
+                    "POST /agents/prune",
+                    "POST /agents/import",
                     "POST /agents/{agent_id}/tick",
                     "GET /agents/{agent_id}/state",
                     "GET /agents/{agent_id}/episodes",
@@ -507,6 +552,7 @@ class NinoHttpApp:
                     "GET /agents/{agent_id}/self-model",
                     "GET /agents/{agent_id}/world-model",
                     "GET /agents/{agent_id}/narrative",
+                    "GET /agents/{agent_id}/profile",
                     "GET /agents/{agent_id}/metrics",
                     "GET /agents/{agent_id}/export",
                     "GET /agents/{agent_id}/export-safe",
@@ -516,7 +562,6 @@ class NinoHttpApp:
                     "POST /agents/{agent_id}/memory/decay",
                     "POST /agents/{agent_id}/memory/search",
                     "GET /agents/{agent_id}/eval/conversation",
-                    "POST /agents/import",
                     "POST /agents/{agent_id}/reset",
                     "POST /agents/{agent_id}/memory/retrieve",
                     "POST /agents/{agent_id}/consolidate",
@@ -529,6 +574,8 @@ class NinoHttpApp:
             }
         if method == "GET" and path == "/health":
             return "200 OK", self.service.health()
+        if method == "GET" and path == "/health/deep":
+            return "200 OK", self.service.deep_health()
         if method == "GET" and path == "/autonomy/status":
             return "200 OK", self.service.autonomy_status()
         if method == "POST" and path == "/autonomy/run-once":
@@ -542,6 +589,8 @@ class NinoHttpApp:
         parts = [part for part in path.split("/") if part]
         if method == "GET" and parts == ["agents"]:
             return "200 OK", self.service.list_agents()
+        if method == "POST" and parts == ["agents", "prune"]:
+            return "200 OK", self.service.prune_agents(payload)
         if method == "POST" and parts == ["agents", "import"]:
             return "200 OK", self.service.import_agent(payload)
 
@@ -571,6 +620,8 @@ class NinoHttpApp:
             return "200 OK", self.service.get_world_model(agent_id)
         if method == "GET" and tail == ["narrative"]:
             return "200 OK", self.service.get_narrative(agent_id)
+        if method == "GET" and tail == ["profile"]:
+            return "200 OK", self.service.get_profile(agent_id)
         if method == "GET" and tail == ["metrics"]:
             return "200 OK", self.service.metrics(agent_id)
         if method == "GET" and tail == ["export"]:

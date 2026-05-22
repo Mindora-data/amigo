@@ -45,3 +45,31 @@ def test_development_snapshot_aggregates_agents(tmp_path) -> None:
     assert snapshot["agent_count"] == 2
     assert snapshot["total_episodes"] == 2
     assert snapshot["average_maturity"] > 0
+
+
+def test_agent_profile_compacts_operational_state(tmp_path) -> None:
+    runtime = create_persistent_runtime(tmp_path / "nino.db")
+    runtime.tick("agent-a", {"intent": "chat", "text": "soy Pablo", "salience": 0.8})
+    runtime.tick("agent-a", {"intent": "music", "text": "me gusta piano", "salience": 0.9})
+    runtime.enqueue_proactive_action("agent-a", {"type": "external_message", "payload": {"text": "hola"}})
+
+    profile = runtime.agent_profile("agent-a")
+
+    assert profile["known_user"] == "Pablo"
+    assert "piano" in profile["preferences"]
+    assert profile["episode_count"] == 2
+    assert profile["pending_proactive_count"] == 1
+
+
+def test_prune_agents_supports_dry_run_and_prefixes(tmp_path) -> None:
+    runtime = create_persistent_runtime(tmp_path / "nino.db")
+    runtime.tick("demo-a", {"intent": "chat", "text": "hola"})
+    runtime.tick("check-b", {"intent": "chat", "text": "hola"})
+    runtime.tick("real-c", {"intent": "chat", "text": "hola"})
+
+    dry_run = runtime.prune_agents(prefixes=["demo-", "check-"], dry_run=True)
+    pruned = runtime.prune_agents(prefixes=["demo-", "check-"], dry_run=False)
+
+    assert dry_run["matched"] == ["check-b", "demo-a"]
+    assert runtime.list_agents() == ["real-c"]
+    assert [item["agent_id"] for item in pruned["deleted"]] == ["check-b", "demo-a"]

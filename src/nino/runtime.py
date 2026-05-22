@@ -420,6 +420,31 @@ class NinoRuntime:
                 ids.update(store.list_agent_ids())
         return sorted(ids)
 
+    def prune_agents(
+        self,
+        prefixes: list[str] | None = None,
+        agent_ids: list[str] | None = None,
+        dry_run: bool = True,
+    ) -> dict[str, Any]:
+        prefixes = [prefix for prefix in (prefixes or []) if prefix]
+        explicit_ids = {agent_id for agent_id in (agent_ids or []) if agent_id}
+        matched = [
+            agent_id
+            for agent_id in self.list_agents()
+            if agent_id in explicit_ids or any(agent_id.startswith(prefix) for prefix in prefixes)
+        ]
+        deleted = []
+        if not dry_run:
+            for agent_id in matched:
+                deleted.append(self.reset_agent(agent_id))
+        return {
+            "dry_run": dry_run,
+            "prefixes": prefixes,
+            "agent_ids": sorted(explicit_ids),
+            "matched": matched,
+            "deleted": deleted,
+        }
+
     def delete_episode(self, agent_id: str, episode_id: str) -> dict[str, Any]:
         deleted = False
         if hasattr(self.episode_store, "delete_episode"):
@@ -683,6 +708,30 @@ class NinoRuntime:
             "total_episodes": sum(item["episode_count"] for item in metrics),
             "total_cold_memory": sum(item["cold_memory_count"] for item in metrics),
             "total_open_questions": sum(item["open_question_count"] for item in metrics),
+        }
+
+    def agent_profile(self, agent_id: str) -> dict[str, Any]:
+        state = self.load_or_init_state(agent_id)
+        metrics = self.metrics(agent_id)
+        narrative = self.build_narrative(agent_id)
+        inbox = self.list_proactive_inbox(agent_id)
+        pending_inbox = [item for item in inbox if not item.get("delivered", False)]
+        return {
+            "agent_id": agent_id,
+            "summary": narrative["summary"],
+            "identity_stage": narrative["identity_stage"],
+            "maturity": metrics["maturity"],
+            "tick": metrics["tick"],
+            "known_user": narrative["known_user"],
+            "preferences": narrative["preferences"],
+            "dominant_concepts": narrative["dominant_concepts"],
+            "active_goals": metrics["active_goals"],
+            "affect_mood": metrics["affect_mood"],
+            "energy": metrics["energy"],
+            "episode_count": metrics["episode_count"],
+            "cold_memory_count": metrics["cold_memory_count"],
+            "pending_proactive_count": len(pending_inbox),
+            "last_updated_at": state.updated_at,
         }
 
     def policy_decide(self, request: PolicyRequest) -> PolicyResponse:
