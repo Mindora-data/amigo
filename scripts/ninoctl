@@ -38,6 +38,8 @@ Commands:
   doctor      Run health, agents, snapshot and nino LLM status checks.
   logs        Show recent logs. Use: scripts/ninoctl logs -f
   backup      Create a timestamped SQLite backup.
+  backups     List local SQLite backups.
+  restore     Restore a SQLite backup. Use: scripts/ninoctl restore <backup.db>
 
 Environment overrides:
   NINO_ENV_FILE, NINO_HOST, NINO_PORT, NINO_DB_PATH, NINO_SCHEDULER_INTERVAL, NINO_PYTHON
@@ -203,6 +205,38 @@ backup() {
   echo "Backup created: $backup_path"
 }
 
+backups() {
+  ensure_dirs
+  find "$BACKUP_DIR" -maxdepth 1 -type f -name '*.db' -print | sort
+}
+
+restore() {
+  local source_path="${1:-}"
+  if [[ -z "$source_path" ]]; then
+    echo "Usage: scripts/ninoctl restore <backup.db>" >&2
+    return 2
+  fi
+  if [[ ! -f "$source_path" ]]; then
+    echo "Backup not found: $source_path" >&2
+    return 1
+  fi
+  if pid_is_running || server_responds; then
+    echo "Stop NIÑO before restoring a database." >&2
+    return 1
+  fi
+
+  ensure_dirs
+  if [[ -f "$DB_PATH" ]]; then
+    local stamp pre_restore
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    pre_restore="$BACKUP_DIR/pre-restore-$stamp.db"
+    cp "$DB_PATH" "$pre_restore"
+    echo "Current database saved: $pre_restore"
+  fi
+  cp "$source_path" "$DB_PATH"
+  echo "Database restored from: $source_path"
+}
+
 doctor() {
   echo "== status =="
   status
@@ -238,6 +272,8 @@ case "$command" in
   doctor) doctor ;;
   logs) logs "${1:-}" ;;
   backup) backup ;;
+  backups) backups ;;
+  restore) restore "${1:-}" ;;
   -h|--help|help|"") usage ;;
   *)
     echo "Unknown command: $command" >&2

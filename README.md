@@ -38,6 +38,7 @@ scripts/ninoctl agents
 scripts/ninoctl doctor
 scripts/ninoctl logs
 scripts/ninoctl backup
+scripts/ninoctl backups
 scripts/ninoctl stop
 ```
 
@@ -52,6 +53,16 @@ Restart:
 ```bash
 scripts/ninoctl restart
 ```
+
+Restore a local SQLite backup while NIÑO is stopped:
+
+```bash
+scripts/ninoctl backups
+scripts/ninoctl stop
+scripts/ninoctl restore data/backups/nino-YYYYMMDD-HHMMSS.db
+```
+
+Restore writes a `pre-restore-*.db` backup of the current database first.
 
 Run the local product smoke test:
 

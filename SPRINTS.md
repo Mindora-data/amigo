@@ -4,7 +4,7 @@ Estado confirmado el 2026-05-22:
 
 - GitHub se mantiene sincronizado desde los commits de sprint; confirmar hash exacto con `git rev-parse HEAD`.
 - Rama activa: `main`.
-- Suite actual: 110 tests pasando.
+- Suite actual: 111 tests pasando.
 - La memoria viva local (`data/nino.db`) no se versiona en GitHub.
 - El producto publicado es el motor, API, UI minima y pruebas; no incluye datos de uso real.
 
@@ -116,7 +116,7 @@ Hecho:
 - Flujo de conversacion diaria desde la UI. Hecho inicial: consola `/app` centrada en agente vivo.
 - Pantalla de estado entendible: energia, relacion, memoria, proactividad, madurez. Hecho inicial: metricas principales visibles.
 - Historial conversacional legible. Hecho inicial: `/app` carga episodios persistidos al abrir o cambiar de agente.
-- Backups locales de `data/nino.db`. Hecho inicial: `scripts/ninoctl backup` y `POST /operations/backup` desde UI.
+- Backups locales de `data/nino.db`. Hecho inicial: `scripts/ninoctl backup`, `scripts/ninoctl backups`, `scripts/ninoctl restore` y `POST /operations/backup` desde UI.
 - Logs operativos claros. Hecho inicial: `scripts/ninoctl logs`.
 - Comando de diagnostico: salud, modo local-first, agentes, episodios, memoria, inbox y ultimo ciclo. Hecho inicial: `scripts/ninoctl doctor`.
 - Validar continuidad entre sesiones reales. Hecho inicial: `nino` conserva episodios y memoria tras reinicio.
@@ -218,7 +218,7 @@ Auditoria final de producto 100% local:
 1. Hecho: crear `scripts/ninoctl` para `start`, `stop`, `status`, `health`, `logs` y `backup`.
 2. Hecho: documentarlo en `README.md`.
 3. Hecho: probar que el servidor arranca y responde `/health`.
-4. Hecho: crear backups de `data/nino.db`.
+4. Hecho: crear, listar y restaurar backups de `data/nino.db`.
 5. Hecho inicial: crear el agente vivo `nino` y validar continuidad entre reinicios.
 6. Hecho inicial: mejorar la UI para conversacion diaria y estado operativo.
 7. Hecho inicial: mejorar historial conversacional persistente.

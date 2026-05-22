@@ -40,3 +40,40 @@ def test_launchd_plist_does_not_embed_anthropic_key(tmp_path) -> None:
     assert str(env_file) in content
     assert "ANTHROPIC_API_KEY" not in content
     assert "secret-launchd-test" not in content
+
+
+def test_ninoctl_can_list_and_restore_backups(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    backup_dir = data_dir / "backups"
+    db_path = data_dir / "nino.db"
+    backup_dir.mkdir(parents=True)
+    db_path.write_text("current", encoding="utf-8")
+    backup_path = backup_dir / "nino-backup.db"
+    backup_path.write_text("restored", encoding="utf-8")
+    env = {
+        **os.environ,
+        "NINO_DATA_DIR": str(data_dir),
+        "NINO_DB_PATH": str(db_path),
+        "NINO_BACKUP_DIR": str(backup_dir),
+        "NINO_PORT": "65530",
+    }
+
+    listed = subprocess.run(
+        ["scripts/ninoctl", "backups"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    restored = subprocess.run(
+        ["scripts/ninoctl", "restore", str(backup_path)],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert str(backup_path) in listed.stdout
+    assert "Database restored from" in restored.stdout
+    assert db_path.read_text(encoding="utf-8") == "restored"
+    assert list(backup_dir.glob("pre-restore-*.db"))
