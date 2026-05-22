@@ -80,6 +80,9 @@ scripts/nino-launchd status
 scripts/nino-launchd uninstall
 ```
 
+The launchd plist calls `scripts/nino-launchd run` and points to `.env.local`;
+it does not embed `ANTHROPIC_API_KEY` in the plist.
+
 Defaults:
 
 - URL: `http://127.0.0.1:8000`

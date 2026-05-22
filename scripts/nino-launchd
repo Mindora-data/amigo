@@ -30,6 +30,7 @@ Commands:
   stop       Stop the installed service.
   status     Show launchd status.
   print      Print the generated plist path.
+  run        Internal launchd entrypoint.
 
 Local env:
   By default scripts/nino-launchd loads $ROOT_DIR/.env.local when it exists.
@@ -49,28 +50,13 @@ install() {
   <string>$ROOT_DIR</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$PYTHON_BIN</string>
-    <string>-m</string>
-    <string>nino.server</string>
-    <string>--db</string>
-    <string>$DB_PATH</string>
-    <string>--host</string>
-    <string>$HOST</string>
-    <string>--port</string>
-    <string>$PORT</string>
-    <string>--scheduler-interval</string>
-    <string>$SCHEDULER_INTERVAL</string>
+    <string>$ROOT_DIR/scripts/nino-launchd</string>
+    <string>run</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PYTHONPATH</key>
-    <string>$ROOT_DIR/src</string>
-    <key>NINO_LLM_PROVIDER</key>
-    <string>${NINO_LLM_PROVIDER:-}</string>
-    <key>NINO_CLAUDE_MODEL</key>
-    <string>${NINO_CLAUDE_MODEL:-claude-sonnet-4-5}</string>
-    <key>ANTHROPIC_API_KEY</key>
-    <string>${ANTHROPIC_API_KEY:-}</string>
+    <key>NINO_ENV_FILE</key>
+    <string>$ENV_FILE</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>
@@ -88,6 +74,17 @@ EOF
   echo "Installed: $PLIST"
 }
 
+run() {
+  mkdir -p "$ROOT_DIR/data"
+  cd "$ROOT_DIR"
+  export PYTHONPATH="$ROOT_DIR/src"
+  exec "$PYTHON_BIN" -m nino.server \
+    --db "$DB_PATH" \
+    --host "$HOST" \
+    --port "$PORT" \
+    --scheduler-interval "$SCHEDULER_INTERVAL"
+}
+
 uninstall() {
   launchctl unload "$PLIST" >/dev/null 2>&1 || true
   rm -f "$PLIST"
@@ -101,6 +98,7 @@ case "${1:-}" in
   stop) launchctl unload "$PLIST" ;;
   status) launchctl list "$LABEL" ;;
   print) echo "$PLIST" ;;
+  run) run ;;
   -h|--help|help|"") usage ;;
   *)
     echo "Unknown command: ${1:-}" >&2

@@ -4,7 +4,7 @@ Estado confirmado el 2026-05-22:
 
 - GitHub se mantiene sincronizado desde los commits de sprint; confirmar hash exacto con `git rev-parse HEAD`.
 - Rama activa: `main`.
-- Suite actual: 105 tests pasando.
+- Suite actual: 106 tests pasando.
 - La memoria viva local (`data/nino.db`) no se versiona en GitHub.
 - El producto publicado es el motor, API, UI minima y pruebas; no incluye datos de uso real.
 
@@ -230,6 +230,7 @@ Auditoria final de producto 100% local:
 15. Hecho inicial: puerta local de producto con `scripts/nino-smoke`.
 16. Hecho inicial: checklist de producto en `PRODUCT_READINESS.md` y puerta `scripts/nino-readiness`.
 17. Hecho inicial: plantilla `.env.example` y carga automatica de `.env.local` para Claude local.
-18. Siguiente: prueba manual de conversacion con Claude real cuando exista `ANTHROPIC_API_KEY`.
+18. Hecho inicial: launchd carga `.env.local` en runtime sin incrustar `ANTHROPIC_API_KEY` en el plist.
+19. Siguiente: prueba manual de conversacion con Claude real cuando exista `ANTHROPIC_API_KEY`.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

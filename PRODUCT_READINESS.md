@@ -52,3 +52,5 @@ No se debe commitear `ANTHROPIC_API_KEY`.
 Para uso diario, guardar esos valores en `.env.local` a partir de `.env.example`.
 `scripts/ninoctl` y `scripts/nino-launchd` cargan `.env.local`
 automaticamente, y `.env.local` esta ignorado por Git.
+El plist de launchd no incrusta `ANTHROPIC_API_KEY`; llama a
+`scripts/nino-launchd run` y este carga el env local en runtime.
