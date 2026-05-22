@@ -48,3 +48,7 @@ curl -X POST http://127.0.0.1:8000/agents/nino/llm/probe \
 ```
 
 No se debe commitear `ANTHROPIC_API_KEY`.
+
+Para uso diario, guardar esos valores en `.env.local` a partir de `.env.example`.
+`scripts/ninoctl` y `scripts/nino-launchd` cargan `.env.local`
+automaticamente, y `.env.local` esta ignorado por Git.

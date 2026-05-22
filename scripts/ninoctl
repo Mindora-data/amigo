@@ -2,6 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${NINO_ENV_FILE:-$ROOT_DIR/.env.local}"
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$ENV_FILE"
+  set +a
+fi
 DATA_DIR="${NINO_DATA_DIR:-$ROOT_DIR/data}"
 DB_PATH="${NINO_DB_PATH:-$DATA_DIR/nino.db}"
 HOST="${NINO_HOST:-127.0.0.1}"
@@ -33,7 +40,11 @@ Commands:
   backup      Create a timestamped SQLite backup.
 
 Environment overrides:
-  NINO_HOST, NINO_PORT, NINO_DB_PATH, NINO_SCHEDULER_INTERVAL, NINO_PYTHON
+  NINO_ENV_FILE, NINO_HOST, NINO_PORT, NINO_DB_PATH, NINO_SCHEDULER_INTERVAL, NINO_PYTHON
+  NINO_LLM_PROVIDER, NINO_CLAUDE_MODEL, ANTHROPIC_API_KEY
+
+Local env:
+  By default scripts/ninoctl loads $ROOT_DIR/.env.local when it exists.
 EOF
 }
 

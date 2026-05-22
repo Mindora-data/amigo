@@ -194,7 +194,7 @@ Objetivo: preparar integraciones externas sin perder control ni seguridad.
 Hecho:
 
 - Adaptador LLM configurable. Hecho inicial: `NINO_LLM_PROVIDER`.
-- Adaptador Claude via Anthropic Messages API. Hecho inicial en Sprint 6 por necesidad de conversacion real; diagnostico local con `GET /operations/claude` y `scripts/ninoctl claude`.
+- Adaptador Claude via Anthropic Messages API. Hecho inicial en Sprint 6 por necesidad de conversacion real; diagnostico local con `GET /operations/claude`, `scripts/ninoctl claude` y configuracion persistente en `.env.local`.
 - Politicas de herramienta/accion externa. Hecho inicial: permisos por tipo de accion, bloqueo por defecto y auditoria.
 - Cola de tareas autonomas con limites. Hecho inicial: cola persistente por agente con limite de pendientes, bloqueo por permisos, ejecucion manual y panel en `/app`.
 - Agenda proactiva con ventanas horarias. Hecho inicial: `active_hours_start`/`active_hours_end` bloquean envios fuera de ventana y se configuran desde `/app`.
@@ -229,6 +229,7 @@ Auditoria final de producto 100% local:
 14. Hecho inicial: diagnostico de Claude sin llamada externa mediante `/operations/claude`.
 15. Hecho inicial: puerta local de producto con `scripts/nino-smoke`.
 16. Hecho inicial: checklist de producto en `PRODUCT_READINESS.md` y puerta `scripts/nino-readiness`.
-17. Siguiente: prueba manual de conversacion con Claude real cuando exista `ANTHROPIC_API_KEY`.
+17. Hecho inicial: plantilla `.env.example` y carga automatica de `.env.local` para Claude local.
+18. Siguiente: prueba manual de conversacion con Claude real cuando exista `ANTHROPIC_API_KEY`.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

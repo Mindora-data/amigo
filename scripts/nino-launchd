@@ -2,6 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${NINO_ENV_FILE:-$ROOT_DIR/.env.local}"
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$ENV_FILE"
+  set +a
+fi
 LABEL="${NINO_LAUNCHD_LABEL:-local.nino.server}"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 PYTHON_BIN="${NINO_PYTHON:-$ROOT_DIR/.venv/bin/python}"
@@ -23,6 +30,9 @@ Commands:
   stop       Stop the installed service.
   status     Show launchd status.
   print      Print the generated plist path.
+
+Local env:
+  By default scripts/nino-launchd loads $ROOT_DIR/.env.local when it exists.
 EOF
 }
 

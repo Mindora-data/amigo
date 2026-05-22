@@ -97,15 +97,18 @@ NINO_SCHEDULER_INTERVAL=300 scripts/ninoctl restart
 NINO_DB_PATH=data/other.db scripts/ninoctl start
 ```
 
+For persistent local configuration, copy `.env.example` to `.env.local`.
+`scripts/ninoctl` and `scripts/nino-launchd` load `.env.local` automatically.
+The `.env.local` file is ignored by Git.
+
 ## Claude Responses
 
 NIÑO uses local rule-based responses by default. To enable Claude for natural
 responses while keeping NIÑO memory and state local, set:
 
 ```bash
-export ANTHROPIC_API_KEY="your-key"
-export NINO_LLM_PROVIDER=claude
-export NINO_CLAUDE_MODEL=claude-sonnet-4-5
+cp .env.example .env.local
+# edit .env.local and set ANTHROPIC_API_KEY
 ```
 
 Then start the server:
@@ -117,7 +120,7 @@ PYTHONPATH=src .venv/bin/python -m nino.server --db data/nino.db --host 127.0.0.
 Or with `ninoctl`:
 
 ```bash
-NINO_LLM_PROVIDER=claude NINO_CLAUDE_MODEL=claude-sonnet-4-5 scripts/ninoctl start
+scripts/ninoctl start
 ```
 
 Check configuration without sending a Claude prompt:
