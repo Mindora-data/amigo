@@ -17,8 +17,8 @@ def test_policy_handles_questions_without_default_placeholder() -> None:
 
     out = runtime.tick("agent-policy", {"intent": "question", "text": "qué recuerdas de mí?"})
 
-    assert "No lo sé todavía" in out["action"]["payload"]["text"]
-    assert "question_detected" in out["reason_trace"]
+    assert "Todavía tengo poca memoria" in out["action"]["payload"]["text"]
+    assert "user_memory_query" in out["reason_trace"]
 
 
 def test_policy_uses_retrieved_memory_on_followup() -> None:
@@ -27,9 +27,21 @@ def test_policy_uses_retrieved_memory_on_followup() -> None:
 
     out = runtime.tick("agent-policy", {"intent": "music piano", "text": "hablemos de piano"})
 
-    assert "recuerdo" in out["action"]["payload"]["text"]
-    assert "me gusta piano" in out["action"]["payload"]["text"]
-    assert "memory_continuity" in out["reason_trace"]
+    assert "Recuerdo que tiene peso para ti" in out["action"]["payload"]["text"]
+    assert "piano" in out["action"]["payload"]["text"]
+    assert "topic_continuation" in out["reason_trace"]
+
+
+def test_policy_answers_user_memory_query_from_relation() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    runtime.tick("agent-policy", {"intent": "chat", "text": "soy Pablo"})
+    runtime.tick("agent-policy", {"intent": "music", "text": "me gusta el piano", "salience": 0.9})
+
+    out = runtime.tick("agent-policy", {"intent": "question", "text": "que sabes de mi?"})
+
+    assert "eres Pablo" in out["action"]["payload"]["text"]
+    assert "piano" in out["action"]["payload"]["text"]
+    assert "user_memory_query" in out["reason_trace"]
 
 
 def test_policy_does_not_use_unrelated_recent_memory() -> None:
@@ -79,7 +91,7 @@ def test_policy_ignores_repeated_same_memory_on_followup() -> None:
 
     out = runtime.tick("agent-policy", {"intent": "chat", "text": "hablemos de piano", "salience": 0.7})
 
-    assert "me gusta piano" in out["action"]["payload"]["text"]
+    assert "Recuerdo que tiene peso para ti" in out["action"]["payload"]["text"]
     assert "hablemos de piano. Lo añado" not in out["action"]["payload"]["text"]
 
 

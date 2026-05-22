@@ -150,6 +150,10 @@ PREFERENCE_RE = re.compile(
     re.IGNORECASE,
 )
 NAME_RE = re.compile(r"\bsoy\s+(?P<name>[\wáéíóúñ]+)", re.IGNORECASE)
+TOPIC_RE = re.compile(
+    r"\b(?:hablemos de|quiero hablar de|hablar de)\s+(?P<topic>[\wáéíóúñ]+(?:\s+[\wáéíóúñ]+){0,4})",
+    re.IGNORECASE,
+)
 EMOTION_PATTERNS = {
     "sad": re.compile(r"\b(triste|solo|sola|mal|baj[oó]n|abatido|abatida)\b", re.IGNORECASE),
     "happy": re.compile(r"\b(contento|contenta|feliz|bien|alegre|motivado|motivada)\b", re.IGNORECASE),
@@ -887,6 +891,47 @@ class NinoRuntime:
                 chosen_action=action,
                 confidence=0.62,
                 reason_trace=["context_policy", "internal_state_query"],
+            )
+
+        if "que recuerdas de mi" in plain or "que sabes de mi" in plain:
+            name = relation.get("user_name")
+            preferences = sorted(relation.get("preferences", {}).keys())
+            parts = []
+            if name:
+                parts.append(f"recuerdo que eres {name}")
+            if preferences:
+                parts.append(f"recuerdo que te interesa {', '.join(preferences[:3])}")
+            if not parts:
+                answer = "Todavía tengo poca memoria sobre ti. Puedo empezar por tu nombre, gustos y cosas importantes que quieras conservar."
+            else:
+                answer = "Ahora mismo " + " y ".join(parts) + "."
+            action = {"type": "external_message", "payload": {"text": answer}}
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.68,
+                reason_trace=["context_policy", "user_memory_query"],
+            )
+
+        topic_match = TOPIC_RE.search(text)
+        if topic_match:
+            topic = _clean_preference_value(topic_match.group("topic"))
+            preferences = relation.get("preferences", {})
+            known = topic in preferences or any(topic in key or key in topic for key in preferences)
+            if known:
+                answer = (
+                    f"Sí, hablemos de {topic}. Recuerdo que tiene peso para ti. "
+                    "Podemos ir por lo que te hace sentir, por cómo aprenderlo o por piezas que te interesen."
+                )
+            else:
+                answer = (
+                    f"Hablemos de {topic}. Todavía no tengo mucha historia con ese tema, "
+                    "pero puedo explorarlo contigo y ver qué lugar ocupa para ti."
+                )
+            action = {"type": "external_message", "payload": {"text": answer}}
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.66,
+                reason_trace=["context_policy", "topic_continuation"],
             )
 
         if "?" in text:
