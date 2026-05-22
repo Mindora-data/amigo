@@ -42,6 +42,44 @@ def test_launchd_plist_does_not_embed_anthropic_key(tmp_path) -> None:
     assert "secret-launchd-test" not in content
 
 
+def test_launchd_doctor_reports_protected_desktop_path_and_recent_error(tmp_path) -> None:
+    home = tmp_path / "home"
+    repo = home / "Desktop" / "bebe"
+    data = repo / "data"
+    data.mkdir(parents=True)
+    err_file = data / "nino-launchd.err.log"
+    err_file.write_text("bash: scripts/nino-launchd: Operation not permitted\n", encoding="utf-8")
+    launchctl = tmp_path / "launchctl"
+    launchctl.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"list\" ]]; then echo '123 0 local.nino.test'; fi\n",
+        encoding="utf-8",
+    )
+    launchctl.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_ROOT_DIR": str(repo),
+        "NINO_LAUNCHD_LABEL": "local.nino.test",
+        "NINO_ERR_FILE": str(err_file),
+        "NINO_LOG_FILE": str(data / "nino-launchd.log"),
+    }
+    result = subprocess.run(
+        [str(Path.cwd() / "scripts" / "nino-launchd"), "doctor"],
+        check=True,
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "macOS privacy-protected folder" in result.stdout
+    assert "Operation not permitted" in result.stdout
+    assert "local.nino.test" in result.stdout
+
+
 def test_ninoctl_can_list_and_restore_backups(tmp_path) -> None:
     data_dir = tmp_path / "data"
     backup_dir = data_dir / "backups"

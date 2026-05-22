@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="${NINO_ROOT_DIR:-$SCRIPT_ROOT}"
 ENV_FILE="${NINO_ENV_FILE:-$ROOT_DIR/.env.local}"
 if [[ -f "$ENV_FILE" ]]; then
   set -a
@@ -29,6 +30,7 @@ Commands:
   start      Start the installed service.
   stop       Stop the installed service.
   status     Show launchd status.
+  doctor     Show launchd config, status and recent permission errors.
   print      Print the generated plist path.
   run        Internal launchd entrypoint.
 
@@ -37,8 +39,23 @@ Local env:
 EOF
 }
 
+protected_path_hint() {
+  case "$ROOT_DIR" in
+    "$HOME/Desktop"/*|"$HOME/Documents"/*|"$HOME/Downloads"/*)
+      cat <<EOF
+Warning: NIÑO is installed under a macOS privacy-protected folder:
+  $ROOT_DIR
+launchd may fail with "Operation not permitted" unless Terminal/launchd has
+permission or the project is moved to a non-protected folder such as
+  $HOME/Developer/bebe
+EOF
+      ;;
+  esac
+}
+
 install() {
   mkdir -p "$HOME/Library/LaunchAgents" "$ROOT_DIR/data"
+  protected_path_hint >&2
   cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -91,12 +108,42 @@ uninstall() {
   echo "Removed: $PLIST"
 }
 
+status() {
+  echo "label: $LABEL"
+  echo "plist: $PLIST"
+  echo "root: $ROOT_DIR"
+  echo "log: $LOG_FILE"
+  echo "err: $ERR_FILE"
+  launchctl list "$LABEL"
+}
+
+doctor() {
+  status || true
+  echo
+  protected_path_hint || true
+  echo
+  if [[ -f "$ERR_FILE" ]]; then
+    echo "== recent stderr =="
+    tail -40 "$ERR_FILE"
+  else
+    echo "No stderr log yet: $ERR_FILE"
+  fi
+  echo
+  if [[ -f "$LOG_FILE" ]]; then
+    echo "== recent stdout =="
+    tail -20 "$LOG_FILE"
+  else
+    echo "No stdout log yet: $LOG_FILE"
+  fi
+}
+
 case "${1:-}" in
   install) install ;;
   uninstall) uninstall ;;
   start) launchctl load "$PLIST" ;;
   stop) launchctl unload "$PLIST" ;;
-  status) launchctl list "$LABEL" ;;
+  status) status ;;
+  doctor) doctor ;;
   print) echo "$PLIST" ;;
   run) run ;;
   -h|--help|help|"") usage ;;

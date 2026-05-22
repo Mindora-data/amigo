@@ -88,11 +88,18 @@ Install as a macOS user service:
 ```bash
 scripts/nino-launchd install
 scripts/nino-launchd status
+scripts/nino-launchd doctor
 scripts/nino-launchd uninstall
 ```
 
 The launchd plist calls `scripts/nino-launchd run` and points to `.env.local`;
 it does not embed `ANTHROPIC_API_KEY` in the plist.
+If the project lives under `Desktop`, `Documents` or `Downloads`, macOS privacy
+controls can prevent launchd from reading the project and the service may exit
+with `Operation not permitted`. Run `scripts/nino-launchd doctor` to confirm.
+For unattended startup, keep the project in a non-protected folder such as
+`~/Developer/bebe`, or grant the required macOS privacy permission before
+installing the LaunchAgent.
 
 Defaults:
 
