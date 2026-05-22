@@ -12,7 +12,12 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 LABEL="${NINO_LAUNCHD_LABEL:-local.nino.server}"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-PYTHON_BIN="${NINO_PYTHON:-$ROOT_DIR/.venv/bin/python}"
+DEFAULT_PYTHON="$ROOT_DIR/.venv/bin/python"
+if [[ -x "$DEFAULT_PYTHON" ]]; then
+  PYTHON_BIN="${NINO_PYTHON:-$DEFAULT_PYTHON}"
+else
+  PYTHON_BIN="${NINO_PYTHON:-$(command -v python3)}"
+fi
 DB_PATH="${NINO_DB_PATH:-$ROOT_DIR/data/nino.db}"
 HOST="${NINO_HOST:-127.0.0.1}"
 PORT="${NINO_PORT:-8000}"
@@ -74,6 +79,8 @@ install() {
   <dict>
     <key>NINO_ENV_FILE</key>
     <string>$ENV_FILE</string>
+    <key>NINO_PYTHON</key>
+    <string>$PYTHON_BIN</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>
@@ -114,7 +121,10 @@ status() {
   echo "root: $ROOT_DIR"
   echo "log: $LOG_FILE"
   echo "err: $ERR_FILE"
-  launchctl list "$LABEL"
+  if ! launchctl list "$LABEL"; then
+    echo "launchctl list did not return job details; trying launchctl print."
+    launchctl print "gui/$(id -u)/$LABEL" || true
+  fi
 }
 
 doctor() {

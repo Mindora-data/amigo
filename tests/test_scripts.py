@@ -38,6 +38,7 @@ def test_launchd_plist_does_not_embed_anthropic_key(tmp_path) -> None:
     assert "scripts/nino-launchd" in content
     assert "<string>run</string>" in content
     assert str(env_file) in content
+    assert "NINO_PYTHON" in content
     assert "ANTHROPIC_API_KEY" not in content
     assert "secret-launchd-test" not in content
 
@@ -80,6 +81,36 @@ def test_launchd_doctor_reports_protected_desktop_path_and_recent_error(tmp_path
     assert "local.nino.test" in result.stdout
 
 
+def test_launchd_status_falls_back_to_print_when_list_has_no_details(tmp_path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    launchctl = tmp_path / "launchctl"
+    launchctl.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"list\" ]]; then exit 1; fi\n"
+        "if [[ \"$1\" == \"print\" ]]; then echo 'state = running'; fi\n",
+        encoding="utf-8",
+    )
+    launchctl.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_LAUNCHD_LABEL": "local.nino.test",
+    }
+    result = subprocess.run(
+        ["scripts/nino-launchd", "status"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "trying launchctl print" in result.stdout
+    assert "state = running" in result.stdout
+
+
 def test_ninoctl_can_list_and_restore_backups(tmp_path) -> None:
     data_dir = tmp_path / "data"
     backup_dir = data_dir / "backups"
@@ -115,3 +146,29 @@ def test_ninoctl_can_list_and_restore_backups(tmp_path) -> None:
     assert "Database restored from" in restored.stdout
     assert db_path.read_text(encoding="utf-8") == "restored"
     assert list(backup_dir.glob("pre-restore-*.db"))
+
+
+def test_install_local_copies_runtime_and_keeps_existing_data(tmp_path) -> None:
+    install_dir = tmp_path / "installed"
+    data_dir = install_dir / "data"
+    data_dir.mkdir(parents=True)
+    existing_db = data_dir / "nino.db"
+    existing_db.write_text("keep-target-db", encoding="utf-8")
+
+    env = {
+        **os.environ,
+        "NINO_INSTALL_DIR": str(install_dir),
+    }
+    result = subprocess.run(
+        ["scripts/nino-install-local", "install"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Installed local runtime" in result.stdout
+    assert (install_dir / "src" / "nino" / "server.py").exists()
+    assert (install_dir / "scripts" / "nino-launchd").exists()
+    assert (install_dir / "README.md").exists()
+    assert existing_db.read_text(encoding="utf-8") == "keep-target-db"

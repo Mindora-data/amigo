@@ -4,7 +4,7 @@ Estado confirmado el 2026-05-23:
 
 - GitHub se mantiene sincronizado desde los commits de sprint; confirmar hash exacto con `git rev-parse HEAD`.
 - Rama activa: `main`.
-- Suite actual: 112 tests pasando.
+- Suite actual: 114 tests pasando.
 - La memoria viva local (`data/nino.db`) no se versiona en GitHub.
 - El producto publicado es el motor, API, UI minima y pruebas; no incluye datos de uso real.
 
@@ -110,7 +110,7 @@ Objetivo: pasar de prototipo funcional a uso vivo diario.
 
 Hecho:
 
-- Arranque persistente del servidor sin depender de una terminal abierta. Hecho inicial: `scripts/nino-launchd`; diagnostico de permisos macOS con `scripts/nino-launchd doctor`.
+- Arranque persistente del servidor sin depender de una terminal abierta. Hecho inicial: `scripts/nino-launchd`; diagnostico de permisos macOS con `scripts/nino-launchd doctor`; instalacion en ruta segura con `scripts/nino-install-local`.
 - Script o servicio local para iniciar/parar NIÑO de forma simple. Hecho: `scripts/ninoctl`.
 - Crear un agente real inicial y poblar memoria con interacciones utiles. Hecho inicial: agente `nino`.
 - Flujo de conversacion diaria desde la UI. Hecho inicial: consola `/app` centrada en agente vivo.
@@ -124,7 +124,7 @@ Hecho:
 Criterios de salida:
 
 - NIÑO puede arrancar automaticamente o con un unico comando documentado.
-- Arranque automatico macOS. Hecho inicial: `scripts/nino-launchd install`; si el repo vive en `Desktop/Documents/Downloads`, `scripts/nino-launchd doctor` detecta el bloqueo de privacidad de macOS.
+- Arranque automatico macOS. Hecho inicial: `scripts/nino-launchd install`; si el repo vive en `Desktop/Documents/Downloads`, `scripts/nino-launchd doctor` detecta el bloqueo de privacidad de macOS y `scripts/nino-install-local` prepara una copia en `~/Developer/bebe`.
 - Hay al menos un agente vivo con memoria persistente no vacia.
 - La UI permite interactuar, revisar memoria y entender el estado sin usar `curl`.
 - Existe backup local manual o automatico de la base.
@@ -232,7 +232,7 @@ Auditoria final de producto 100% local:
 15. Hecho inicial: puerta local de producto con `scripts/nino-smoke`.
 16. Hecho inicial: checklist de producto en `PRODUCT_READINESS.md` y puerta `scripts/nino-readiness`.
 17. Hecho inicial: plantilla `.env.example` y carga automatica de `.env.local` para Claude local.
-18. Hecho inicial: launchd carga `.env.local` en runtime sin incrustar `ANTHROPIC_API_KEY` en el plist y diagnostica bloqueos de permisos macOS.
+18. Hecho inicial: launchd carga `.env.local` en runtime sin incrustar `ANTHROPIC_API_KEY` en el plist, diagnostica bloqueos de permisos macOS y puede instalarse desde una copia local no protegida.
 19. Hecho inicial: prueba viva opcional de Claude con `scripts/nino-claude-live`.
 20. Hecho inicial: contrato OpenAPI local con `/openapi.json`.
 21. Siguiente: ejecutar `scripts/nino-claude-live --require-key --json` con una `ANTHROPIC_API_KEY` real.

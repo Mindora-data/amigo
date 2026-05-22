@@ -86,6 +86,8 @@ See `PRODUCT_READINESS.md` for the requirement-by-requirement product checklist.
 Install as a macOS user service:
 
 ```bash
+scripts/nino-install-local install
+cd ~/Developer/bebe
 scripts/nino-launchd install
 scripts/nino-launchd status
 scripts/nino-launchd doctor
@@ -98,8 +100,8 @@ If the project lives under `Desktop`, `Documents` or `Downloads`, macOS privacy
 controls can prevent launchd from reading the project and the service may exit
 with `Operation not permitted`. Run `scripts/nino-launchd doctor` to confirm.
 For unattended startup, keep the project in a non-protected folder such as
-`~/Developer/bebe`, or grant the required macOS privacy permission before
-installing the LaunchAgent.
+`~/Developer/bebe`; `scripts/nino-install-local install` copies the runtime
+there while keeping an existing target `data/nino.db` and `.env.local`.
 
 Defaults:
 

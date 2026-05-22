@@ -34,7 +34,7 @@ scripts/nino-claude-live --require-key --json
 | Tareas autonomas controladas | smoke `task_enqueue`, `task_run`, `proactive_inbox` | Cumplido |
 | Proactividad limitada | consentimiento, intervalo minimo, maximo diario y ventanas horarias | Cumplido |
 | Backups | `scripts/ninoctl backup`, `scripts/ninoctl backups`, `scripts/ninoctl restore`, `/operations/backup`, `/operations/backups`, smoke `sqlite_backup` y `sqlite_backup_list` | Cumplido |
-| Operacion local | `scripts/ninoctl`, `scripts/nino-launchd`, `scripts/nino-launchd doctor`, `nino-server`, `nino-smoke` | Cumplido |
+| Operacion local | `scripts/ninoctl`, `scripts/nino-install-local`, `scripts/nino-launchd`, `scripts/nino-launchd doctor`, `nino-server`, `nino-smoke` | Cumplido |
 | Empaquetado local | `pyproject.toml`, console scripts `nino-server` y `nino-smoke` | Cumplido |
 | Contrato API | `GET /openapi.json`, `openapi/README.md`, tests de alineacion con `GET /` | Cumplido |
 | Regresion objetiva | `eval/memory_regression.json`, `nino.eval_runner`, pytest | Cumplido |
@@ -70,5 +70,5 @@ El plist de launchd no incrusta `ANTHROPIC_API_KEY`; llama a
 Si el proyecto esta bajo `Desktop`, `Documents` o `Downloads`, macOS puede
 bloquear a launchd con `Operation not permitted`; `scripts/nino-launchd doctor`
 lo muestra junto con el stderr reciente. Para arranque desatendido estable,
-usar una ruta no protegida como `~/Developer/bebe` o conceder el permiso de
-privacidad correspondiente antes de instalar el LaunchAgent.
+`scripts/nino-install-local install` copia el runtime a una ruta no protegida
+como `~/Developer/bebe` sin sobrescribir una base o `.env.local` existentes.

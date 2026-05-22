@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+INSTALL_DIR="${NINO_INSTALL_DIR:-$HOME/Developer/bebe}"
+
+usage() {
+  cat <<EOF
+Usage: scripts/nino-install-local <command>
+
+Commands:
+  install          Copy NIÑO runtime to a macOS launchd-safe local folder.
+  launchd-install  Copy runtime, then install launchd from the copied folder.
+
+Environment overrides:
+  NINO_INSTALL_DIR defaults to $HOME/Developer/bebe
+
+The installer copies source code, scripts and docs. It keeps an existing target
+data/nino.db and .env.local, and only seeds them from the source when missing.
+EOF
+}
+
+copy_dir() {
+  local source="$1"
+  local target="$2"
+  mkdir -p "$target"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete "$source/" "$target/"
+  else
+    cp -R "$source/." "$target/"
+  fi
+}
+
+install_runtime() {
+  if [[ "$INSTALL_DIR" == "$ROOT_DIR" ]]; then
+    echo "Install dir is the current project dir: $INSTALL_DIR" >&2
+    return 2
+  fi
+
+  mkdir -p "$INSTALL_DIR" "$INSTALL_DIR/data"
+  copy_dir "$ROOT_DIR/src" "$INSTALL_DIR/src"
+  copy_dir "$ROOT_DIR/scripts" "$INSTALL_DIR/scripts"
+  cp "$ROOT_DIR/pyproject.toml" "$INSTALL_DIR/pyproject.toml"
+  cp "$ROOT_DIR/README.md" "$INSTALL_DIR/README.md"
+  cp "$ROOT_DIR/PRODUCT_READINESS.md" "$INSTALL_DIR/PRODUCT_READINESS.md"
+  cp "$ROOT_DIR/SPRINTS.md" "$INSTALL_DIR/SPRINTS.md"
+  cp "$ROOT_DIR/.env.example" "$INSTALL_DIR/.env.example"
+
+  if [[ -f "$ROOT_DIR/.env.local" && ! -f "$INSTALL_DIR/.env.local" ]]; then
+    cp "$ROOT_DIR/.env.local" "$INSTALL_DIR/.env.local"
+  fi
+  if [[ -f "$ROOT_DIR/data/nino.db" && ! -f "$INSTALL_DIR/data/nino.db" ]]; then
+    cp "$ROOT_DIR/data/nino.db" "$INSTALL_DIR/data/nino.db"
+  fi
+
+  echo "Installed local runtime: $INSTALL_DIR"
+  echo "Start manually: cd \"$INSTALL_DIR\" && scripts/ninoctl start"
+  echo "Install launchd: cd \"$INSTALL_DIR\" && scripts/nino-launchd install"
+}
+
+case "${1:-}" in
+  install) install_runtime ;;
+  launchd-install)
+    install_runtime
+    cd "$INSTALL_DIR"
+    scripts/nino-launchd install
+    ;;
+  -h|--help|help|"") usage ;;
+  *)
+    echo "Unknown command: ${1:-}" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
