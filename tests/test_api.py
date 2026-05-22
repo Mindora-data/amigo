@@ -62,6 +62,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"Consolidar" in body
     assert b"loadConversation" in body
     assert b"/conversation" in body
+    assert b"/openapi.json" in body
     assert b"/llm/status" in body
     assert b"/llm/probe" in body
     assert b"Marcar entregado" in body
@@ -92,6 +93,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
 
     root = _request(app, "GET", "/")
     health = _request(app, "GET", "/health")
+    openapi = _request(app, "GET", "/openapi.json")
     mode = _request(app, "GET", "/operations/mode")
     claude = _request(app, "GET", "/operations/claude")
     tick = _request(
@@ -125,9 +127,14 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
 
     assert root["service"] == "nino"
     assert "GET /health" in root["endpoints"]
+    assert "GET /openapi.json" in root["endpoints"]
     assert "GET /operations/mode" in root["endpoints"]
     assert "GET /operations/claude" in root["endpoints"]
     assert "POST /agents/{agent_id}/tasks/run-next" in root["endpoints"]
+    assert openapi["openapi"] == "3.1.0"
+    assert "/agents/{agent_id}/tick" in openapi["paths"]
+    assert "post" in openapi["paths"]["/agents/{agent_id}/tick"]
+    assert "/operations/claude" in openapi["paths"]
     assert health == {"ok": True, "service": "nino"}
     assert mode["local_first"] is True
     assert mode["network_required_for_core"] is False
@@ -151,6 +158,21 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert tasks_before_run["tasks"][0]["status"] == "pending"
     assert ran_task["ok"] is True
     assert tasks_after_run["tasks"][0]["status"] == "completed"
+
+
+def test_http_api_openapi_matches_root_endpoint_catalog(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    root = _request(app, "GET", "/")
+    openapi = _request(app, "GET", "/openapi.json")
+    documented = {
+        f"{method.upper()} {path}"
+        for path, operations in openapi["paths"].items()
+        for method in operations
+    }
+
+    expected = set(root["endpoints"]) - {"GET /app"}
+    assert documented == expected
 
 
 def test_http_api_creates_database_backup(tmp_path) -> None:

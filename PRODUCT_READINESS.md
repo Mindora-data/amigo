@@ -36,6 +36,7 @@ scripts/nino-claude-live --require-key --json
 | Backups | `scripts/ninoctl backup`, `/operations/backup`, smoke `sqlite_backup` | Cumplido |
 | Operacion local | `scripts/ninoctl`, `scripts/nino-launchd`, `nino-server`, `nino-smoke` | Cumplido |
 | Empaquetado local | `pyproject.toml`, console scripts `nino-server` y `nino-smoke` | Cumplido |
+| Contrato API | `GET /openapi.json`, `openapi/README.md`, tests de alineacion con `GET /` | Cumplido |
 | Regresion objetiva | `eval/memory_regression.json`, `nino.eval_runner`, pytest | Cumplido |
 
 ## Bloque externo

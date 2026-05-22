@@ -161,6 +161,7 @@ Emails and long numeric sequences are redacted before context is sent to Claude.
 ```text
 GET  /health
 GET  /app
+GET  /openapi.json
 GET  /autonomy/status
 POST /autonomy/run-once
 GET  /development/snapshot

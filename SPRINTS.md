@@ -4,7 +4,7 @@ Estado confirmado el 2026-05-22:
 
 - GitHub se mantiene sincronizado desde los commits de sprint; confirmar hash exacto con `git rev-parse HEAD`.
 - Rama activa: `main`.
-- Suite actual: 109 tests pasando.
+- Suite actual: 110 tests pasando.
 - La memoria viva local (`data/nino.db`) no se versiona en GitHub.
 - El producto publicado es el motor, API, UI minima y pruebas; no incluye datos de uso real.
 
@@ -173,6 +173,7 @@ Hecho:
 - Pruebas de regresion para memoria realista. Hecho inicial: tests del eval runner.
 - Smoke test local de producto. Hecho inicial: `scripts/nino-smoke` valida UI servida, memoria, permisos, tareas, inbox, export seguro y backup con SQLite temporal.
 - Puerta de readiness local. Hecho inicial: `scripts/nino-readiness` ejecuta tests y smoke end-to-end.
+- Contrato API publicable. Hecho inicial: `GET /openapi.json` generado desde el catalogo de endpoints.
 - Metricas de calidad historicas. Hecho inicial: guardar y consultar historial de evaluacion conversacional por agente.
 - Comparativa antes/despues por sprint. Hecho inicial: runner determinista y dataset local.
 - Deteccion de contradicciones mas explicable. Hecho inicial: contradicciones en consolidacion y razonamiento auditable.
@@ -233,6 +234,7 @@ Auditoria final de producto 100% local:
 17. Hecho inicial: plantilla `.env.example` y carga automatica de `.env.local` para Claude local.
 18. Hecho inicial: launchd carga `.env.local` en runtime sin incrustar `ANTHROPIC_API_KEY` en el plist.
 19. Hecho inicial: prueba viva opcional de Claude con `scripts/nino-claude-live`.
-20. Siguiente: ejecutar `scripts/nino-claude-live --require-key --json` con una `ANTHROPIC_API_KEY` real.
+20. Hecho inicial: contrato OpenAPI local con `/openapi.json`.
+21. Siguiente: ejecutar `scripts/nino-claude-live --require-key --json` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

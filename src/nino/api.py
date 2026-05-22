@@ -175,7 +175,10 @@ APP_HTML = """<!doctype html>
           <button id="healthDeep" class="secondary">Salud</button>
           <button id="snapshot" class="secondary">Snapshot</button>
         </div>
-        <button id="audit" class="secondary" style="margin-top:8px;width:100%">Auditoría</button>
+        <div class="row">
+          <button id="openapi" class="secondary">API</button>
+          <button id="audit" class="secondary">Auditoría</button>
+        </div>
         <div class="row three">
           <button id="cycle" class="secondary">Ciclo</button>
           <button id="dream" class="secondary">Sueño</button>
@@ -486,6 +489,7 @@ APP_HTML = """<!doctype html>
     };
     $("healthDeep").onclick = async () => print($("state"), await api("/health/deep"));
     $("snapshot").onclick = async () => print($("state"), await api("/development/snapshot"));
+    $("openapi").onclick = async () => print($("state"), await api("/openapi.json"));
     $("audit").onclick = async () => print($("state"), await api(agentPath("/audit")));
     $("profile").onclick = async () => print($("state"), await api(agentPath("/profile")));
     $("metrics").onclick = async () => print($("state"), await api(agentPath("/metrics")));
@@ -662,6 +666,61 @@ APP_HTML = """<!doctype html>
 """
 
 
+API_ENDPOINTS = [
+    "GET /health",
+    "GET /health/deep",
+    "GET /app",
+    "GET /openapi.json",
+    "GET /autonomy/status",
+    "POST /autonomy/run-once",
+    "GET /development/snapshot",
+    "GET /operations/mode",
+    "GET /operations/claude",
+    "POST /operations/backup",
+    "GET /agents",
+    "POST /agents/prune",
+    "POST /agents/import",
+    "POST /agents/{agent_id}/tick",
+    "GET /agents/{agent_id}/state",
+    "GET /agents/{agent_id}/conversation",
+    "GET /agents/{agent_id}/episodes",
+    "GET /agents/{agent_id}/llm/status",
+    "POST /agents/{agent_id}/llm/probe",
+    "GET /agents/{agent_id}/memory/facts",
+    "GET /agents/{agent_id}/relation",
+    "GET /agents/{agent_id}/self-model",
+    "GET /agents/{agent_id}/world-model",
+    "GET /agents/{agent_id}/narrative",
+    "GET /agents/{agent_id}/profile",
+    "GET /agents/{agent_id}/metrics",
+    "GET /agents/{agent_id}/export",
+    "GET /agents/{agent_id}/export-safe",
+    "GET /agents/{agent_id}/proactivity/inbox",
+    "POST /agents/{agent_id}/proactivity/inbox/{item_id}/delivered",
+    "POST /agents/{agent_id}/proactivity/inbox/clear-delivered",
+    "POST /agents/{agent_id}/memory/decay",
+    "POST /agents/{agent_id}/memory/search",
+    "GET /agents/{agent_id}/eval/conversation",
+    "POST /agents/{agent_id}/eval/conversation/record",
+    "GET /agents/{agent_id}/eval/conversation/history",
+    "GET /agents/{agent_id}/audit",
+    "GET /agents/{agent_id}/permissions",
+    "POST /agents/{agent_id}/permissions/configure",
+    "GET /agents/{agent_id}/tasks",
+    "POST /agents/{agent_id}/tasks",
+    "POST /agents/{agent_id}/tasks/run-next",
+    "POST /agents/{agent_id}/reset",
+    "POST /agents/{agent_id}/memory/retrieve",
+    "POST /agents/{agent_id}/consolidate",
+    "POST /agents/{agent_id}/internal/cycle",
+    "POST /agents/{agent_id}/internal/dream",
+    "POST /agents/{agent_id}/internal/scheduled",
+    "POST /internal/scheduled",
+    "POST /agents/{agent_id}/proactivity/configure",
+    "POST /agents/{agent_id}/proactivity/evaluate",
+]
+
+
 def _json_default(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
@@ -676,6 +735,40 @@ def _to_jsonable(value: Any) -> Any:
 
 def _parse_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)
+
+
+def _openapi_document() -> dict[str, Any]:
+    paths: dict[str, Any] = {}
+    for endpoint in API_ENDPOINTS:
+        method, path = endpoint.split(" ", 1)
+        if path == "/app":
+            continue
+        parameters = []
+        for name in ("agent_id", "item_id", "episode_id", "fact_id"):
+            if "{" + name + "}" in path:
+                parameters.append({
+                    "name": name,
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                })
+        operation: dict[str, Any] = {
+            "summary": endpoint,
+            "responses": {"200": {"description": "OK"}},
+        }
+        if parameters:
+            operation["parameters"] = parameters
+        if method in {"POST", "PUT", "PATCH"}:
+            operation["requestBody"] = {
+                "required": False,
+                "content": {"application/json": {"schema": {"type": "object"}}},
+            }
+        paths.setdefault(path, {})[method.lower()] = operation
+    return {
+        "openapi": "3.1.0",
+        "info": {"title": "NIÑO Local API", "version": "0.8.0"},
+        "paths": paths,
+    }
 
 
 def _episode_from_raw(raw: dict[str, Any]) -> Episode:
@@ -1040,57 +1133,10 @@ class NinoHttpApp:
             return "200 OK", {
                 "service": "nino",
                 "status": "ok",
-                "endpoints": [
-                    "GET /health",
-                    "GET /health/deep",
-                "GET /autonomy/status",
-                "POST /autonomy/run-once",
-                "GET /development/snapshot",
-                "GET /operations/mode",
-                "GET /operations/claude",
-                "POST /operations/backup",
-                "GET /agents",
-                    "POST /agents/prune",
-                    "POST /agents/import",
-                    "POST /agents/{agent_id}/tick",
-                    "GET /agents/{agent_id}/state",
-                    "GET /agents/{agent_id}/conversation",
-                    "GET /agents/{agent_id}/episodes",
-                    "GET /agents/{agent_id}/llm/status",
-                    "POST /agents/{agent_id}/llm/probe",
-                    "GET /agents/{agent_id}/memory/facts",
-                    "GET /agents/{agent_id}/relation",
-                    "GET /agents/{agent_id}/self-model",
-                    "GET /agents/{agent_id}/world-model",
-                    "GET /agents/{agent_id}/narrative",
-                    "GET /agents/{agent_id}/profile",
-                    "GET /agents/{agent_id}/metrics",
-                    "GET /agents/{agent_id}/export",
-                    "GET /agents/{agent_id}/export-safe",
-                    "GET /agents/{agent_id}/proactivity/inbox",
-                    "POST /agents/{agent_id}/proactivity/inbox/{item_id}/delivered",
-                    "POST /agents/{agent_id}/proactivity/inbox/clear-delivered",
-                    "POST /agents/{agent_id}/memory/decay",
-                    "POST /agents/{agent_id}/memory/search",
-                    "GET /agents/{agent_id}/eval/conversation",
-                    "POST /agents/{agent_id}/eval/conversation/record",
-                    "GET /agents/{agent_id}/eval/conversation/history",
-                    "GET /agents/{agent_id}/audit",
-                    "GET /agents/{agent_id}/permissions",
-                    "POST /agents/{agent_id}/permissions/configure",
-                    "GET /agents/{agent_id}/tasks",
-                    "POST /agents/{agent_id}/tasks",
-                    "POST /agents/{agent_id}/tasks/run-next",
-                    "POST /agents/{agent_id}/reset",
-                    "POST /agents/{agent_id}/memory/retrieve",
-                    "POST /agents/{agent_id}/consolidate",
-                    "POST /agents/{agent_id}/internal/cycle",
-                    "POST /agents/{agent_id}/internal/dream",
-                    "POST /agents/{agent_id}/internal/scheduled",
-                    "POST /agents/{agent_id}/proactivity/configure",
-                    "POST /agents/{agent_id}/proactivity/evaluate",
-                ],
+                "endpoints": API_ENDPOINTS,
             }
+        if method == "GET" and path == "/openapi.json":
+            return "200 OK", _openapi_document()
         if method == "GET" and path == "/health":
             return "200 OK", self.service.health()
         if method == "GET" and path == "/health/deep":
