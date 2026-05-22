@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+import json
+import subprocess
+
+from nino.claude_live import run_live_claude_probe
+
+
+def test_live_claude_probe_skips_without_config(monkeypatch) -> None:
+    monkeypatch.delenv("NINO_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    result = run_live_claude_probe()
+
+    assert result["ok"] is True
+    assert result["skipped"] is True
+    assert result["reason"] == "claude_not_configured"
+
+
+def test_live_claude_probe_can_require_key(monkeypatch) -> None:
+    monkeypatch.setenv("NINO_LLM_PROVIDER", "claude")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    result = run_live_claude_probe(require_key=True)
+
+    assert result["ok"] is False
+    assert result["skipped"] is True
+    assert result["missing"] == ["ANTHROPIC_API_KEY"]
+
+
+def test_live_claude_probe_script_outputs_skip_json() -> None:
+    completed = subprocess.run(
+        ["scripts/nino-claude-live", "--json"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "NINO_ENV_FILE": "/tmp/does-not-exist"},
+    )
+    payload = json.loads(completed.stdout)
+
+    assert payload["ok"] is True
+    assert payload["skipped"] is True

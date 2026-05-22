@@ -135,6 +135,8 @@ scripts/ninoctl claude
 Run a live probe only after the key is configured:
 
 ```bash
+scripts/nino-claude-live --require-key --json
+
 curl -X POST http://127.0.0.1:8000/agents/nino/llm/probe \
   -H 'Content-Type: application/json' \
   -d '{}'

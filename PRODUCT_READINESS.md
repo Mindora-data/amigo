@@ -15,6 +15,12 @@ Esta puerta corre:
 - `.venv/bin/python -m pytest`
 - `scripts/nino-smoke --json`
 
+La prueba viva de Claude queda separada porque requiere red y una key real:
+
+```bash
+scripts/nino-claude-live --require-key --json
+```
+
 ## Requisitos del producto
 
 | Requisito | Evidencia local | Estado |
@@ -45,6 +51,12 @@ scripts/ninoctl claude
 curl -X POST http://127.0.0.1:8000/agents/nino/llm/probe \
   -H 'Content-Type: application/json' \
   -d '{}'
+```
+
+Tambien se puede comprobar sin servidor:
+
+```bash
+scripts/nino-claude-live --require-key --json
 ```
 
 No se debe commitear `ANTHROPIC_API_KEY`.
