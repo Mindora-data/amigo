@@ -258,7 +258,8 @@ scripts/ninoctl claude
 
 If `NINO_LLM_MAX_TOKENS` or `NINO_LLM_TIMEOUT` is invalid, the Claude
 diagnostic reports `config_errors` and keeps Claude disabled until the value is
-fixed.
+fixed. The CLI and API configurators also reject model or Keychain service
+values containing `=` or newlines before writing `.env.local`.
 
 The same safe setup commands are exposed in `/operations/claude` and the LLM
 panel in `/app`; the API reports whether a key is present, but never returns

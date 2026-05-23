@@ -59,6 +59,14 @@ if [[ -z "$MODEL" ]]; then
   echo "Model cannot be empty." >&2
   exit 2
 fi
+if [[ "$MODEL" == *$'\n'* || "$MODEL" == *$'\r'* || "$MODEL" == *"="* ]]; then
+  echo "Model contains invalid characters." >&2
+  exit 2
+fi
+if [[ "$KEYCHAIN_SERVICE" == *$'\n'* || "$KEYCHAIN_SERVICE" == *$'\r'* || "$KEYCHAIN_SERVICE" == *"="* ]]; then
+  echo "Keychain service contains invalid characters." >&2
+  exit 2
+fi
 
 if [[ "$READ_STDIN" == true ]]; then
   IFS= read -r KEY || true

@@ -429,6 +429,45 @@ def test_configure_claude_writes_untracked_env_without_printing_key(tmp_path) ->
     assert oct(env_file.stat().st_mode & 0o777) == "0o600"
 
 
+def test_configure_claude_rejects_env_injection_values(tmp_path) -> None:
+    env_file = tmp_path / ".env.local"
+
+    bad_model = subprocess.run(
+        [
+            "scripts/nino-configure-claude",
+            "--env-file",
+            str(env_file),
+            "--model",
+            "claude-test=bad",
+            "--key-stdin",
+        ],
+        check=False,
+        input="secret\n",
+        capture_output=True,
+        text=True,
+    )
+    bad_service = subprocess.run(
+        [
+            "scripts/nino-configure-claude",
+            "--env-file",
+            str(env_file),
+            "--key-stdin",
+            "--keychain-service",
+            "nino-test=bad",
+        ],
+        check=False,
+        input="secret\n",
+        capture_output=True,
+        text=True,
+    )
+
+    assert bad_model.returncode == 2
+    assert "Model contains invalid characters" in bad_model.stderr
+    assert bad_service.returncode == 2
+    assert "Keychain service contains invalid characters" in bad_service.stderr
+    assert not env_file.exists()
+
+
 def test_configure_claude_can_store_key_in_keychain_without_env_secret(tmp_path) -> None:
     env_file = tmp_path / ".env.local"
     security = tmp_path / "security"

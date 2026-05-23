@@ -231,6 +231,7 @@ Hecho:
 - Comandos de cierre con doble camino. Hecho inicial: la evidencia `setup_commands` incluye `finish --key-stdin` y `finish --skip-configure` para cubrir primera configuracion y cierre posterior.
 - Recomendacion de cierre segun estado Claude. Hecho inicial: si solo bloquea `claude_live`, `recommended_next_action` cambia a `scripts/ninoctl finish --skip-configure`.
 - Guardado de cierre sin reconfigurar. Hecho inicial: `finish --skip-configure` falla antes de reiniciar si Claude no esta ya configurado.
+- Validacion CLI de configuracion Claude. Hecho inicial: `scripts/nino-configure-claude` rechaza modelo o servicio Keychain con `=` o saltos de linea antes de escribir `.env.local`.
 - Matriz de terminacion tras cierre UI. Hecho inicial: `Cierre final` y `Cierre guiado` refrescan la auditoria de terminacion con la evidencia del informe recien generado.
 - Politicas de herramienta/accion externa. Hecho inicial: permisos por tipo de accion, bloqueo por defecto y auditoria.
 - Cola de tareas autonomas con limites. Hecho inicial: cola persistente por agente con limite de pendientes, bloqueo por permisos, ejecucion manual y panel en `/app`.
@@ -310,6 +311,7 @@ Auditoria final de producto 100% local:
 36. Hecho inicial: `setup_commands` de Claude expone tanto `finish --key-stdin` como `finish --skip-configure`.
 37. Hecho inicial: `recommended_next_action` recomienda `finish --skip-configure` cuando Claude ya esta configurado y falta solo la prueba viva.
 38. Hecho inicial: `finish --skip-configure` valida configuracion Claude antes de reiniciar launchd.
-39. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
+39. Hecho inicial: configurador CLI Claude rechaza valores que puedan corromper `.env.local`.
+40. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

@@ -167,7 +167,9 @@ No se debe commitear `ANTHROPIC_API_KEY`.
 Para uso diario, guardar esos valores en `.env.local` a partir de `.env.example`.
 `scripts/ninoctl configure-claude` y `scripts/nino-configure-claude` escriben `.env.local` con permisos `600` sin
 imprimir la key. Con `--keychain-service`, guarda el secreto en macOS Keychain
-y `.env.local` solo contiene `NINO_KEYCHAIN_SERVICE`. `scripts/ninoctl` y
+y `.env.local` solo contiene `NINO_KEYCHAIN_SERVICE`. Rechazan nombres de
+modelo o servicio Keychain con `=` o saltos de linea antes de escribir el env.
+`scripts/ninoctl` y
 `scripts/nino-launchd` cargan `.env.local` automaticamente, y `.env.local` esta ignorado por Git.
 El plist de launchd no incrusta `ANTHROPIC_API_KEY`; llama a
 `scripts/nino-launchd run` y este carga el env local en runtime.
