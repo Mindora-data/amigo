@@ -1885,6 +1885,7 @@ class NinoService:
                 [
                     "POST /operations/closing-report",
                     "GET /operations/reports",
+                    "GET /operations/reports/latest",
                     "GET /operations/reports/{report_name}",
                     "tests/test_smoke.py closing_report_*",
                 ],
