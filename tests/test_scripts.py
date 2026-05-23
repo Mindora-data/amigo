@@ -460,11 +460,43 @@ def test_configure_claude_rejects_env_injection_values(tmp_path) -> None:
         capture_output=True,
         text=True,
     )
+    bad_model_newline = subprocess.run(
+        [
+            "scripts/nino-configure-claude",
+            "--env-file",
+            str(env_file),
+            "--model",
+            "claude-test\nNINO_PORT=9999",
+            "--key-stdin",
+        ],
+        check=False,
+        input="secret\n",
+        capture_output=True,
+        text=True,
+    )
+    bad_service_newline = subprocess.run(
+        [
+            "scripts/nino-configure-claude",
+            "--env-file",
+            str(env_file),
+            "--key-stdin",
+            "--keychain-service",
+            "nino-test\nANTHROPIC_API_KEY=leak",
+        ],
+        check=False,
+        input="secret\n",
+        capture_output=True,
+        text=True,
+    )
 
     assert bad_model.returncode == 2
     assert "Model contains invalid characters" in bad_model.stderr
     assert bad_service.returncode == 2
     assert "Keychain service contains invalid characters" in bad_service.stderr
+    assert bad_model_newline.returncode == 2
+    assert "Model contains invalid characters" in bad_model_newline.stderr
+    assert bad_service_newline.returncode == 2
+    assert "Keychain service contains invalid characters" in bad_service_newline.stderr
     assert not env_file.exists()
 
 
