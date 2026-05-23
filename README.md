@@ -205,6 +205,7 @@ POST /autonomy/run-once
 GET  /development/snapshot
 GET  /operations/mode
 GET  /operations/claude
+GET  /operations/audit
 GET  /operations/backups
 POST /operations/backup
 GET  /agents

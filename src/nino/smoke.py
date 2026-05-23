@@ -64,7 +64,7 @@ def run_smoke(db_path: str | Path) -> SmokeResult:
     _require(status.startswith("200") and claude["api_key_present"] is False, checks, "claude_diagnostic")
 
     status, html = _request(app, "GET", "/app")
-    _require(status.startswith("200") and "/operations/backups" in html and "/tasks/run-next" in html, checks, "browser_app")
+    _require(status.startswith("200") and "/operations/audit" in html and "/tasks/run-next" in html, checks, "browser_app")
 
     status, first = _request(
         app,

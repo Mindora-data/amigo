@@ -41,7 +41,7 @@ scripts/nino-product-audit --require-claude-live --json
 | Empaquetado local | `pyproject.toml`, console scripts `nino-server` y `nino-smoke` | Cumplido |
 | Contrato API | `GET /openapi.json`, `openapi/README.md`, tests de alineacion con `GET /` | Cumplido |
 | Regresion objetiva | `eval/memory_regression.json`, `nino.eval_runner`, pytest | Cumplido |
-| Auditoria final repetible | `scripts/nino-product-audit --json`; `--require-claude-live` para cerrar Claude real | Cumplido local; Claude vivo requiere key real |
+| Auditoria final repetible | `GET /operations/audit`, `scripts/nino-product-audit --json`; `--require-claude-live` para cerrar Claude real | Cumplido local; Claude vivo requiere key real |
 
 ## Bloque externo
 

@@ -86,6 +86,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"activeEnd" in body
     assert b"/operations/mode" in body
     assert b"/operations/claude" in body
+    assert b"/operations/audit" in body
+    assert b"Auditor" in body
 
 
 def test_http_api_ticks_and_restores_state(tmp_path) -> None:
@@ -96,6 +98,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     openapi = _request(app, "GET", "/openapi.json")
     mode = _request(app, "GET", "/operations/mode")
     claude = _request(app, "GET", "/operations/claude")
+    _request(app, "POST", "/operations/backup", {})
+    product_audit = _request(app, "GET", "/operations/audit")
     tick = _request(
         app,
         "POST",
@@ -130,11 +134,13 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /openapi.json" in root["endpoints"]
     assert "GET /operations/mode" in root["endpoints"]
     assert "GET /operations/claude" in root["endpoints"]
+    assert "GET /operations/audit" in root["endpoints"]
     assert "POST /agents/{agent_id}/tasks/run-next" in root["endpoints"]
     assert openapi["openapi"] == "3.1.0"
     assert "/agents/{agent_id}/tick" in openapi["paths"]
     assert "post" in openapi["paths"]["/agents/{agent_id}/tick"]
     assert "/operations/claude" in openapi["paths"]
+    assert "/operations/audit" in openapi["paths"]
     assert health == {"ok": True, "service": "nino"}
     assert mode["local_first"] is True
     assert mode["network_required_for_core"] is False
@@ -144,6 +150,12 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert claude["configured"] is False
     assert claude["api_key_present"] is False
     assert "NINO_LLM_PROVIDER" in claude["missing"]
+    assert product_audit["ok"] is True
+    assert {check["name"] for check in product_audit["checks"]} >= {
+        "sqlite_database_exists",
+        "backup_directory_available",
+        "claude_live",
+    }
     assert tick["tick"] == 1
     assert state["tick"] == 1
     assert len(episodes["episodes"]) == 1

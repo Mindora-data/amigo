@@ -235,7 +235,7 @@ Auditoria final de producto 100% local:
 18. Hecho inicial: launchd carga `.env.local` en runtime sin incrustar `ANTHROPIC_API_KEY` en el plist, diagnostica bloqueos de permisos macOS y puede instalarse desde una copia local no protegida.
 19. Hecho inicial: prueba viva opcional de Claude con `scripts/nino-claude-live`.
 20. Hecho inicial: contrato OpenAPI local con `/openapi.json`.
-21. Hecho inicial: auditoria final repetible con `scripts/nino-product-audit`.
+21. Hecho inicial: auditoria final repetible con `scripts/nino-product-audit` y `GET /operations/audit` visible en `/app`.
 22. Siguiente: ejecutar `scripts/nino-claude-live --require-key --json` o `scripts/nino-product-audit --require-claude-live --json` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

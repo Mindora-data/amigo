@@ -302,9 +302,10 @@ APP_HTML = """<!doctype html>
         </div>
         <div class="row">
           <button id="backups" class="secondary">Ver backups</button>
-          <button id="mode" class="secondary">Modo</button>
+          <button id="auditProduct" class="secondary">Auditoría</button>
         </div>
         <div class="row">
+          <button id="mode" class="secondary">Modo</button>
           <button id="reset" class="danger">Reset agente</button>
         </div>
         <div class="output"><pre id="backupsOut">{}</pre></div>
@@ -525,6 +526,11 @@ APP_HTML = """<!doctype html>
       return out;
     }
     $("backups").onclick = loadBackups;
+    $("auditProduct").onclick = async () => {
+      const out = await api("/operations/audit");
+      print($("backupsOut"), out);
+      status(out.ok ? "Auditoría local OK" : "Auditoría con bloqueos");
+    };
     $("mode").onclick = async () => print($("state"), await api("/operations/mode"));
     $("saveProactivity").onclick = async () => {
       const payload = {
@@ -688,6 +694,7 @@ API_ENDPOINTS = [
     "GET /development/snapshot",
     "GET /operations/mode",
     "GET /operations/claude",
+    "GET /operations/audit",
     "GET /operations/backups",
     "POST /operations/backup",
     "GET /agents",
@@ -924,6 +931,28 @@ class NinoService:
             "missing": config["missing"],
             "probe_endpoint": "/agents/{agent_id}/llm/probe",
         }
+
+    def product_audit(self) -> dict[str, Any]:
+        from .product_audit import audit_product
+
+        if self.db_path is None:
+            return {
+                "ok": False,
+                "checks": [
+                    {
+                        "name": "sqlite_database_exists",
+                        "ok": False,
+                        "evidence": {"error": "db_path_unavailable"},
+                    }
+                ],
+            }
+        return audit_product(
+            db_path=self.db_path,
+            base_url="http://127.0.0.1:0",
+            require_claude_live=False,
+            run_local_smoke=False,
+            http_checks=False,
+        )
 
     def tick(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.tick(agent_id, payload))
@@ -1183,6 +1212,8 @@ class NinoHttpApp:
             return "200 OK", self.service.operating_mode()
         if method == "GET" and path == "/operations/claude":
             return "200 OK", self.service.claude_config()
+        if method == "GET" and path == "/operations/audit":
+            return "200 OK", self.service.product_audit()
         if method == "GET" and path == "/operations/backups":
             return "200 OK", self.service.list_backups()
         if method == "POST" and path == "/operations/backup":
