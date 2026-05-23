@@ -43,7 +43,11 @@ def _audit_payload() -> dict:
                 "ok": False,
                 "evidence": {
                     "missing": ["NINO_LLM_PROVIDER"],
-                    "setup_commands": ["scripts/ninoctl finish --key-stdin", "scripts/ninoctl finish --skip-configure"],
+                    "setup_commands": [
+                        "scripts/ninoctl finish --key-stdin",
+                        "scripts/ninoctl finish --skip-configure",
+                        "scripts/ninoctl final-audit",
+                    ],
                     "required": True,
                 },
             },
@@ -52,7 +56,12 @@ def _audit_payload() -> dict:
                 "ok": False,
                 "evidence": {
                     "skipped": True,
-                    "setup_commands": ["scripts/ninoctl finish --key-stdin", "scripts/ninoctl finish --skip-configure"],
+                    "setup_commands": [
+                        "scripts/ninoctl finish --key-env",
+                        "scripts/ninoctl configure-claude --keychain-service nino-anthropic",
+                        "scripts/ninoctl finish --key-stdin",
+                        "scripts/ninoctl finish --skip-configure",
+                    ],
                 },
             },
         ],
@@ -103,6 +112,13 @@ def test_completion_audit_maps_requirements_and_blockers(monkeypatch, tmp_path, 
     assert result["latest_report_current"]["latest_report_head"] == "abc12345"
     assert result["living_agent"]["episode_count"] == 1
     assert "scripts/ninoctl finish --key-stdin" in result["next_commands"]
+    assert result["next_commands"][:5] == [
+        "scripts/ninoctl finish --key-stdin",
+        "scripts/ninoctl finish --key-env",
+        "scripts/ninoctl finish --skip-configure",
+        "scripts/ninoctl configure-claude --keychain-service nino-anthropic",
+        "scripts/ninoctl final-audit",
+    ]
     assert "scripts/ninoctl finish --skip-configure" in result["next_commands"]
     assert result["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
     assert "blocked: claude_live" in format_completion_audit(result)

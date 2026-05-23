@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from .next_commands import ordered_next_commands
+
 
 def _run_json(command: list[str], root: Path) -> dict[str, Any]:
     result = subprocess.run(command, cwd=root, capture_output=True, text=True, check=False)
@@ -264,7 +266,7 @@ def _next_commands(audit: dict[str, Any]) -> list[str]:
         for command in check.get("evidence", {}).get("setup_commands", []):
             if command not in commands:
                 commands.append(command)
-    return commands
+    return ordered_next_commands(commands)
 
 
 def _recommended_next_action(ok: bool, blockers: list[dict[str, Any]], commands: list[str]) -> str:

@@ -36,6 +36,8 @@ def test_product_status_summarizes_claude_blocker(monkeypatch, tmp_path, capsys)
                         "scripts/ninoctl finish --key-stdin",
                         "scripts/ninoctl finish --skip-configure",
                         "scripts/ninoctl configure-claude --keychain-service nino-anthropic",
+                        "scripts/ninoctl final-audit",
+                        "scripts/ninoctl finish --key-env",
                     ],
                     "required": True,
                 },
@@ -57,8 +59,10 @@ def test_product_status_summarizes_claude_blocker(monkeypatch, tmp_path, capsys)
     assert status["blockers"][0]["name"] == "claude_configured"
     assert status["next_commands"] == [
         "scripts/ninoctl finish --key-stdin",
+        "scripts/ninoctl finish --key-env",
         "scripts/ninoctl finish --skip-configure",
         "scripts/ninoctl configure-claude --keychain-service nino-anthropic",
+        "scripts/ninoctl final-audit",
     ]
     assert status["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
     assert status["latest_report"]["name"] == report_path.name
