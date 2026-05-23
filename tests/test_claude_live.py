@@ -3,7 +3,15 @@ from __future__ import annotations
 import json
 import subprocess
 
-from nino.claude_live import run_live_claude_probe
+from nino.claude_live import claude_setup_commands, run_live_claude_probe
+
+
+def test_claude_setup_commands_can_include_runtime_directory() -> None:
+    commands = claude_setup_commands(include_cd=True)
+
+    assert commands[0] == "cd ~/Developer/bebe"
+    assert "scripts/ninoctl configure-claude --keychain-service nino-anthropic" in commands
+    assert commands[-1] == "scripts/ninoctl final-audit"
 
 
 def test_live_claude_probe_skips_without_config(monkeypatch) -> None:

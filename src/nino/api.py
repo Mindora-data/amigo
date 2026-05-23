@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 
 from .autonomy import BackgroundAutonomy
+from .claude_live import claude_setup_commands
 from .contracts import ConsolidationRequest, ProactivitySettings, RetrieveRequest
 from .internal_loop import InternalLoop
 from .llm import llm_config_status
@@ -957,13 +958,7 @@ class NinoService:
             "missing": config["missing"],
             "config_errors": config["config_errors"],
             "probe_endpoint": "/agents/{agent_id}/llm/probe",
-            "setup_commands": [
-                "cd ~/Developer/bebe",
-                "scripts/ninoctl configure-claude --keychain-service nino-anthropic",
-                "scripts/nino-launchd stop",
-                "scripts/nino-launchd start",
-                "scripts/ninoctl final-audit",
-            ],
+            "setup_commands": claude_setup_commands(include_cd=True),
             "notes": [
                 "Con --keychain-service, .env.local guarda solo NINO_KEYCHAIN_SERVICE.",
                 "Sin Keychain, la API key se guarda solo en .env.local con permisos 600.",

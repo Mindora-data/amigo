@@ -15,6 +15,13 @@ CLAUDE_SETUP_COMMANDS = [
 ]
 
 
+def claude_setup_commands(*, include_cd: bool = False) -> list[str]:
+    commands = list(CLAUDE_SETUP_COMMANDS)
+    if include_cd:
+        return ["cd ~/Developer/bebe", *commands]
+    return commands
+
+
 def run_live_claude_probe(*, require_key: bool = False) -> dict[str, Any]:
     config = llm_config_status()
     if not config["enabled"]:
@@ -24,7 +31,7 @@ def run_live_claude_probe(*, require_key: bool = False) -> dict[str, Any]:
             "reason": "claude_not_configured",
             "missing": config["missing"],
             "configured": False,
-            "setup_commands": CLAUDE_SETUP_COMMANDS,
+            "setup_commands": claude_setup_commands(),
         }
 
     client = build_configured_llm()
@@ -35,7 +42,7 @@ def run_live_claude_probe(*, require_key: bool = False) -> dict[str, Any]:
             "reason": "client_not_available",
             "missing": config["missing"],
             "configured": config["enabled"],
-            "setup_commands": CLAUDE_SETUP_COMMANDS,
+            "setup_commands": claude_setup_commands(),
         }
 
     prompt = {
