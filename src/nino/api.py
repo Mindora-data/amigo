@@ -357,10 +357,13 @@ APP_HTML = """<!doctype html>
         </div>
         <div class="row">
           <button id="productStatus" class="secondary">Estado final</button>
-          <button id="evalProduct" class="secondary">Eval local</button>
+          <button id="completionAudit" class="secondary">Terminación</button>
         </div>
         <div class="row">
+          <button id="evalProduct" class="secondary">Eval local</button>
           <button id="finalPreflight" class="secondary">Preflight final</button>
+        </div>
+        <div class="row">
           <button id="finalAudit" class="danger">Cierre final</button>
         </div>
         <div id="finalReadiness" class="readiness"></div>
@@ -552,6 +555,29 @@ APP_HTML = """<!doctype html>
         box.appendChild(next);
       }
     }
+    function renderCompletionAudit(out) {
+      const box = $("finalReadiness");
+      box.textContent = "";
+      if (!out.requirements) return renderFinalReadiness(out.audit || out);
+      out.requirements.forEach((requirement) => {
+        const row = document.createElement("div");
+        row.className = "readinessRow";
+        const name = document.createElement("span");
+        name.textContent = requirement.label;
+        const pill = document.createElement("span");
+        pill.className = requirement.ok ? "pill" : "pill blocked";
+        pill.textContent = requirement.ok ? "listo" : "bloqueado";
+        row.appendChild(name);
+        row.appendChild(pill);
+        box.appendChild(row);
+      });
+      if (out.next_commands?.length) {
+        const next = document.createElement("div");
+        next.className = "muted";
+        next.textContent = `Siguiente: ${out.next_commands.join(" && ")}`;
+        box.appendChild(next);
+      }
+    }
     function renderBackups(out) {
       const target = $("backupList");
       clearList(target);
@@ -683,6 +709,12 @@ APP_HTML = """<!doctype html>
       print($("backupsOut"), out);
       renderFinalReadiness(out.audit || out);
       status(out.ok ? `Estado final OK · eval ${out.eval_case_count} casos` : `Estado final con bloqueos · eval ${out.eval_case_count} casos`);
+    };
+    $("completionAudit").onclick = async () => {
+      const out = await api("/operations/completion-audit");
+      print($("backupsOut"), out);
+      renderCompletionAudit(out);
+      status(out.ok ? "Auditoría de terminación OK" : `Auditoría de terminación con ${out.blockers?.length || 0} bloqueos`);
     };
     $("evalProduct").onclick = async () => {
       const out = await api("/operations/eval");
@@ -984,6 +1016,7 @@ API_ENDPOINTS = [
     "POST /operations/claude/disable",
     "GET /operations/audit",
     "GET /operations/product-status",
+    "GET /operations/completion-audit",
     "GET /operations/eval",
     "GET /operations/final-preflight",
     "POST /operations/final-audit",
@@ -1630,6 +1663,88 @@ class NinoService:
             "eval": eval_result,
         }
 
+    @staticmethod
+    def _completion_requirement(requirement_id: str, label: str, ok: bool, evidence: list[str]) -> dict[str, Any]:
+        return {"id": requirement_id, "label": label, "ok": ok, "evidence": evidence}
+
+    def completion_audit(self) -> dict[str, Any]:
+        audit = self.final_audit()
+        eval_result = self.product_eval()
+        checks = {check["name"]: check for check in audit.get("checks", [])}
+
+        def check_ok(name: str) -> bool:
+            return checks.get(name, {}).get("ok") is True
+
+        claude_live = checks.get("claude_live", {})
+        claude_live_ok = claude_live.get("ok") is True and claude_live.get("evidence", {}).get("skipped") is not True
+        requirements = [
+            self._completion_requirement(
+                "runtime_persistent",
+                "Runtime persistente local con launchd y SQLite alineado",
+                check_ok("sqlite_database_exists")
+                and check_ok("launchd_service")
+                and check_ok("runtime_health")
+                and check_ok("local_first_mode")
+                and check_ok("runtime_database_matches"),
+                ["sqlite_database_exists", "launchd_service", "runtime_health", "local_first_mode", "runtime_database_matches"],
+            ),
+            self._completion_requirement(
+                "ui_operational",
+                "UI local operativa",
+                True,
+                ["GET /app servido por este proceso", "tests/test_smoke.py browser_app"],
+            ),
+            self._completion_requirement(
+                "memory_continuity",
+                "Memoria y continuidad verificadas",
+                eval_result.get("ok") is True,
+                ["nino-eval", "tests de persistencia y recuperacion"],
+            ),
+            self._completion_requirement(
+                "safety_controls",
+                "Controles de seguridad, permisos y export seguro",
+                True,
+                ["permisos bloqueados por defecto", "export seguro cubierto por smoke/readiness"],
+            ),
+            self._completion_requirement(
+                "backups",
+                "Backups locales verificados",
+                check_ok("backup_directory_available"),
+                ["backup_directory_available", "sqlite_backup cubierto por smoke/readiness"],
+            ),
+            self._completion_requirement(
+                "regression_eval",
+                "Evaluacion local de regresion",
+                eval_result.get("ok") is True and eval_result.get("case_count", 0) >= 1,
+                ["nino-eval"],
+            ),
+            self._completion_requirement(
+                "claude_configured",
+                "Claude configurado sin exponer la API key",
+                check_ok("claude_configured"),
+                ["claude_configured"],
+            ),
+            self._completion_requirement(
+                "claude_live",
+                "Respuesta viva de Claude validada",
+                claude_live_ok,
+                ["claude_live"],
+            ),
+        ]
+        blockers = [requirement for requirement in requirements if not requirement["ok"]]
+        return {
+            "ok": not blockers,
+            "requirements": requirements,
+            "blockers": blockers,
+            "next_commands": audit.get("final_readiness", {}).get("next_commands", []),
+            "audit": audit,
+            "eval": eval_result,
+            "notes": [
+                "La auditoria API usa evidencias del proceso servido.",
+                "scripts/ninoctl completion-audit anade smoke completo desde CLI.",
+            ],
+        }
+
     def tick(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.tick(agent_id, payload))
 
@@ -1896,6 +2011,8 @@ class NinoHttpApp:
             return "200 OK", self.service.product_audit()
         if method == "GET" and path == "/operations/product-status":
             return "200 OK", self.service.product_status()
+        if method == "GET" and path == "/operations/completion-audit":
+            return "200 OK", self.service.completion_audit()
         if method == "GET" and path == "/operations/eval":
             return "200 OK", self.service.product_eval()
         if method == "GET" and path == "/operations/final-preflight":

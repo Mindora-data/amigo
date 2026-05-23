@@ -176,6 +176,8 @@ preflight/eval/blocker summary as the CLI status command.
 `scripts/ninoctl completion-audit` prints the requirement-by-requirement
 completion matrix, including the remaining Claude live blocker when no real key
 has been configured.
+The same matrix is available in the UI with `Terminación`, backed by
+`GET /operations/completion-audit`.
 The same panel includes `Desactivar Claude`, backed by
 `POST /operations/claude/disable`, to remove Claude settings from `.env.local`,
 disable the runtime client immediately, and optionally delete the configured
@@ -283,6 +285,7 @@ POST /operations/claude/configure
 POST /operations/claude/disable
 GET  /operations/audit
 GET  /operations/product-status
+GET  /operations/completion-audit
 GET  /operations/eval
 GET  /operations/final-preflight
 POST /operations/final-audit

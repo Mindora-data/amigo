@@ -127,6 +127,10 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/operations/product-status" in body
     assert b"Estado final" in body
     assert b"productStatus" in body
+    assert b"/operations/completion-audit" in body
+    assert b"Terminaci" in body
+    assert b"completionAudit" in body
+    assert b"renderCompletionAudit" in body
     assert b"Auditor" in body
 
 
@@ -141,6 +145,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     _request(app, "POST", "/operations/backup", {})
     product_audit = _request(app, "GET", "/operations/audit")
     product_status = _request(app, "GET", "/operations/product-status")
+    completion_audit = _request(app, "GET", "/operations/completion-audit")
     product_eval = _request(app, "GET", "/operations/eval")
     final_preflight = _request(app, "GET", "/operations/final-preflight")
     final_audit = _request(app, "POST", "/operations/final-audit", {})
@@ -182,6 +187,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "POST /operations/claude/disable" in root["endpoints"]
     assert "GET /operations/audit" in root["endpoints"]
     assert "GET /operations/product-status" in root["endpoints"]
+    assert "GET /operations/completion-audit" in root["endpoints"]
     assert "GET /operations/eval" in root["endpoints"]
     assert "GET /operations/final-preflight" in root["endpoints"]
     assert "POST /operations/final-audit" in root["endpoints"]
@@ -198,6 +204,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "/operations/claude/disable" in openapi["paths"]
     assert "/operations/audit" in openapi["paths"]
     assert "/operations/product-status" in openapi["paths"]
+    assert "/operations/completion-audit" in openapi["paths"]
     assert "/operations/eval" in openapi["paths"]
     assert "/operations/final-preflight" in openapi["paths"]
     assert "/operations/final-audit" in openapi["paths"]
@@ -249,6 +256,19 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "scripts/ninoctl finish --key-stdin" in product_status["next_commands"]
     assert product_status["audit"]["final_readiness"]["ready_for_final_preflight"] is False
     assert product_status["eval"]["ok"] is True
+    assert completion_audit["ok"] is False
+    assert {item["id"] for item in completion_audit["requirements"]} >= {
+        "runtime_persistent",
+        "ui_operational",
+        "memory_continuity",
+        "safety_controls",
+        "backups",
+        "regression_eval",
+        "claude_configured",
+        "claude_live",
+    }
+    assert {item["id"] for item in completion_audit["blockers"]} == {"claude_configured", "claude_live"}
+    assert "scripts/ninoctl finish --key-stdin" in completion_audit["next_commands"]
     assert product_eval["ok"] is True
     assert product_eval["path"] == "eval"
     assert product_eval["case_count"] >= 1
