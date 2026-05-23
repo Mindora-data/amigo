@@ -66,7 +66,7 @@ scripts/ninoctl logs -f
 When NIÑO is running as the launchd service, `scripts/ninoctl status` reports
 the launchd PID/state and `scripts/ninoctl logs` reads the launchd log if there
 is no manual `ninoctl start` log.
-`scripts/ninoctl wait-health [seconds]` waits up to 60 seconds by default until `/health` responds; the
+`scripts/ninoctl wait-health [seconds]` waits up to 120 seconds by default until `/health` responds; the
 final `finish` flow uses it after restarting launchd.
 
 Run the final setup as one flow, keeping the key in macOS Keychain by default:
