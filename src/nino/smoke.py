@@ -108,10 +108,45 @@ def run_smoke(db_path: str | Path) -> SmokeResult:
     status, safe_export = _request(app, "GET", "/agents/smoke/export-safe")
     _require(status.startswith("200") and safe_export["export"]["agent_id"] == "smoke", checks, "safe_export")
 
+    status, nino_seed = _request(
+        app,
+        "POST",
+        "/agents/nino/tick",
+        {"intent": "smoke", "text": "estado vivo para informe de cierre", "salience": 0.8, "confidence": 0.9},
+    )
+    _require(status.startswith("200") and nino_seed["tick"] == 1, checks, "nino_agent_seed")
+
     status, backup = _request(app, "POST", "/operations/backup", {})
     _require(status.startswith("200") and backup["ok"] is True and Path(backup["path"]).exists(), checks, "sqlite_backup")
     status, backups = _request(app, "GET", "/operations/backups")
     _require(status.startswith("200") and backups["backups"], checks, "sqlite_backup_list")
+
+    status, closing = _request(app, "POST", "/operations/closing-report", {})
+    _require(
+        status.startswith("200")
+        and closing["ok"] is True
+        and Path(closing["path"]).exists()
+        and closing["report"]["nino_profile"]["profile"]["agent_id"] == "nino",
+        checks,
+        "closing_report",
+    )
+    status, reports = _request(app, "GET", "/operations/reports")
+    _require(status.startswith("200") and reports["reports"][0]["path"] == closing["path"], checks, "closing_report_list")
+    report_name = reports["reports"][0]["name"]
+    status, report = _request(app, "GET", f"/operations/reports/{report_name}")
+    _require(
+        status.startswith("200")
+        and report["ok"] is True
+        and report["report"]["summary"] == closing["report"]["summary"],
+        checks,
+        "closing_report_read",
+    )
+    status, invalid_report = _request(app, "GET", "/operations/reports/bad.json")
+    _require(
+        status.startswith("200") and invalid_report == {"ok": False, "error": "invalid_report_name"},
+        checks,
+        "closing_report_name_guard",
+    )
 
     return SmokeResult(ok=True, checks=checks, db_path=str(db_path))
 
