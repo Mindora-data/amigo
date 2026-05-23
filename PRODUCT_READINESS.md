@@ -65,7 +65,7 @@ scripts/ninoctl persistent-audit
 | Regresion objetiva | `eval/memory_regression.json`, `nino.eval_runner`, `scripts/ninoctl eval`, `nino-eval`, `GET /operations/eval`, boton `Eval local` en `/app`, pytest | Cumplido |
 | Auditoria final repetible | `GET /operations/audit`, `GET /operations/product-status`, `GET /operations/final-preflight`, `POST /operations/final-audit`, `scripts/nino-product-audit --json`, `scripts/ninoctl product-status`; `--require-launchd` para exigir servicio persistente; `--require-claude-config` para preflight sin llamada viva; `--require-claude-live` para cerrar Claude real | Cumplido local; Claude vivo requiere key real |
 | Auditoria de terminacion | `scripts/ninoctl completion-audit`, `nino-completion-audit`, `GET /operations/completion-audit`, boton `Terminación` | Cumplido local; marca Claude vivo como bloqueo hasta tener key real |
-| Informe de cierre | `scripts/ninoctl closing-report`, `nino-closing-report`, JSON en `data/reports/` | Cumplido local |
+| Informe de cierre | `scripts/ninoctl closing-report`, `nino-closing-report`, `POST /operations/closing-report`, boton `Informe cierre`, JSON en `data/reports/` | Cumplido local |
 
 La auditoria estricta de cierre es:
 
@@ -89,6 +89,8 @@ eval, Claude configurado y Claude vivo.
 desde el proceso servido.
 `scripts/ninoctl closing-report` guarda una evidencia local versionable fuera de
 Git con estado git, perfil de `nino`, estado final y auditoria de terminacion.
+`POST /operations/closing-report` y el boton `Informe cierre` generan la misma
+evidencia desde el proceso servido.
 `scripts/ninoctl finish --key-stdin` ejecuta el cierre guiado completo:
 configura Claude en Keychain por defecto, reinicia launchd y lanza el cierre
 final. Con `--preflight-only` valida la configuracion sin gastar llamada viva.

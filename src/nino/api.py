@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -360,6 +360,9 @@ APP_HTML = """<!doctype html>
           <button id="completionAudit" class="secondary">Terminación</button>
         </div>
         <div class="row">
+          <button id="closingReport" class="secondary">Informe cierre</button>
+        </div>
+        <div class="row">
           <button id="evalProduct" class="secondary">Eval local</button>
           <button id="finalPreflight" class="secondary">Preflight final</button>
         </div>
@@ -716,6 +719,12 @@ APP_HTML = """<!doctype html>
       renderCompletionAudit(out);
       status(out.ok ? "Auditoría de terminación OK" : `Auditoría de terminación con ${out.blockers?.length || 0} bloqueos`);
     };
+    $("closingReport").onclick = async () => {
+      const out = await api("/operations/closing-report", {method: "POST", body: "{}"});
+      print($("backupsOut"), out);
+      renderCompletionAudit(out.report?.completion_audit || out);
+      status(out.ok ? `Informe de cierre creado: ${out.path}` : "Informe de cierre fallido");
+    };
     $("evalProduct").onclick = async () => {
       const out = await api("/operations/eval");
       print($("backupsOut"), out);
@@ -1017,6 +1026,7 @@ API_ENDPOINTS = [
     "GET /operations/audit",
     "GET /operations/product-status",
     "GET /operations/completion-audit",
+    "POST /operations/closing-report",
     "GET /operations/eval",
     "GET /operations/final-preflight",
     "POST /operations/final-audit",
@@ -1664,6 +1674,66 @@ class NinoService:
         }
 
     @staticmethod
+    def _metadata_value(root: Path, filename: str) -> str | None:
+        path = root / filename
+        if not path.exists():
+            return None
+        value = path.read_text(encoding="utf-8").strip()
+        return value or None
+
+    @staticmethod
+    def _git_metadata(root: Path) -> dict[str, Any]:
+        def git(command: list[str]) -> str | None:
+            try:
+                result = subprocess.run(
+                    ["git", *command],
+                    cwd=root,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+            except (OSError, subprocess.SubprocessError):
+                return None
+            if result.returncode != 0:
+                return None
+            return result.stdout.strip()
+
+        status = git(["status", "--short"])
+        return {
+            "branch": git(["branch", "--show-current"]) or NinoService._metadata_value(root, "BRANCH"),
+            "head": git(["rev-parse", "HEAD"]) or NinoService._metadata_value(root, "REVISION"),
+            "dirty": bool(status),
+        }
+
+    def closing_report(self) -> dict[str, Any]:
+        if self.db_path is None:
+            return {"ok": False, "error": "db_path_unavailable"}
+        root = Path.cwd()
+        product_status = self.product_status()
+        completion_audit = self.completion_audit()
+        report = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "root": str(root.resolve()),
+            "git": self._git_metadata(root),
+            "summary": {
+                "ok": bool(completion_audit.get("ok")),
+                "product_status_ok": bool(product_status.get("ok")),
+                "completion_audit_ok": bool(completion_audit.get("ok")),
+                "blockers": [item.get("id") or item.get("name") for item in completion_audit.get("blockers", [])],
+                "next_commands": completion_audit.get("next_commands", []),
+            },
+            "nino_profile": self.get_profile("nino"),
+            "product_status": product_status,
+            "completion_audit": completion_audit,
+        }
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        output_path = self.db_path.parent / "reports" / f"nino-closing-{stamp}.json"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(report, indent=2, default=_json_default), encoding="utf-8")
+        return {"ok": True, "path": str(output_path), "report": _to_jsonable(report)}
+
+    @staticmethod
     def _completion_requirement(requirement_id: str, label: str, ok: bool, evidence: list[str]) -> dict[str, Any]:
         return {"id": requirement_id, "label": label, "ok": ok, "evidence": evidence}
 
@@ -2023,6 +2093,8 @@ class NinoHttpApp:
             return "200 OK", self.service.product_status()
         if method == "GET" and path == "/operations/completion-audit":
             return "200 OK", self.service.completion_audit()
+        if method == "POST" and path == "/operations/closing-report":
+            return "200 OK", self.service.closing_report()
         if method == "GET" and path == "/operations/eval":
             return "200 OK", self.service.product_eval()
         if method == "GET" and path == "/operations/final-preflight":

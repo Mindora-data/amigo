@@ -183,6 +183,8 @@ The same matrix is available in the UI with `Terminación`, backed by
 `scripts/ninoctl closing-report` writes a timestamped JSON evidence report under
 `data/reports/` with git state, product status, completion audit and the live
 `nino` profile.
+The same evidence can be generated from `/app` with `Informe cierre`, backed by
+`POST /operations/closing-report`.
 The same panel includes `Desactivar Claude`, backed by
 `POST /operations/claude/disable`, to remove Claude settings from `.env.local`,
 disable the runtime client immediately, and optionally delete the configured
@@ -291,6 +293,7 @@ POST /operations/claude/disable
 GET  /operations/audit
 GET  /operations/product-status
 GET  /operations/completion-audit
+POST /operations/closing-report
 GET  /operations/eval
 GET  /operations/final-preflight
 POST /operations/final-audit

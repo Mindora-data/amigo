@@ -130,6 +130,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/operations/completion-audit" in body
     assert b"Terminaci" in body
     assert b"completionAudit" in body
+    assert b"/operations/closing-report" in body
+    assert b"Informe cierre" in body
+    assert b"closingReport" in body
     assert b"renderCompletionAudit" in body
     assert b"Auditor" in body
 
@@ -152,6 +155,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     product_audit = _request(app, "GET", "/operations/audit")
     product_status = _request(app, "GET", "/operations/product-status")
     completion_audit = _request(app, "GET", "/operations/completion-audit")
+    closing_report = _request(app, "POST", "/operations/closing-report", {})
     product_eval = _request(app, "GET", "/operations/eval")
     final_preflight = _request(app, "GET", "/operations/final-preflight")
     final_audit = _request(app, "POST", "/operations/final-audit", {})
@@ -194,6 +198,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /operations/audit" in root["endpoints"]
     assert "GET /operations/product-status" in root["endpoints"]
     assert "GET /operations/completion-audit" in root["endpoints"]
+    assert "POST /operations/closing-report" in root["endpoints"]
     assert "GET /operations/eval" in root["endpoints"]
     assert "GET /operations/final-preflight" in root["endpoints"]
     assert "POST /operations/final-audit" in root["endpoints"]
@@ -211,6 +216,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "/operations/audit" in openapi["paths"]
     assert "/operations/product-status" in openapi["paths"]
     assert "/operations/completion-audit" in openapi["paths"]
+    assert "/operations/closing-report" in openapi["paths"]
+    assert "post" in openapi["paths"]["/operations/closing-report"]
     assert "/operations/eval" in openapi["paths"]
     assert "/operations/final-preflight" in openapi["paths"]
     assert "/operations/final-audit" in openapi["paths"]
@@ -276,6 +283,13 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     }
     assert {item["id"] for item in completion_audit["blockers"]} == {"claude_configured", "claude_live"}
     assert "scripts/ninoctl finish --key-stdin" in completion_audit["next_commands"]
+    assert closing_report["ok"] is True
+    assert Path(closing_report["path"]).exists()
+    assert Path(closing_report["path"]).parent == tmp_path / "reports"
+    assert closing_report["report"]["summary"]["blockers"] == ["claude_configured", "claude_live"]
+    assert closing_report["report"]["summary"]["completion_audit_ok"] is False
+    assert closing_report["report"]["product_status"]["eval_ok"] is True
+    assert closing_report["report"]["nino_profile"]["profile"]["agent_id"] == "nino"
     assert product_eval["ok"] is True
     assert product_eval["path"] == "eval"
     assert product_eval["case_count"] >= 1
