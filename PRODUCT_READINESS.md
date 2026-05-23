@@ -124,6 +124,8 @@ comandos seguros de configuracion y vuelve a apuntar a
 `scripts/ninoctl final-audit`. Esos comandos incluyen tanto
 `scripts/ninoctl finish --key-stdin` para primera configuracion como
 `scripts/ninoctl finish --skip-configure` cuando el secreto ya esta guardado.
+Cuando Claude ya esta configurado y solo queda validar la llamada viva, la
+accion recomendada pasa a `finish --skip-configure`.
 `GET /operations/audit` y la UI en `/app` exponen tambien `final_readiness`,
 con estado de auditoria local, servicio persistente observado, bloqueos de
 Claude y comandos siguientes para no interpretar el JSON completo de la

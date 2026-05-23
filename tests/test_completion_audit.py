@@ -144,3 +144,38 @@ def test_completion_audit_json_output(monkeypatch, tmp_path, capsys) -> None:
     assert payload["latest_report_current"]["ok"] is False
     assert payload["latest_report_current"]["reason"] == "report_not_found"
     assert payload["recommended_next_action"] == "scripts/ninoctl closing-report"
+
+
+def test_completion_audit_recommends_skip_configure_when_only_claude_live_is_blocked(monkeypatch, tmp_path) -> None:
+    db_path = tmp_path / "nino.db"
+    (tmp_path / "REVISION").write_text("abc123", encoding="utf-8")
+    report_dir = tmp_path / "data" / "reports"
+    report_dir.mkdir(parents=True)
+    (report_dir / "nino-closing-20260523-192346.json").write_text(
+        json.dumps({"generated_at": "2026-05-23T19:23:46+00:00", "git": {"head": "abc123"}, "summary": {"blockers": ["claude_live"]}}),
+        encoding="utf-8",
+    )
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE agent_states (agent_id TEXT PRIMARY KEY)")
+        conn.execute("CREATE TABLE episodes (agent_id TEXT)")
+        conn.execute("CREATE TABLE memory_facts (agent_id TEXT)")
+        conn.execute("INSERT INTO agent_states (agent_id) VALUES ('nino')")
+        conn.execute("INSERT INTO episodes (agent_id) VALUES ('nino')")
+    audit = {**_audit_payload(), "db_path": str(db_path)}
+    for check in audit["checks"]:
+        if check["name"] == "claude_configured":
+            check["ok"] = True
+            check["evidence"] = {}
+        if check["name"] == "claude_live":
+            check["ok"] = False
+            check["evidence"] = {"skipped": False, "setup_commands": ["scripts/ninoctl finish --skip-configure"]}
+
+    def fake_run(command, **kwargs):
+        payload = audit if "nino-product-audit" in command[0] else {"ok": True, "case_count": 1}
+        return subprocess.CompletedProcess(command, 1 if payload is audit else 0, json.dumps(payload), "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = build_completion_audit(tmp_path)
+    assert {item["id"] for item in result["blockers"]} == {"claude_live"}
+    assert result["recommended_next_action"] == "scripts/ninoctl finish --skip-configure"

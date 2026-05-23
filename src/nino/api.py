@@ -1929,6 +1929,8 @@ class NinoService:
             return "scripts/ninoctl finish --key-stdin"
         if "closing_evidence" in blocker_names:
             return "scripts/ninoctl closing-report"
+        if "claude_live" in blocker_names:
+            return "scripts/ninoctl finish --skip-configure"
         return commands[0] if commands else ""
 
     def _latest_report_summary(self) -> dict[str, Any]:

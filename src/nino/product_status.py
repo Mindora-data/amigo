@@ -47,6 +47,8 @@ def _recommended_next_action(ok: bool, blockers: list[dict[str, Any]], commands:
         return "scripts/ninoctl finish --key-stdin"
     if "closing_evidence" in blocker_names:
         return "scripts/ninoctl closing-report"
+    if "claude_live" in blocker_names:
+        return "scripts/ninoctl finish --skip-configure"
     return commands[0] if commands else ""
 
 
