@@ -85,6 +85,10 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"Logs" in body
     assert b"/operations/eval" in body
     assert b"Eval local" in body
+    assert b"/operations/final-preflight" in body
+    assert b"/operations/final-audit" in body
+    assert b"Preflight final" in body
+    assert b"Cierre final" in body
     assert b"Descargar seguro" in body
     assert b"Descargar completo" in body
     assert b"Eliminar episodio" in body
@@ -122,6 +126,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     _request(app, "POST", "/operations/backup", {})
     product_audit = _request(app, "GET", "/operations/audit")
     product_eval = _request(app, "GET", "/operations/eval")
+    final_preflight = _request(app, "GET", "/operations/final-preflight")
+    final_audit = _request(app, "POST", "/operations/final-audit", {})
     tick = _request(
         app,
         "POST",
@@ -158,6 +164,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /operations/claude" in root["endpoints"]
     assert "GET /operations/audit" in root["endpoints"]
     assert "GET /operations/eval" in root["endpoints"]
+    assert "GET /operations/final-preflight" in root["endpoints"]
+    assert "POST /operations/final-audit" in root["endpoints"]
     assert "GET /operations/logs" in root["endpoints"]
     assert "POST /agents/{agent_id}/tasks/run-next" in root["endpoints"]
     assert openapi["openapi"] == "3.1.0"
@@ -168,6 +176,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "/operations/claude" in openapi["paths"]
     assert "/operations/audit" in openapi["paths"]
     assert "/operations/eval" in openapi["paths"]
+    assert "/operations/final-preflight" in openapi["paths"]
+    assert "/operations/final-audit" in openapi["paths"]
     assert "/operations/logs" in openapi["paths"]
     assert health == {"ok": True, "service": "nino"}
     assert mode["local_first"] is True
@@ -210,6 +220,15 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert product_eval["path"] == "eval"
     assert product_eval["case_count"] >= 1
     assert product_eval["results"][0]["ok"] is True
+    assert final_preflight["ok"] is False
+    assert final_preflight["require_launchd"] is True
+    assert final_preflight["require_claude_config"] is True
+    assert final_preflight["final_readiness"]["ready_for_final_preflight"] is False
+    assert "claude_configured" in {check["name"] for check in final_preflight["checks"]}
+    assert final_audit["ok"] is False
+    assert final_audit["require_claude_live"] is True
+    assert final_audit["audit_profile"]["strict_final"] is True
+    assert final_audit["final_readiness"]["ready_for_final_audit"] is False
     assert tick["tick"] == 1
     assert state["tick"] == 1
     assert len(episodes["episodes"]) == 1

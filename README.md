@@ -215,6 +215,10 @@ The `/operations/audit` endpoint and the `/app` audit button also return this
 strict final command, the required checks, and `final_readiness` with current
 local audit state, observed launchd state, Claude configuration blockers, and
 the next safe commands.
+`GET /operations/final-preflight` runs the strict preflight profile from the API
+without a live Claude call. `POST /operations/final-audit` runs the strict final
+profile and may call Claude when a real key is configured; the UI exposes it as
+`Cierre final` with confirmation.
 
 Do not commit API keys. Keep `ANTHROPIC_API_KEY` in your shell environment or a
 local untracked secret manager.
@@ -243,6 +247,8 @@ GET  /operations/mode
 GET  /operations/claude
 GET  /operations/audit
 GET  /operations/eval
+GET  /operations/final-preflight
+POST /operations/final-audit
 GET  /operations/backups
 GET  /operations/logs
 POST /operations/backup

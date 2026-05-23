@@ -244,6 +244,7 @@ Auditoria final de producto 100% local:
 24. Hecho inicial: preflight final sin llamada externa con `scripts/ninoctl final-preflight`, que exige launchd, DB runtime alineada y Claude configurado antes de gastar una llamada viva.
 25. Hecho inicial: resumen accionable de cierre en `/operations/audit` y `/app` con `final_readiness`, auditoria local, servicio persistente observado, bloqueos y siguientes comandos.
 26. Hecho inicial: evaluacion local de regresion accesible desde `/operations/eval` y boton `Eval local` en `/app`.
-27. Siguiente: ejecutar `scripts/ninoctl final-audit` con una `ANTHROPIC_API_KEY` real.
+27. Hecho inicial: preflight y cierre final accesibles desde API/UI con `GET /operations/final-preflight`, `POST /operations/final-audit`, botones `Preflight final` y `Cierre final`.
+28. Siguiente: ejecutar `scripts/ninoctl final-audit` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

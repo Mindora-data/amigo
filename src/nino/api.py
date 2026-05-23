@@ -338,6 +338,10 @@ APP_HTML = """<!doctype html>
         </div>
         <div class="row">
           <button id="evalProduct" class="secondary">Eval local</button>
+          <button id="finalPreflight" class="secondary">Preflight final</button>
+        </div>
+        <div class="row">
+          <button id="finalAudit" class="danger">Cierre final</button>
         </div>
         <div id="finalReadiness" class="readiness"></div>
         <div class="row">
@@ -645,6 +649,19 @@ APP_HTML = """<!doctype html>
       print($("backupsOut"), out);
       status(out.ok ? `Eval local OK · ${out.case_count} casos` : `Eval local con fallos · ${out.case_count} casos`);
     };
+    $("finalPreflight").onclick = async () => {
+      const out = await api("/operations/final-preflight");
+      print($("backupsOut"), out);
+      renderFinalReadiness(out);
+      status(out.ok ? "Preflight final OK" : "Preflight final con bloqueos");
+    };
+    $("finalAudit").onclick = async () => {
+      if (!confirm("Ejecutar cierre final? Puede realizar una llamada real a Claude si hay API key configurada.")) return;
+      const out = await api("/operations/final-audit", {method: "POST", body: "{}"});
+      print($("backupsOut"), out);
+      renderFinalReadiness(out);
+      status(out.ok ? "Cierre final OK" : "Cierre final con bloqueos");
+    };
     $("mode").onclick = async () => print($("state"), await api("/operations/mode"));
     $("logs").onclick = async () => print($("backupsOut"), await api("/operations/logs"));
     $("saveProactivity").onclick = async () => {
@@ -859,6 +876,8 @@ API_ENDPOINTS = [
     "GET /operations/claude",
     "GET /operations/audit",
     "GET /operations/eval",
+    "GET /operations/final-preflight",
+    "POST /operations/final-audit",
     "GET /operations/backups",
     "GET /operations/logs",
     "POST /operations/backup",
@@ -1128,9 +1147,7 @@ class NinoService:
             ],
         }
 
-    def product_audit(self) -> dict[str, Any]:
-        from .product_audit import audit_product
-
+    def _final_audit_metadata(self, result: dict[str, Any]) -> dict[str, Any]:
         def final_metadata(result: dict[str, Any]) -> dict[str, Any]:
             claude = self.claude_config()
             claude_configured = claude["configured"] is True and not claude["config_errors"]
@@ -1139,6 +1156,7 @@ class NinoService:
             launchd_evidence = launchd.get("evidence", {})
             launchd_observed = launchd.get("ok") is True and not launchd_evidence.get("skipped", False)
             local_audit_ok = result.get("ok") is True
+            claude_live_ok = checks.get("claude_live", {}).get("ok") is True
             blockers = []
             if not local_audit_ok:
                 blockers.extend(check["name"] for check in result.get("checks", []) if not check.get("ok"))
@@ -1171,7 +1189,9 @@ class NinoService:
                     "launchd_observed": launchd_observed,
                     "claude_configured": claude_configured,
                     "ready_for_final_preflight": ready_for_final_preflight,
-                    "ready_for_final_audit": False,
+                    "ready_for_final_audit": ready_for_final_preflight
+                    and claude_live_ok
+                    and result.get("require_claude_live") is True,
                     "blockers": blockers,
                     "next_commands": next_commands,
                     "notes": [
@@ -1180,6 +1200,18 @@ class NinoService:
                     ],
                 },
             }
+
+        return final_metadata(result)
+
+    def _product_audit_runtime(
+        self,
+        *,
+        require_claude_config: bool = False,
+        require_claude_live: bool = False,
+        require_launchd: bool = False,
+    ) -> dict[str, Any]:
+        from .product_audit import _audit_profile
+        from .product_audit import audit_product
 
         base_final_audit = {
             "final_preflight_command": "scripts/ninoctl final-preflight",
@@ -1207,11 +1239,89 @@ class NinoService:
         result = audit_product(
             db_path=self.db_path,
             base_url="http://127.0.0.1:0",
-            require_claude_live=False,
+            require_claude_config=False,
+            require_claude_live=require_claude_live,
+            require_launchd=require_launchd,
             run_local_smoke=False,
             http_checks=False,
         )
-        return {**result, **final_metadata(result)}
+        checks = [check for check in result["checks"] if check["name"] != "claude_configured"]
+        health = self.health()
+        mode = self.operating_mode()
+        storage_path = mode.get("storage", {}).get("path")
+        expected = Path(self.db_path)
+        actual = Path(storage_path) if isinstance(storage_path, str) and storage_path else None
+        claude = self.claude_config()
+        checks.extend(
+            [
+                {"name": "runtime_health", "ok": health.get("ok") is True, "evidence": health},
+                {
+                    "name": "local_first_mode",
+                    "ok": mode.get("local_first") is True and mode.get("storage", {}).get("type") == "sqlite",
+                    "evidence": mode,
+                },
+                {
+                    "name": "runtime_database_matches",
+                    "ok": actual is not None and actual.resolve() == expected.resolve(),
+                    "evidence": {
+                        "expected": str(expected),
+                        "expected_resolved": str(expected.resolve()),
+                        "actual": storage_path,
+                        "actual_resolved": str(actual.resolve()) if actual else None,
+                    },
+                },
+                {
+                    "name": "claude_config_endpoint",
+                    "ok": "api_key_present" in claude and "missing" in claude,
+                    "evidence": claude,
+                },
+            ]
+        )
+        if require_claude_config or require_claude_live:
+            checks.append(
+                {
+                    "name": "claude_configured",
+                    "ok": claude["configured"] is True and not claude["config_errors"],
+                    "evidence": {
+                        "configured": claude["configured"],
+                        "runtime_enabled": claude["runtime_enabled"],
+                        "provider": claude["provider"],
+                        "model": claude["model"],
+                        "api_key_present": claude["api_key_present"],
+                        "api_key_source": claude["api_key_source"],
+                        "keychain_service": claude["keychain_service"],
+                        "missing": claude["missing"],
+                        "config_errors": claude["config_errors"],
+                        "setup_commands": claude["setup_commands"],
+                        "required": True,
+                    },
+                }
+            )
+        result = {
+            **result,
+            "ok": all(check["ok"] for check in checks),
+            "checks": checks,
+            "require_claude_config": require_claude_config,
+            "require_claude_live": require_claude_live,
+            "require_launchd": require_launchd,
+            "audit_profile": _audit_profile(
+                require_launchd=require_launchd,
+                require_claude_config=require_claude_config,
+                require_claude_live=require_claude_live,
+                http_checks=True,
+                run_local_smoke=False,
+            ),
+        }
+        return {**result, **self._final_audit_metadata(result)}
+
+    def product_audit(self) -> dict[str, Any]:
+        return self._product_audit_runtime()
+
+    def final_preflight(self) -> dict[str, Any]:
+        return self._product_audit_runtime(require_launchd=True, require_claude_config=True)
+
+    def final_audit(self) -> dict[str, Any]:
+        return self._product_audit_runtime(require_launchd=True, require_claude_config=True, require_claude_live=True)
 
     def product_eval(self) -> dict[str, Any]:
         from .eval_runner import run_eval_dir
@@ -1484,6 +1594,10 @@ class NinoHttpApp:
             return "200 OK", self.service.product_audit()
         if method == "GET" and path == "/operations/eval":
             return "200 OK", self.service.product_eval()
+        if method == "GET" and path == "/operations/final-preflight":
+            return "200 OK", self.service.final_preflight()
+        if method == "POST" and path == "/operations/final-audit":
+            return "200 OK", self.service.final_audit()
         if method == "GET" and path == "/operations/backups":
             return "200 OK", self.service.list_backups()
         if method == "GET" and path == "/operations/logs":
