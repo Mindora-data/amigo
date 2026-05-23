@@ -341,6 +341,40 @@ def test_ninoctl_status_ignores_stale_pid_for_another_database(tmp_path) -> None
     assert "pid 4242" not in result.stdout
 
 
+def test_ninoctl_wait_health_waits_for_server_response(tmp_path) -> None:
+    calls = tmp_path / "curl-calls"
+    curl = tmp_path / "curl"
+    curl.write_text(
+        "#!/usr/bin/env bash\n"
+        "count=0\n"
+        "if [[ -f \"$NINO_CURL_CALLS\" ]]; then count=$(cat \"$NINO_CURL_CALLS\"); fi\n"
+        "count=$((count + 1))\n"
+        "echo \"$count\" > \"$NINO_CURL_CALLS\"\n"
+        "if [[ \"$count\" -lt 2 ]]; then exit 1; fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_CURL_CALLS": str(calls),
+        "NINO_PORT": "65535",
+    }
+
+    result = subprocess.run(
+        ["scripts/ninoctl", "wait-health", "3"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "health: ok at http://127.0.0.1:65535" in result.stdout
+    assert calls.read_text(encoding="utf-8").strip() == "2"
+
+
 def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     root = tmp_path / "repo"
     scripts_dir = root / "scripts"
@@ -359,16 +393,26 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-completion-audit",
         "nino-closing-report",
         "nino-launchd",
+        "sleep",
     ):
         path = scripts_dir / name
         path.write_text(
             "#!/usr/bin/env bash\n"
-            "printf '%s %s\\n' \"$(basename \"$0\")\" \"$*\" >> \"$NINO_CALLS_LOG\"\n",
+            "if [[ \"$(basename \"$0\")\" != \"sleep\" ]]; then printf '%s %s\\n' \"$(basename \"$0\")\" \"$*\" >> \"$NINO_CALLS_LOG\"; fi\n",
             encoding="utf-8",
         )
         path.chmod(0o755)
+    curl = scripts_dir / "curl"
+    curl.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s %s\\n' \"$(basename \"$0\")\" \"$*\" >> \"$NINO_CALLS_LOG\"\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
     env = {
         **os.environ,
+        "PATH": f"{scripts_dir}:{os.environ['PATH']}",
         "NINO_CALLS_LOG": str(calls),
         "NINO_PORT": "65531",
     }
@@ -483,12 +527,14 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-configure-claude --key-stdin --model claude-test --keychain-service nino-anthropic",
         "nino-launchd stop",
         "nino-launchd start",
+        "curl -fsS http://127.0.0.1:65531/health",
         "nino-status ",
         "nino-product-audit --require-launchd --require-claude-config --json",
         "nino-closing-report --json",
         "nino-completion-audit --json",
         "nino-launchd stop",
         "nino-launchd start",
+        "curl -fsS http://127.0.0.1:65531/health",
         "nino-status ",
         "nino-product-audit --require-launchd --require-claude-config --json",
         "nino-closing-report --json",

@@ -31,6 +31,7 @@ Use `scripts/ninoctl` for day-to-day local operation:
 scripts/ninoctl start
 scripts/ninoctl status
 scripts/ninoctl health
+scripts/ninoctl wait-health
 scripts/ninoctl mode
 scripts/ninoctl claude
 scripts/ninoctl configure-claude
@@ -65,6 +66,8 @@ scripts/ninoctl logs -f
 When NIÑO is running as the launchd service, `scripts/ninoctl status` reports
 the launchd PID/state and `scripts/ninoctl logs` reads the launchd log if there
 is no manual `ninoctl start` log.
+`scripts/ninoctl wait-health [seconds]` waits until `/health` responds; the
+final `finish` flow uses it after restarting launchd.
 
 Run the final setup as one flow, keeping the key in macOS Keychain by default:
 

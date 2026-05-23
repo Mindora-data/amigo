@@ -39,6 +39,7 @@ Commands:
   restart     Stop and start the server.
   status      Show process and health status.
   health      Request GET /health.
+  wait-health Wait until GET /health responds or timeout is reached.
   deep-health Request GET /health/deep.
   mode        Request GET /operations/mode.
   claude      Show Claude configuration status without sending a prompt.
@@ -115,6 +116,25 @@ adopt_running_pid() {
 
 server_responds() {
   curl -fsS "$BASE_URL/health" >/dev/null 2>&1
+}
+
+wait_health() {
+  local timeout="${1:-30}"
+  local elapsed=0
+  if [[ ! "$timeout" =~ ^[0-9]+$ || "$timeout" -lt 1 ]]; then
+    echo "Usage: scripts/ninoctl wait-health [timeout_seconds]" >&2
+    return 2
+  fi
+  while [[ "$elapsed" -lt "$timeout" ]]; do
+    if server_responds; then
+      echo "health: ok at $BASE_URL"
+      return 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  echo "health: not responding at $BASE_URL after ${timeout}s" >&2
+  return 1
 }
 
 launchd_print() {
@@ -469,6 +489,7 @@ finish() {
   fi
   "$ROOT_DIR/scripts/nino-launchd" stop
   "$ROOT_DIR/scripts/nino-launchd" start
+  wait_health 30
   product_status || true
   local audit_rc=0
   set +e
@@ -510,6 +531,7 @@ case "$command" in
   restart) stop && start ;;
   status) status ;;
   health) request "/health" ;;
+  wait-health) wait_health "${1:-30}" ;;
   deep-health) request "/health/deep" ;;
   mode) request "/operations/mode" ;;
   claude) request "/operations/claude" ;;
