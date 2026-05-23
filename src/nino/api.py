@@ -585,6 +585,22 @@ APP_HTML = """<!doctype html>
         box.appendChild(next);
       }
     }
+    function renderProductStatus(out) {
+      renderFinalReadiness(out.audit || out);
+      const box = $("finalReadiness");
+      const latest = out.latest_report;
+      if (!latest) return;
+      const row = document.createElement("div");
+      row.className = "readinessRow";
+      const name = document.createElement("span");
+      name.textContent = "Último informe";
+      const pill = document.createElement("span");
+      pill.className = latest.ok ? "pill" : "pill blocked";
+      pill.textContent = latest.ok ? latest.name : "sin informe";
+      row.appendChild(name);
+      row.appendChild(pill);
+      box.appendChild(row);
+    }
     function renderBackups(out) {
       const target = $("backupList");
       clearList(target);
@@ -735,7 +751,7 @@ APP_HTML = """<!doctype html>
     $("productStatus").onclick = async () => {
       const out = await api("/operations/product-status");
       print($("backupsOut"), out);
-      renderFinalReadiness(out.audit || out);
+      renderProductStatus(out);
       status(out.ok ? `Estado final OK · eval ${out.eval_case_count} casos` : `Estado final con bloqueos · eval ${out.eval_case_count} casos`);
     };
     $("completionAudit").onclick = async () => {
