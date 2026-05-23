@@ -67,6 +67,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/llm/probe" in body
     assert b"/operations/claude/configure" in body
     assert b"Guardar Claude" in body
+    assert b"claudeSecretMode" in body
+    assert b"nino-anthropic" in body
     assert b"llmSetup" in body
     assert b"ninoctl configure-claude" in body
     assert b"describeClaudeConfig" in body
@@ -340,6 +342,51 @@ def test_http_api_configures_claude_without_returning_key(tmp_path, monkeypatch)
     assert "old-secret" not in content
     assert "sk-ant-test-secret" not in json.dumps(configured)
     assert oct((tmp_path / ".env.local").stat().st_mode & 0o777) == "0o600"
+
+
+def test_http_api_configures_claude_in_keychain_without_env_secret(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("USER", "tester")
+    monkeypatch.setenv("NINO_LLM_PROVIDER", "")
+    monkeypatch.setenv("NINO_CLAUDE_MODEL", "")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("NINO_KEYCHAIN_SERVICE", "")
+    calls: list[list[str]] = []
+
+    class Completed:
+        stdout = ""
+
+    def fake_run(args: list[str], **_kwargs: object) -> Completed:
+        calls.append(args)
+        return Completed()
+
+    monkeypatch.setattr("nino.api.subprocess.run", fake_run)
+    monkeypatch.setattr("nino.llm._keychain_api_key", lambda service: "sk-ant-keychain-secret" if service == "nino-test" else None)
+    app = create_app(tmp_path / "nino.db")
+
+    configured = _request(
+        app,
+        "POST",
+        "/operations/claude/configure",
+        {
+            "api_key": "sk-ant-keychain-secret",
+            "model": "claude-test",
+            "use_keychain": True,
+            "keychain_service": "nino-test",
+        },
+    )
+
+    content = (tmp_path / ".env.local").read_text(encoding="utf-8")
+    assert configured["ok"] is True
+    assert configured["mode"] == "keychain"
+    assert configured["keychain_service"] == "nino-test"
+    assert configured["claude"]["configured"] is True
+    assert configured["claude"]["api_key_source"] == "keychain"
+    assert "NINO_KEYCHAIN_SERVICE=nino-test" in content
+    assert "ANTHROPIC_API_KEY" not in content
+    assert "sk-ant-keychain-secret" not in content
+    assert "sk-ant-keychain-secret" not in json.dumps(configured)
+    assert calls[0][:4] == ["/usr/bin/security", "add-generic-password", "-U", "-a"]
 
 
 def test_http_api_restart_requires_confirmation_and_can_be_injected(tmp_path) -> None:

@@ -152,9 +152,12 @@ The command writes `.env.local` with file mode `600`, preserves unrelated local
 overrides, and never prints the key. With `--keychain-service`, the secret is
 stored in macOS Keychain and `.env.local` stores only `NINO_KEYCHAIN_SERVICE`.
 The local UI also includes `Guardar Claude`, backed by
-`POST /operations/claude/configure`, for configuring `.env.local` without a
-terminal. The API never returns the key and the response recommends restarting
-launchd so the persistent service reloads the file from a clean process.
+`POST /operations/claude/configure`, for configuring Claude without a terminal.
+By default it stores the secret in macOS Keychain and writes only
+`NINO_KEYCHAIN_SERVICE` to `.env.local`; `.env.local` storage is still available
+as an explicit option. The API never returns the key and the response recommends
+restarting launchd so the persistent service reloads the file from a clean
+process.
 The `Reiniciar servicio` button calls `POST /operations/restart`; when NIÑO is
 running under launchd, the process exits after responding and launchd `KeepAlive`
 starts it again.
