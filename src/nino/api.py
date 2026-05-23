@@ -845,6 +845,17 @@ APP_HTML = """<!doctype html>
       status(out.ok ? `Informe de cierre creado: ${out.path}` : "Informe de cierre fallido");
       await loadReports();
     };
+    async function writeClosingReportAfterAudit(auditLabel) {
+      const report = await api("/operations/closing-report", {method: "POST", body: "{}"});
+      print($("backupsOut"), report);
+      if (report.ok) {
+        await loadReports();
+        status(`${auditLabel} · informe: ${report.path}`);
+      } else {
+        status(`${auditLabel} · informe fallido`);
+      }
+      return report;
+    }
     async function loadReports() {
       const out = await api("/operations/reports");
       renderReports(out);
@@ -874,7 +885,7 @@ APP_HTML = """<!doctype html>
       const out = await api("/operations/final-audit", {method: "POST", body: "{}"});
       print($("backupsOut"), out);
       renderFinalReadiness(out);
-      status(out.ok ? "Cierre final OK" : "Cierre final con bloqueos");
+      await writeClosingReportAfterAudit(out.ok ? "Cierre final OK" : "Cierre final con bloqueos");
     };
     $("mode").onclick = async () => print($("state"), await api("/operations/mode"));
     $("logs").onclick = async () => print($("backupsOut"), await api("/operations/logs"));
@@ -1084,7 +1095,7 @@ APP_HTML = """<!doctype html>
       const out = await api("/operations/final-audit", {method: "POST", body: "{}"});
       print($("backupsOut"), out);
       renderFinalReadiness(out);
-      status(out.ok ? "Cierre guiado OK" : "Cierre guiado con bloqueos");
+      await writeClosingReportAfterAudit(out.ok ? "Cierre guiado OK" : "Cierre guiado con bloqueos");
     };
     $("disableClaude").onclick = async () => {
       const removeKeychain = $("claudeSecretMode").value === "keychain";

@@ -155,7 +155,7 @@ Hecho:
 - Acciones rapidas para consolidar, sonar, ciclo interno y scheduler. Hecho inicial: consolidar y operaciones internas via API/UI.
 - Respuestas naturales con Claude usando memoria local como contexto. Hecho inicial: adaptador opcional `NINO_LLM_PROVIDER=claude`.
 - Contexto mixto para Claude. Hecho inicial: ultimos turnos, memoria recuperada, hechos frios activos y redaccion de email/numeros largos.
-- Cierre guiado desde UI. Hecho inicial: el panel LLM puede guardar Claude, reiniciar el servicio persistente, esperar `/health` y ejecutar `Cierre final`.
+- Cierre guiado desde UI. Hecho inicial: el panel LLM puede guardar Claude, reiniciar el servicio persistente, esperar `/health`, ejecutar `Cierre final` y generar informe de cierre.
 
 Criterios de salida:
 
@@ -291,7 +291,7 @@ Auditoria final de producto 100% local:
 31f. Hecho inicial: lectura segura de informes desde API/UI con `GET /operations/reports/{report_name}` y boton `Ver JSON`.
 31g. Hecho inicial: smoke de informes de cierre con checks `closing_report`, `closing_report_list`, `closing_report_read`, `closing_report_latest` y `closing_report_name_guard`.
 32. Hecho inicial: cierre final guiado con `scripts/ninoctl finish --key-stdin`, Keychain por defecto, modo `--preflight-only` e informe de cierre al final del flujo.
-33. Hecho inicial: cierre guiado desde UI con configuracion Claude, reinicio persistente, espera de salud y cierre final.
+33. Hecho inicial: cierre guiado desde UI con configuracion Claude, reinicio persistente, espera de salud, cierre final e informe de cierre.
 34. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

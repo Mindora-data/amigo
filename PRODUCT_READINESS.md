@@ -124,8 +124,9 @@ La UI tambien permite lanzar `Preflight final` sin llamada viva y `Cierre final`
 con confirmacion, equivalente al perfil estricto con Claude vivo cuando la key
 real ya esta configurada.
 Desde el panel LLM, `Cierre guiado` configura Claude con la key pegada,
-reinicia el servicio persistente y lanza `Cierre final` cuando `/health`
-vuelve a responder.
+reinicia el servicio persistente, lanza `Cierre final` cuando `/health`
+vuelve a responder y escribe un informe de cierre actualizado. El boton
+`Cierre final` tambien genera ese informe despues de auditar.
 
 ## Bloque externo
 

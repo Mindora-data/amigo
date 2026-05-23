@@ -136,6 +136,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/operations/closing-report" in body
     assert b"Informe cierre" in body
     assert b"closingReport" in body
+    assert b"writeClosingReportAfterAudit" in body
     assert b"/operations/reports" in body
     assert b"Ver informes" in body
     assert b"renderReports" in body
