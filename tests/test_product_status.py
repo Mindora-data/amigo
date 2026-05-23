@@ -51,12 +51,14 @@ def test_product_status_summarizes_claude_blocker(monkeypatch, tmp_path, capsys)
     assert status["eval_ok"] is True
     assert status["blockers"][0]["name"] == "claude_configured"
     assert status["next_commands"] == ["scripts/ninoctl configure-claude --keychain-service nino-anthropic"]
+    assert status["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
     assert status["latest_report"]["name"] == report_path.name
     assert status["latest_report"]["git_head"] == "abc123"
     assert "claude_configured missing=NINO_LLM_PROVIDER" in format_product_status(status)
     assert f"latest_report: {report_path.name}" in format_product_status(status)
     assert "head=abc123" in format_product_status(status)
     assert "blockers=claude_configured" in format_product_status(status)
+    assert "recommended_next_action: scripts/ninoctl finish --key-stdin" in format_product_status(status)
 
     assert main(["--root", str(root)]) == 1
     assert "NIÑO product status: blocked" in capsys.readouterr().out
@@ -73,3 +75,4 @@ def test_product_status_json_output(monkeypatch, tmp_path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is True
     assert payload["eval_case_count"] == 2
+    assert payload["recommended_next_action"] == "scripts/ninoctl final-audit"

@@ -39,6 +39,15 @@ def _setup_commands(audit: dict[str, Any]) -> list[str]:
     return commands
 
 
+def _recommended_next_action(ok: bool, blockers: list[dict[str, Any]], commands: list[str]) -> str:
+    if ok:
+        return "scripts/ninoctl final-audit"
+    blocker_names = {str(blocker.get("name")) for blocker in blockers}
+    if "claude_configured" in blocker_names:
+        return "scripts/ninoctl finish --key-stdin"
+    return commands[0] if commands else ""
+
+
 def _latest_report(root: Path) -> dict[str, Any]:
     report_dir = root / "data" / "reports"
     reports = sorted(report_dir.glob("nino-closing-*.json"))
@@ -78,13 +87,16 @@ def build_product_status(root: str | Path = ".") -> dict[str, Any]:
             }
         )
 
+    ok = bool(audit.get("ok")) and bool(eval_result.get("ok"))
+    commands = _setup_commands(audit)
     return {
-        "ok": bool(audit.get("ok")) and bool(eval_result.get("ok")),
+        "ok": ok,
         "final_preflight_ok": bool(audit.get("ok")),
         "eval_ok": bool(eval_result.get("ok")),
         "eval_case_count": eval_result.get("case_count", 0),
         "blockers": blockers,
-        "next_commands": _setup_commands(audit),
+        "next_commands": commands,
+        "recommended_next_action": _recommended_next_action(ok, blockers, commands),
         "latest_report": _latest_report(root_path),
         "audit": audit,
         "eval": eval_result,
@@ -111,6 +123,8 @@ def format_product_status(status: dict[str, Any]) -> str:
         detail_parts = [part for part in [f"head={head}" if head else "", f"blockers={blockers}" if blockers else ""] if part]
         detail = f" ({'; '.join(detail_parts)})" if detail_parts else ""
         lines.append(f"latest_report: {latest_report['name']}{detail}")
+    if status.get("recommended_next_action"):
+        lines.append(f"recommended_next_action: {status['recommended_next_action']}")
     commands = status.get("next_commands", [])
     if commands:
         lines.append("next:")

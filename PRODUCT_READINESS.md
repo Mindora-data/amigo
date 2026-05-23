@@ -80,7 +80,8 @@ una llamada viva. `final-audit` anade la respuesta real de Claude con una key
 real.
 `scripts/ninoctl product-status` resume ese preflight, la eval local, el ultimo
 informe de cierre con head/bloqueos y los bloqueos restantes en formato legible,
-o en JSON con `--json`.
+o en JSON con `--json`. Tambien incluye `recommended_next_action` con el
+proximo comando operativo.
 `GET /operations/product-status` expone el mismo resumen a la UI con el boton
 `Estado final`.
 `scripts/ninoctl completion-audit` muestra una matriz requisito por requisito:

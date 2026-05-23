@@ -607,6 +607,18 @@ APP_HTML = """<!doctype html>
     function renderProductStatus(out) {
       renderFinalReadiness(out.audit || out);
       const box = $("finalReadiness");
+      if (out.recommended_next_action) {
+        const row = document.createElement("div");
+        row.className = "readinessRow";
+        const name = document.createElement("span");
+        name.textContent = "Siguiente acción";
+        const pill = document.createElement("span");
+        pill.className = out.ok ? "pill" : "pill blocked";
+        pill.textContent = out.recommended_next_action;
+        row.appendChild(name);
+        row.appendChild(pill);
+        box.appendChild(row);
+      }
       const latest = out.latest_report;
       if (!latest) return;
       const row = document.createElement("div");
@@ -1783,17 +1795,29 @@ class NinoService:
                     "required": evidence.get("required", False),
                 }
             )
+        ok = bool(audit.get("ok")) and bool(eval_result.get("ok"))
+        commands = audit.get("final_readiness", {}).get("next_commands", [])
         return {
-            "ok": bool(audit.get("ok")) and bool(eval_result.get("ok")),
+            "ok": ok,
             "final_preflight_ok": bool(audit.get("ok")),
             "eval_ok": bool(eval_result.get("ok")),
             "eval_case_count": eval_result.get("case_count", 0),
             "blockers": blockers,
-            "next_commands": audit.get("final_readiness", {}).get("next_commands", []),
+            "next_commands": commands,
+            "recommended_next_action": self._recommended_next_action(ok, blockers, commands),
             "latest_report": self._latest_report_summary(),
             "audit": audit,
             "eval": eval_result,
         }
+
+    @staticmethod
+    def _recommended_next_action(ok: bool, blockers: list[dict[str, Any]], commands: list[str]) -> str:
+        if ok:
+            return "scripts/ninoctl final-audit"
+        blocker_names = {str(blocker.get("name")) for blocker in blockers}
+        if "claude_configured" in blocker_names:
+            return "scripts/ninoctl finish --key-stdin"
+        return commands[0] if commands else ""
 
     def _latest_report_summary(self) -> dict[str, Any]:
         latest = self.get_report("latest")
