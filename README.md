@@ -158,6 +158,10 @@ By default it stores the secret in macOS Keychain and writes only
 as an explicit option. The API never returns the key and the response recommends
 restarting launchd so the persistent service reloads the file from a clean
 process.
+The same panel includes `Desactivar Claude`, backed by
+`POST /operations/claude/disable`, to remove Claude settings from `.env.local`,
+disable the runtime client immediately, and optionally delete the configured
+Keychain item.
 The `Reiniciar servicio` button calls `POST /operations/restart`; when NIÑO is
 running under launchd, the process exits after responding and launchd `KeepAlive`
 starts it again.
@@ -256,6 +260,7 @@ GET  /development/snapshot
 GET  /operations/mode
 GET  /operations/claude
 POST /operations/claude/configure
+POST /operations/claude/disable
 GET  /operations/audit
 GET  /operations/eval
 GET  /operations/final-preflight

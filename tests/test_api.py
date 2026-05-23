@@ -66,7 +66,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/llm/status" in body
     assert b"/llm/probe" in body
     assert b"/operations/claude/configure" in body
+    assert b"/operations/claude/disable" in body
     assert b"Guardar Claude" in body
+    assert b"Desactivar Claude" in body
     assert b"claudeSecretMode" in body
     assert b"nino-anthropic" in body
     assert b"llmSetup" in body
@@ -169,6 +171,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /operations/mode" in root["endpoints"]
     assert "GET /operations/claude" in root["endpoints"]
     assert "POST /operations/claude/configure" in root["endpoints"]
+    assert "POST /operations/claude/disable" in root["endpoints"]
     assert "GET /operations/audit" in root["endpoints"]
     assert "GET /operations/eval" in root["endpoints"]
     assert "GET /operations/final-preflight" in root["endpoints"]
@@ -183,6 +186,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "delete" in openapi["paths"]["/agents/{agent_id}/memory/facts/{fact_id}"]
     assert "/operations/claude" in openapi["paths"]
     assert "/operations/claude/configure" in openapi["paths"]
+    assert "/operations/claude/disable" in openapi["paths"]
     assert "/operations/audit" in openapi["paths"]
     assert "/operations/eval" in openapi["paths"]
     assert "/operations/final-preflight" in openapi["paths"]
@@ -387,6 +391,59 @@ def test_http_api_configures_claude_in_keychain_without_env_secret(tmp_path, mon
     assert "sk-ant-keychain-secret" not in content
     assert "sk-ant-keychain-secret" not in json.dumps(configured)
     assert calls[0][:4] == ["/usr/bin/security", "add-generic-password", "-U", "-a"]
+
+
+def test_http_api_disables_claude_and_cleans_local_config(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("NINO_LLM_PROVIDER", "claude")
+    monkeypatch.setenv("NINO_CLAUDE_MODEL", "claude-test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-secret")
+    monkeypatch.setenv("NINO_KEYCHAIN_SERVICE", "nino-test")
+    (tmp_path / ".env.local").write_text(
+        "NINO_PORT=8000\n"
+        "NINO_LLM_PROVIDER=claude\n"
+        "NINO_CLAUDE_MODEL=claude-test\n"
+        "ANTHROPIC_API_KEY=sk-ant-test-secret\n"
+        "NINO_KEYCHAIN_SERVICE=nino-test\n",
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    class Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(args: list[str], **_kwargs: object) -> Completed:
+        calls.append(args)
+        return Completed()
+
+    monkeypatch.setattr("nino.api.subprocess.run", fake_run)
+    app = create_app(tmp_path / "nino.db")
+
+    denied = _request(app, "POST", "/operations/claude/disable", {})
+    disabled = _request(
+        app,
+        "POST",
+        "/operations/claude/disable",
+        {"confirm": True, "remove_keychain": True, "keychain_service": "nino-test"},
+    )
+    status = _request(app, "GET", "/operations/claude")
+
+    content = (tmp_path / ".env.local").read_text(encoding="utf-8")
+    assert denied["ok"] is False
+    assert denied["error"] == "confirmation_required"
+    assert disabled["ok"] is True
+    assert disabled["keychain_removed"] is True
+    assert disabled["claude"]["configured"] is False
+    assert status["configured"] is False
+    assert "NINO_PORT=8000" in content
+    assert "NINO_LLM_PROVIDER" not in content
+    assert "NINO_CLAUDE_MODEL" not in content
+    assert "ANTHROPIC_API_KEY" not in content
+    assert "NINO_KEYCHAIN_SERVICE" not in content
+    assert "sk-ant-test-secret" not in json.dumps(disabled)
+    assert ["/usr/bin/security", "delete-generic-password", "-s", "nino-test"] in calls
 
 
 def test_http_api_restart_requires_confirmation_and_can_be_injected(tmp_path) -> None:

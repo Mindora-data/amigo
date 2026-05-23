@@ -317,6 +317,9 @@ APP_HTML = """<!doctype html>
           <button id="saveClaude" class="secondary">Guardar Claude</button>
           <button id="llmProbe" class="secondary">Probar Claude</button>
         </div>
+        <div class="row">
+          <button id="disableClaude" class="danger">Desactivar Claude</button>
+        </div>
         <div class="output"><pre id="llm">{}</pre></div>
       </div>
       <div class="panel">
@@ -861,6 +864,19 @@ APP_HTML = """<!doctype html>
       status(out.ok ? "Claude configurado. Reinicia launchd para persistencia completa." : `Claude no configurado: ${out.error || "error"}`);
       await loadLLMStatus();
     };
+    $("disableClaude").onclick = async () => {
+      const removeKeychain = $("claudeSecretMode").value === "keychain";
+      const keychainService = $("claudeKeychainService").value.trim() || "nino-anthropic";
+      if (!confirm(removeKeychain ? "Desactivar Claude y borrar la entrada de Keychain indicada?" : "Desactivar Claude y limpiar .env.local?")) return;
+      const out = await api("/operations/claude/disable", {
+        method: "POST",
+        body: JSON.stringify({confirm: true, remove_keychain: removeKeychain, keychain_service: keychainService})
+      });
+      $("llmSummary").textContent = describeClaudeConfig(out.claude || out);
+      print($("llm"), out);
+      status(out.ok ? "Claude desactivado." : `Claude no desactivado: ${out.error || "error"}`);
+      await loadLLMStatus();
+    };
     $("llmStatus").onclick = loadLLMStatus;
     $("llmProbe").onclick = probeLLM;
     $("permissions").onclick = async () => print($("permissionsOut"), await api(agentPath("/permissions")));
@@ -917,6 +933,7 @@ API_ENDPOINTS = [
     "GET /operations/mode",
     "GET /operations/claude",
     "POST /operations/claude/configure",
+    "POST /operations/claude/disable",
     "GET /operations/audit",
     "GET /operations/eval",
     "GET /operations/final-preflight",
@@ -1294,6 +1311,60 @@ class NinoService:
             "claude": self.claude_config(),
             "notes": [
                 "La API key no se devuelve en esta respuesta.",
+                "Reinicia launchd para que el servicio persistente cargue .env.local desde cero.",
+            ],
+        }
+
+    def disable_claude(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if payload.get("confirm") is not True:
+            return {"ok": False, "error": "confirmation_required", "claude": self.claude_config()}
+        remove_keychain = bool(payload.get("remove_keychain", False))
+        keychain_service = str(payload.get("keychain_service", "")).strip() or os.environ.get("NINO_KEYCHAIN_SERVICE", "").strip()
+        if remove_keychain and keychain_service and any(char in keychain_service for char in "\r\n="):
+            return {"ok": False, "error": "invalid_keychain_service", "claude": self.claude_config()}
+
+        keychain_removed = False
+        keychain_error: str | None = None
+        if remove_keychain and keychain_service:
+            try:
+                completed = subprocess.run(
+                    ["/usr/bin/security", "delete-generic-password", "-s", keychain_service],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                keychain_removed = completed.returncode == 0
+                if completed.returncode not in (0, 44):
+                    keychain_error = "keychain_delete_failed"
+            except (OSError, subprocess.SubprocessError) as exc:
+                keychain_error = exc.__class__.__name__
+
+        env_file = Path(".env.local")
+        if env_file.exists():
+            preserved = [
+                line
+                for line in env_file.read_text(encoding="utf-8").splitlines()
+                if not line.startswith(
+                    ("NINO_LLM_PROVIDER=", "NINO_CLAUDE_MODEL=", "ANTHROPIC_API_KEY=", "NINO_KEYCHAIN_SERVICE=")
+                )
+            ]
+            env_file.write_text(("\n".join(preserved).rstrip() + "\n") if preserved else "", encoding="utf-8")
+            env_file.chmod(0o600)
+
+        for name in ("NINO_LLM_PROVIDER", "NINO_CLAUDE_MODEL", "ANTHROPIC_API_KEY", "NINO_KEYCHAIN_SERVICE"):
+            os.environ.pop(name, None)
+        self.runtime.llm_client = None
+        return {
+            "ok": keychain_error is None,
+            "env_file": str(env_file),
+            "keychain_service": keychain_service or None,
+            "keychain_removed": keychain_removed,
+            "keychain_error": keychain_error,
+            "restart_recommended": True,
+            "claude": self.claude_config(),
+            "notes": [
+                "Claude queda desactivado en este proceso.",
                 "Reinicia launchd para que el servicio persistente cargue .env.local desde cero.",
             ],
         }
@@ -1743,6 +1814,8 @@ class NinoHttpApp:
             return "200 OK", self.service.claude_config()
         if method == "POST" and path == "/operations/claude/configure":
             return "200 OK", self.service.configure_claude(payload)
+        if method == "POST" and path == "/operations/claude/disable":
+            return "200 OK", self.service.disable_claude(payload)
         if method == "GET" and path == "/operations/audit":
             return "200 OK", self.service.product_audit()
         if method == "GET" and path == "/operations/eval":
