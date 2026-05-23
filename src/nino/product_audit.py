@@ -70,6 +70,25 @@ def _launchd_check(*, require_launchd: bool, label: str) -> dict[str, Any]:
     return _check("launchd_service", running if require_launchd else True, evidence)
 
 
+def _storage_path_from_mode(mode: dict[str, Any]) -> str | None:
+    path = mode.get("storage", {}).get("path")
+    return path if isinstance(path, str) and path else None
+
+
+def _same_database_path(expected: Path, actual: str | None) -> dict[str, Any]:
+    evidence = {
+        "expected": str(expected),
+        "expected_resolved": str(expected.resolve()),
+        "actual": actual,
+        "actual_resolved": str(Path(actual).resolve()) if actual else None,
+    }
+    return _check(
+        "runtime_database_matches",
+        bool(actual) and Path(actual).resolve() == expected.resolve(),
+        evidence,
+    )
+
+
 def audit_product(
     *,
     db_path: str | Path,
@@ -118,8 +137,10 @@ def audit_product(
                     mode,
                 )
             )
+            checks.append(_same_database_path(db, _storage_path_from_mode(mode)))
         except (OSError, error.URLError, TimeoutError) as exc:
             checks.append(_check("local_first_mode", False, {"error": exc.__class__.__name__}))
+            checks.append(_check("runtime_database_matches", False, {"error": exc.__class__.__name__}))
 
         try:
             claude = _http_json(base_url, "/operations/claude")

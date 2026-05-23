@@ -37,6 +37,7 @@ def test_product_audit_reports_local_evidence_without_requiring_live_claude(tmp_
         "backup_directory_available",
         "runtime_health",
         "local_first_mode",
+        "runtime_database_matches",
         "claude_config_endpoint",
         "claude_live",
     }
@@ -50,7 +51,7 @@ def test_product_audit_blocks_when_live_claude_is_required(tmp_path, monkeypatch
         if path == "/health":
             return {"ok": True}
         if path == "/operations/mode":
-            return {"local_first": True, "storage": {"type": "sqlite"}}
+            return {"local_first": True, "storage": {"type": "sqlite", "path": str(db_path)}}
         if path == "/operations/claude":
             return {"api_key_present": False, "missing": ["ANTHROPIC_API_KEY"]}
         raise AssertionError(path)
@@ -76,6 +77,35 @@ def test_product_audit_blocks_when_live_claude_is_required(tmp_path, monkeypatch
     assert [check for check in result["checks"] if check["name"] == "claude_live"][0]["ok"] is False
 
 
+def test_product_audit_blocks_when_runtime_uses_a_different_database(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "nino.db"
+    other_db = tmp_path / "other.db"
+    db_path.write_text("db", encoding="utf-8")
+    other_db.write_text("other", encoding="utf-8")
+
+    def fake_http_json(_base_url: str, path: str, timeout: float = 2.0) -> dict:
+        if path == "/health":
+            return {"ok": True}
+        if path == "/operations/mode":
+            return {"local_first": True, "storage": {"type": "sqlite", "path": str(other_db)}}
+        if path == "/operations/claude":
+            return {"api_key_present": False, "missing": []}
+        raise AssertionError(path)
+
+    monkeypatch.setattr("nino.product_audit._http_json", fake_http_json)
+    monkeypatch.setattr(
+        "nino.product_audit.run_live_claude_probe",
+        lambda require_key=False: {"ok": True, "skipped": True},
+    )
+
+    result = audit_product(db_path=db_path, run_local_smoke=False)
+    match = [check for check in result["checks"] if check["name"] == "runtime_database_matches"][0]
+
+    assert result["ok"] is False
+    assert match["ok"] is False
+    assert match["evidence"]["actual_resolved"] == str(other_db.resolve())
+
+
 def test_product_audit_smoke_uses_fresh_database_each_run(tmp_path, monkeypatch) -> None:
     db_path = tmp_path / "nino.db"
     backup_dir = tmp_path / "backups"
@@ -87,7 +117,7 @@ def test_product_audit_smoke_uses_fresh_database_each_run(tmp_path, monkeypatch)
         if path == "/health":
             return {"ok": True}
         if path == "/operations/mode":
-            return {"local_first": True, "storage": {"type": "sqlite"}}
+            return {"local_first": True, "storage": {"type": "sqlite", "path": str(db_path)}}
         if path == "/operations/claude":
             return {"api_key_present": False, "missing": []}
         raise AssertionError(path)

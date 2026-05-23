@@ -65,7 +65,8 @@ La auditoria estricta de cierre es:
 scripts/ninoctl final-audit
 ```
 
-Debe pasar solo cuando el servicio persistente esta cargado y Claude responde con una key real.
+Debe pasar solo cuando el servicio persistente esta cargado, la DB auditada es
+la misma que usa el servidor y Claude responde con una key real.
 
 ## Bloque externo
 
