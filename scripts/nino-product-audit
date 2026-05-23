@@ -10,5 +10,4 @@ else
 fi
 
 cd "$ROOT_DIR"
-PYTHONPATH=src "$PYTHON_BIN" -m pytest
-scripts/nino-smoke --json
+PYTHONPATH=src "$PYTHON_BIN" -m nino.product_audit "$@"

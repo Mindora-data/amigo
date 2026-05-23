@@ -8,17 +8,20 @@ Ejecutar:
 
 ```bash
 scripts/nino-readiness
+scripts/nino-product-audit --json
 ```
 
 Esta puerta corre:
 
 - `.venv/bin/python -m pytest`
 - `scripts/nino-smoke --json`
+- `scripts/nino-product-audit --json` para evidencias de runtime local
 
 La prueba viva de Claude queda separada porque requiere red y una key real:
 
 ```bash
 scripts/nino-claude-live --require-key --json
+scripts/nino-product-audit --require-claude-live --json
 ```
 
 ## Requisitos del producto
@@ -38,6 +41,7 @@ scripts/nino-claude-live --require-key --json
 | Empaquetado local | `pyproject.toml`, console scripts `nino-server` y `nino-smoke` | Cumplido |
 | Contrato API | `GET /openapi.json`, `openapi/README.md`, tests de alineacion con `GET /` | Cumplido |
 | Regresion objetiva | `eval/memory_regression.json`, `nino.eval_runner`, pytest | Cumplido |
+| Auditoria final repetible | `scripts/nino-product-audit --json`; `--require-claude-live` para cerrar Claude real | Cumplido local; Claude vivo requiere key real |
 
 ## Bloque externo
 

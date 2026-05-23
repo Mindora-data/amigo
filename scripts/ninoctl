@@ -17,7 +17,12 @@ SCHEDULER_INTERVAL="${NINO_SCHEDULER_INTERVAL:-60}"
 PID_FILE="${NINO_PID_FILE:-$DATA_DIR/nino.pid}"
 LOG_FILE="${NINO_LOG_FILE:-$DATA_DIR/nino-server.log}"
 BACKUP_DIR="${NINO_BACKUP_DIR:-$DATA_DIR/backups}"
-PYTHON_BIN="${NINO_PYTHON:-$ROOT_DIR/.venv/bin/python}"
+DEFAULT_PYTHON="$ROOT_DIR/.venv/bin/python"
+if [[ -x "$DEFAULT_PYTHON" ]]; then
+  PYTHON_BIN="${NINO_PYTHON:-$DEFAULT_PYTHON}"
+else
+  PYTHON_BIN="${NINO_PYTHON:-$(command -v python3)}"
+fi
 BASE_URL="http://$HOST:$PORT"
 
 usage() {

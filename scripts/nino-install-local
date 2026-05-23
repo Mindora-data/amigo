@@ -54,6 +54,9 @@ install_runtime() {
   if [[ -f "$ROOT_DIR/data/nino.db" && ! -f "$INSTALL_DIR/data/nino.db" ]]; then
     cp "$ROOT_DIR/data/nino.db" "$INSTALL_DIR/data/nino.db"
   fi
+  if [[ -d "$ROOT_DIR/data/backups" && ! -d "$INSTALL_DIR/data/backups" ]]; then
+    copy_dir "$ROOT_DIR/data/backups" "$INSTALL_DIR/data/backups"
+  fi
 
   echo "Installed local runtime: $INSTALL_DIR"
   echo "Start manually: cd \"$INSTALL_DIR\" && scripts/ninoctl start"

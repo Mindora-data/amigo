@@ -4,7 +4,7 @@ Estado confirmado el 2026-05-23:
 
 - GitHub se mantiene sincronizado desde los commits de sprint; confirmar hash exacto con `git rev-parse HEAD`.
 - Rama activa: `main`.
-- Suite actual: 115 tests pasando.
+- Suite actual: 119 tests pasando.
 - La memoria viva local (`data/nino.db`) no se versiona en GitHub.
 - El producto publicado es el motor, API, UI minima y pruebas; no incluye datos de uso real.
 
@@ -235,6 +235,7 @@ Auditoria final de producto 100% local:
 18. Hecho inicial: launchd carga `.env.local` en runtime sin incrustar `ANTHROPIC_API_KEY` en el plist, diagnostica bloqueos de permisos macOS y puede instalarse desde una copia local no protegida.
 19. Hecho inicial: prueba viva opcional de Claude con `scripts/nino-claude-live`.
 20. Hecho inicial: contrato OpenAPI local con `/openapi.json`.
-21. Siguiente: ejecutar `scripts/nino-claude-live --require-key --json` con una `ANTHROPIC_API_KEY` real.
+21. Hecho inicial: auditoria final repetible con `scripts/nino-product-audit`.
+22. Siguiente: ejecutar `scripts/nino-claude-live --require-key --json` o `scripts/nino-product-audit --require-claude-live --json` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

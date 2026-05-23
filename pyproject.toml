@@ -18,6 +18,7 @@ dependencies = []
 nino-server = "nino.server:main"
 nino-smoke = "nino.smoke:main"
 nino-claude-live = "nino.claude_live:main"
+nino-product-audit = "nino.product_audit:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

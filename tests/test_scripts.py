@@ -174,6 +174,31 @@ def test_install_local_copies_runtime_and_keeps_existing_data(tmp_path) -> None:
     assert existing_db.read_text(encoding="utf-8") == "keep-target-db"
 
 
+def test_install_local_seeds_backups_when_target_has_none(tmp_path) -> None:
+    install_dir = tmp_path / "installed"
+    source_data = Path("data")
+    source_backup_dir = source_data / "backups"
+    source_backup_dir.mkdir(parents=True, exist_ok=True)
+    source_backup = source_backup_dir / "nino-test-install.db"
+    source_backup.write_text("backup", encoding="utf-8")
+
+    env = {
+        **os.environ,
+        "NINO_INSTALL_DIR": str(install_dir),
+    }
+    try:
+        subprocess.run(
+            ["scripts/nino-install-local", "install"],
+            check=True,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert (install_dir / "data" / "backups" / source_backup.name).read_text(encoding="utf-8") == "backup"
+    finally:
+        source_backup.unlink(missing_ok=True)
+
+
 def test_configure_claude_writes_untracked_env_without_printing_key(tmp_path) -> None:
     env_file = tmp_path / ".env.local"
     env_file.write_text("NINO_PORT=8010\nANTHROPIC_API_KEY=old-key\n", encoding="utf-8")

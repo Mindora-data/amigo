@@ -9,7 +9,12 @@ if [[ -f "$ENV_FILE" ]]; then
   source "$ENV_FILE"
   set +a
 fi
-PYTHON_BIN="${NINO_PYTHON:-$ROOT_DIR/.venv/bin/python}"
+DEFAULT_PYTHON="$ROOT_DIR/.venv/bin/python"
+if [[ -x "$DEFAULT_PYTHON" ]]; then
+  PYTHON_BIN="${NINO_PYTHON:-$DEFAULT_PYTHON}"
+else
+  PYTHON_BIN="${NINO_PYTHON:-$(command -v python3)}"
+fi
 
 cd "$ROOT_DIR"
 PYTHONPATH=src "$PYTHON_BIN" -m nino.claude_live "$@"
