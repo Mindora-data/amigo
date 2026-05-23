@@ -80,6 +80,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"Backup DB" in body
     assert b"Descargar seguro" in body
     assert b"Descargar completo" in body
+    assert b"Eliminar episodio" in body
+    assert b"Eliminar hecho" in body
     assert b"Importar" in body
     assert b"/agents/import" in body
     assert b"/agents/prune" in body
@@ -148,6 +150,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert openapi["openapi"] == "3.1.0"
     assert "/agents/{agent_id}/tick" in openapi["paths"]
     assert "post" in openapi["paths"]["/agents/{agent_id}/tick"]
+    assert "delete" in openapi["paths"]["/agents/{agent_id}/episodes/{episode_id}"]
+    assert "delete" in openapi["paths"]["/agents/{agent_id}/memory/facts/{fact_id}"]
     assert "/operations/claude" in openapi["paths"]
     assert "/operations/audit" in openapi["paths"]
     assert health == {"ok": True, "service": "nino"}

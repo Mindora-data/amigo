@@ -116,6 +116,7 @@ APP_HTML = """<!doctype html>
       line-height: 1.4;
     }
     .listItem:last-child { border-bottom: 0; padding-bottom: 0; }
+    .listItem button { margin-top: 6px; min-height: 30px; padding: 5px 8px; }
     .muted { color: #667781; font-size: 12px; }
     .readiness {
       display: grid;
@@ -387,6 +388,7 @@ APP_HTML = """<!doctype html>
       item.appendChild(head);
       item.appendChild(detail);
       target.appendChild(item);
+      return item;
     };
     const addEntry = (role, text) => {
       const item = document.createElement("div");
@@ -665,13 +667,40 @@ APP_HTML = """<!doctype html>
     async function loadEpisodes() {
       const out = await api(agentPath("/episodes"));
       clearList($("memoryList"));
-      out.episodes.slice().reverse().forEach((episode) => addListItem($("memoryList"), episode.text, `${episode.intent} · salience ${episode.salience}`));
+      out.episodes.slice().reverse().forEach((episode) => {
+        const item = addListItem($("memoryList"), episode.text, `${episode.intent} · salience ${episode.salience}`);
+        const button = document.createElement("button");
+        button.className = "danger";
+        button.textContent = "Eliminar episodio";
+        button.onclick = async () => {
+          if (!confirm("Eliminar este episodio de memoria?")) return;
+          const deleted = await api(agentPath(`/episodes/${encodeURIComponent(episode.episode_id)}`), {method: "DELETE"});
+          print($("memory"), deleted);
+          await loadEpisodes();
+          await refreshState();
+          await loadConversation();
+        };
+        item.appendChild(button);
+      });
       print($("memory"), out);
     }
     async function loadFacts() {
       const out = await api(agentPath("/memory/facts"));
       clearList($("memoryList"));
-      out.facts.forEach((fact) => addListItem($("memoryList"), `${fact.key}: ${fact.value}`, `confidence ${fact.confidence}`));
+      out.facts.forEach((fact) => {
+        const item = addListItem($("memoryList"), `${fact.key}: ${fact.value}`, `confidence ${fact.confidence}`);
+        const button = document.createElement("button");
+        button.className = "danger";
+        button.textContent = "Eliminar hecho";
+        button.onclick = async () => {
+          if (!confirm("Eliminar este hecho de memoria fría?")) return;
+          const deleted = await api(agentPath(`/memory/facts/${encodeURIComponent(fact.fact_id)}`), {method: "DELETE"});
+          print($("memory"), deleted);
+          await loadFacts();
+          await refreshState();
+        };
+        item.appendChild(button);
+      });
       print($("memory"), out);
     }
     async function loadMemorySearch() {
@@ -794,9 +823,11 @@ API_ENDPOINTS = [
     "GET /agents/{agent_id}/state",
     "GET /agents/{agent_id}/conversation",
     "GET /agents/{agent_id}/episodes",
+    "DELETE /agents/{agent_id}/episodes/{episode_id}",
     "GET /agents/{agent_id}/llm/status",
     "POST /agents/{agent_id}/llm/probe",
     "GET /agents/{agent_id}/memory/facts",
+    "DELETE /agents/{agent_id}/memory/facts/{fact_id}",
     "GET /agents/{agent_id}/relation",
     "GET /agents/{agent_id}/self-model",
     "GET /agents/{agent_id}/world-model",

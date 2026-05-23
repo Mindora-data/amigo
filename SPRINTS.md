@@ -149,6 +149,7 @@ Hecho:
 - Configuracion visible de proactividad. Hecho inicial.
 - Gestion de inbox proactivo desde UI. Hecho inicial: marcar entregado y limpiar entregados.
 - Filtros y busqueda en episodios/memoria. Hecho inicial: busqueda de memoria.
+- Gestion individual de memoria desde UI. Hecho inicial: eliminar episodios y hechos frios con confirmacion.
 - Acciones rapidas para consolidar, sonar, ciclo interno y scheduler. Hecho inicial: consolidar y operaciones internas via API/UI.
 - Respuestas naturales con Claude usando memoria local como contexto. Hecho inicial: adaptador opcional `NINO_LLM_PROVIDER=claude`.
 - Contexto mixto para Claude. Hecho inicial: ultimos turnos, memoria recuperada, hechos frios activos y redaccion de email/numeros largos.
