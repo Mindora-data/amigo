@@ -176,7 +176,8 @@ process.
 `Cierre guiado` uses the same panel to save Claude, restart the persistent
 service, wait for `/health` and run the final audit.
 `Estado final` calls `GET /operations/product-status` and shows the same
-preflight/eval/blocker summary as the CLI status command.
+preflight/eval/blocker summary as the CLI status command, including the newest
+closing report when one exists.
 `scripts/ninoctl completion-audit` prints the requirement-by-requirement
 completion matrix, including the remaining Claude live blocker when no real key
 has been configured. It also verifies that the live `nino` agent has persisted

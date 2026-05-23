@@ -288,6 +288,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "scripts/ninoctl finish --key-stdin" in product_status["next_commands"]
     assert product_status["audit"]["final_readiness"]["ready_for_final_preflight"] is False
     assert product_status["eval"]["ok"] is True
+    assert product_status["latest_report"]["ok"] is False
+    assert product_status["latest_report"]["error"] == "report_not_found"
     assert completion_audit["ok"] is False
     assert {item["id"] for item in completion_audit["requirements"]} >= {
         "runtime_persistent",
@@ -311,6 +313,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert closing_report["report"]["summary"]["blockers"] == ["claude_configured", "claude_live"]
     assert closing_report["report"]["summary"]["completion_audit_ok"] is False
     assert closing_report["report"]["product_status"]["eval_ok"] is True
+    assert closing_report["report"]["product_status"]["latest_report"]["error"] == "report_not_found"
     assert closing_report["report"]["nino_profile"]["profile"]["agent_id"] == "nino"
     assert reports["ok"] is True
     assert reports["report_dir"] == str(tmp_path / "reports")
@@ -323,6 +326,9 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert latest_report["ok"] is True
     assert latest_report["name"] == report["name"]
     assert latest_report["report"]["summary"] == closing_report["report"]["summary"]
+    product_status_after_report = _request(app, "GET", "/operations/product-status")
+    assert product_status_after_report["latest_report"]["name"] == report["name"]
+    assert product_status_after_report["latest_report"]["blockers"] == ["claude_configured", "claude_live"]
     assert invalid_report == {"ok": False, "error": "invalid_report_name"}
     assert product_eval["ok"] is True
     assert product_eval["path"] == "eval"

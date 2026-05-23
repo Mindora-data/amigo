@@ -39,6 +39,26 @@ def _setup_commands(audit: dict[str, Any]) -> list[str]:
     return commands
 
 
+def _latest_report(root: Path) -> dict[str, Any]:
+    report_dir = root / "data" / "reports"
+    reports = sorted(report_dir.glob("nino-closing-*.json"))
+    if not reports:
+        return {"ok": False, "error": "report_not_found", "report_dir": str(report_dir)}
+    path = reports[-1]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {"ok": False, "error": "invalid_report_json", "path": str(path), "detail": str(exc)}
+    return {
+        "ok": True,
+        "path": str(path),
+        "name": path.name,
+        "generated_at": payload.get("generated_at"),
+        "git_head": payload.get("git", {}).get("head"),
+        "blockers": payload.get("summary", {}).get("blockers", []),
+    }
+
+
 def build_product_status(root: str | Path = ".") -> dict[str, Any]:
     root_path = Path(root).resolve()
     audit = _run_json(
@@ -65,6 +85,7 @@ def build_product_status(root: str | Path = ".") -> dict[str, Any]:
         "eval_case_count": eval_result.get("case_count", 0),
         "blockers": blockers,
         "next_commands": _setup_commands(audit),
+        "latest_report": _latest_report(root_path),
         "audit": audit,
         "eval": eval_result,
     }
@@ -83,6 +104,9 @@ def format_product_status(status: dict[str, Any]) -> str:
             missing = ", ".join(blocker.get("missing") or [])
             detail = f" missing={missing}" if missing else ""
             lines.append(f"- {blocker['name']}{detail}")
+    latest_report = status.get("latest_report", {})
+    if latest_report.get("ok"):
+        lines.append(f"latest_report: {latest_report['name']}")
     commands = status.get("next_commands", [])
     if commands:
         lines.append("next:")

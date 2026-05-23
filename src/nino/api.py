@@ -1749,8 +1749,23 @@ class NinoService:
             "eval_case_count": eval_result.get("case_count", 0),
             "blockers": blockers,
             "next_commands": audit.get("final_readiness", {}).get("next_commands", []),
+            "latest_report": self._latest_report_summary(),
             "audit": audit,
             "eval": eval_result,
+        }
+
+    def _latest_report_summary(self) -> dict[str, Any]:
+        latest = self.get_report("latest")
+        if not latest.get("ok"):
+            return latest
+        report = latest.get("report", {})
+        return {
+            "ok": True,
+            "path": latest.get("path"),
+            "name": latest.get("name"),
+            "generated_at": report.get("generated_at"),
+            "git_head": report.get("git", {}).get("head"),
+            "blockers": report.get("summary", {}).get("blockers", []),
         }
 
     @staticmethod
