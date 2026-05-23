@@ -28,13 +28,15 @@ def test_closing_report_writes_summary(monkeypatch, tmp_path, capsys) -> None:
     assert payload["summary"]["ok"] is False
     assert payload["summary"]["blockers"] == ["claude_live"]
     assert payload["nino_profile"]["profile"]["agent_id"] == "nino"
+    assert payload["report_file"]["path"] == str(path)
+    assert payload["report_file"]["name"] == "report.json"
 
     assert main(["--root", str(tmp_path), "--output", "report-2.json", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["path"].endswith("report-2.json")
 
 
 def test_closing_report_default_path(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr("nino.closing_report.build_closing_report", lambda root: {"ok": True})
+    monkeypatch.setattr("nino.closing_report.build_closing_report", lambda root, report_path=None: {"ok": True})
 
     path = write_closing_report(tmp_path)
 
@@ -51,7 +53,8 @@ def test_closing_report_reads_installed_revision(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("nino.closing_report._run_json", lambda command, root: {"ok": True})
     monkeypatch.setattr("nino.closing_report._git", lambda command, root: None)
 
-    report = build_closing_report(tmp_path)
+    report = build_closing_report(tmp_path, tmp_path / "data" / "reports" / "nino-closing-20260523-191902.json")
 
     assert report["git"]["head"] == "installed-head"
     assert report["git"]["branch"] == "main"
+    assert report["report_file"]["name"] == "nino-closing-20260523-191902.json"

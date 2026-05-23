@@ -39,15 +39,16 @@ def _run_json(command: list[str], root: Path) -> dict[str, Any]:
     return payload
 
 
-def build_closing_report(root: str | Path = ".") -> dict[str, Any]:
+def build_closing_report(root: str | Path = ".", report_path: str | Path | None = None) -> dict[str, Any]:
     root_path = Path(root).resolve()
+    resolved_report_path = Path(report_path).resolve() if report_path is not None else None
     product_status = build_product_status(root_path)
     completion_audit = build_completion_audit(root_path)
     nino_profile = _run_json(
         [str(root_path / "scripts" / "nino-http-json"), "/agents/nino/profile"],
         root_path,
     )
-    return {
+    report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "root": str(root_path),
         "git": {
@@ -66,11 +67,13 @@ def build_closing_report(root: str | Path = ".") -> dict[str, Any]:
         "product_status": product_status,
         "completion_audit": completion_audit,
     }
+    if resolved_report_path is not None:
+        report["report_file"] = {"path": str(resolved_report_path), "name": resolved_report_path.name}
+    return report
 
 
 def write_closing_report(root: str | Path = ".", output: str | Path | None = None) -> Path:
     root_path = Path(root).resolve()
-    report = build_closing_report(root_path)
     if output is None:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         output_path = root_path / "data" / "reports" / f"nino-closing-{stamp}.json"
@@ -78,6 +81,7 @@ def write_closing_report(root: str | Path = ".", output: str | Path | None = Non
         output_path = Path(output)
         if not output_path.is_absolute():
             output_path = root_path / output_path
+    report = build_closing_report(root_path, output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return output_path

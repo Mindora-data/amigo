@@ -311,6 +311,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert closing_report["ok"] is True
     assert Path(closing_report["path"]).exists()
     assert Path(closing_report["path"]).parent == tmp_path / "reports"
+    assert closing_report["report"]["report_file"]["path"] == closing_report["path"]
+    assert closing_report["report"]["report_file"]["name"] == Path(closing_report["path"]).name
     assert closing_report["report"]["summary"]["blockers"] == ["claude_configured", "claude_live"]
     assert closing_report["report"]["summary"]["completion_audit_ok"] is False
     assert closing_report["report"]["product_status"]["eval_ok"] is True

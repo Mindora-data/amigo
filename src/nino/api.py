@@ -1821,11 +1821,14 @@ class NinoService:
         if self.db_path is None:
             return {"ok": False, "error": "db_path_unavailable"}
         root = Path.cwd()
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        output_path = self.db_path.parent / "reports" / f"nino-closing-{stamp}.json"
         product_status = self.product_status()
         completion_audit = self.completion_audit()
         report = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "root": str(root.resolve()),
+            "report_file": {"path": str(output_path), "name": output_path.name},
             "git": self._git_metadata(root),
             "summary": {
                 "ok": bool(completion_audit.get("ok")),
@@ -1838,8 +1841,6 @@ class NinoService:
             "product_status": product_status,
             "completion_audit": completion_audit,
         }
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        output_path = self.db_path.parent / "reports" / f"nino-closing-{stamp}.json"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(report, indent=2, default=_json_default), encoding="utf-8")
         return {"ok": True, "path": str(output_path), "report": _to_jsonable(report)}

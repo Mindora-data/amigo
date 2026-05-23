@@ -90,6 +90,7 @@ eval, evidencia de cierre, Claude configurado y Claude vivo.
 desde el proceso servido.
 `scripts/ninoctl closing-report` guarda una evidencia local versionable fuera de
 Git con estado git, perfil de `nino`, estado final y auditoria de terminacion.
+Cada JSON incluye `report_file` con su propio nombre y ruta local.
 `scripts/ninoctl reports`, `scripts/ninoctl report <name>` y `scripts/ninoctl
 report latest` listan y leen esos informes desde terminal validando el nombre
 local.
