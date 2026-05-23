@@ -87,6 +87,7 @@ proximo comando operativo.
 `scripts/ninoctl completion-audit` muestra una matriz requisito por requisito:
 runtime persistente, UI, memoria, agente vivo `nino`, seguridad, backups,
 eval, evidencia de cierre, Claude configurado, Claude vivo y ultimo informe.
+Tambien incluye `recommended_next_action` para el siguiente paso de cierre.
 `GET /operations/completion-audit` y el boton `Terminación` exponen esa matriz
 desde el proceso servido.
 `scripts/ninoctl closing-report` guarda una evidencia local versionable fuera de

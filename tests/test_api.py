@@ -299,6 +299,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert completion_audit["ok"] is False
     assert completion_audit["latest_report"]["ok"] is False
     assert completion_audit["latest_report"]["error"] == "report_not_found"
+    assert completion_audit["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
     assert {item["id"] for item in completion_audit["requirements"]} >= {
         "runtime_persistent",
         "ui_operational",
@@ -342,6 +343,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     completion_audit_after_report = _request(app, "GET", "/operations/completion-audit")
     assert completion_audit_after_report["latest_report"]["name"] == report["name"]
     assert completion_audit_after_report["latest_report"]["blockers"] == ["claude_configured", "claude_live"]
+    assert completion_audit_after_report["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
     assert invalid_report == {"ok": False, "error": "invalid_report_name"}
     assert product_eval["ok"] is True
     assert product_eval["path"] == "eval"

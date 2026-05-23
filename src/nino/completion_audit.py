@@ -193,11 +193,13 @@ def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
         ),
     ]
     blockers = [item for item in requirements if not item["ok"]]
+    commands = _next_commands(final_audit)
     return {
         "ok": not blockers,
         "requirements": requirements,
         "blockers": blockers,
-        "next_commands": _next_commands(final_audit),
+        "next_commands": commands,
+        "recommended_next_action": _recommended_next_action(not blockers, blockers, commands),
         "latest_report": _latest_report(root_path),
         "living_agent": living_agent,
         "final_audit": final_audit,
@@ -214,6 +216,15 @@ def _next_commands(audit: dict[str, Any]) -> list[str]:
     return commands
 
 
+def _recommended_next_action(ok: bool, blockers: list[dict[str, Any]], commands: list[str]) -> str:
+    if ok:
+        return "scripts/ninoctl final-audit"
+    blocker_ids = {str(blocker.get("id") or blocker.get("name")) for blocker in blockers}
+    if "claude_configured" in blocker_ids:
+        return "scripts/ninoctl finish --key-stdin"
+    return commands[0] if commands else ""
+
+
 def format_completion_audit(result: dict[str, Any]) -> str:
     lines = [f"NIÑO completion audit: {'complete' if result['ok'] else 'incomplete'}"]
     for requirement in result["requirements"]:
@@ -226,6 +237,8 @@ def format_completion_audit(result: dict[str, Any]) -> str:
         detail_parts = [part for part in [f"head={head}" if head else "", f"blockers={blockers}" if blockers else ""] if part]
         detail = f" ({'; '.join(detail_parts)})" if detail_parts else ""
         lines.append(f"latest_report: {latest_report['name']}{detail}")
+    if result.get("recommended_next_action"):
+        lines.append(f"recommended_next_action: {result['recommended_next_action']}")
     if result["next_commands"]:
         lines.append("next:")
         lines.extend(f"- {command}" for command in result["next_commands"])

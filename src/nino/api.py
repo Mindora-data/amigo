@@ -597,6 +597,18 @@ APP_HTML = """<!doctype html>
         row.appendChild(pill);
         box.appendChild(row);
       }
+      if (out.recommended_next_action) {
+        const row = document.createElement("div");
+        row.className = "readinessRow";
+        const name = document.createElement("span");
+        name.textContent = "Siguiente acción";
+        const pill = document.createElement("span");
+        pill.className = out.ok ? "pill" : "pill blocked";
+        pill.textContent = out.recommended_next_action;
+        row.appendChild(name);
+        row.appendChild(pill);
+        box.appendChild(row);
+      }
       if (out.next_commands?.length) {
         const next = document.createElement("div");
         next.className = "muted";
@@ -1814,7 +1826,7 @@ class NinoService:
     def _recommended_next_action(ok: bool, blockers: list[dict[str, Any]], commands: list[str]) -> str:
         if ok:
             return "scripts/ninoctl final-audit"
-        blocker_names = {str(blocker.get("name")) for blocker in blockers}
+        blocker_names = {str(blocker.get("name") or blocker.get("id")) for blocker in blockers}
         if "claude_configured" in blocker_names:
             return "scripts/ninoctl finish --key-stdin"
         return commands[0] if commands else ""
@@ -1985,11 +1997,13 @@ class NinoService:
             ),
         ]
         blockers = [requirement for requirement in requirements if not requirement["ok"]]
+        commands = audit.get("final_readiness", {}).get("next_commands", [])
         return {
             "ok": not blockers,
             "requirements": requirements,
             "blockers": blockers,
-            "next_commands": audit.get("final_readiness", {}).get("next_commands", []),
+            "next_commands": commands,
+            "recommended_next_action": self._recommended_next_action(not blockers, blockers, commands),
             "latest_report": self._latest_report_summary(),
             "audit": audit,
             "eval": eval_result,
