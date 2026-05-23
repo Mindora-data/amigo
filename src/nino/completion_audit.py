@@ -216,6 +216,7 @@ def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
                 "closing_report_read",
                 "closing_report_latest",
                 "closing_report_name_guard",
+                "next_action",
             )
             and latest_report_current.get("ok") is True,
             [
@@ -224,6 +225,7 @@ def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
                 "local_smoke.closing_report_read",
                 "local_smoke.closing_report_latest",
                 "local_smoke.closing_report_name_guard",
+                "local_smoke.next_action",
                 "latest_report_current",
             ],
         ),

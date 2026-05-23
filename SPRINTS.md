@@ -217,6 +217,7 @@ Hecho:
 - Siguiente accion en auditoria de terminacion. Hecho inicial: `completion-audit` y UI incluyen `recommended_next_action`.
 - Requisito explicito de evidencia de cierre. Hecho inicial: `completion-audit` incluye `closing_evidence` cubierto por smoke y API.
 - Evidencia de cierre actual obligatoria. Hecho inicial: `closing_evidence` exige `latest_report_current` para no cerrar con informes obsoletos.
+- Evidencia de cierre accionable obligatoria. Hecho inicial: `closing_evidence` exige tambien `local_smoke.next_action`.
 - Informe de cierre local. Hecho inicial: `scripts/ninoctl closing-report` y `nino-closing-report` escriben JSON de evidencias en `data/reports/`.
 - Informe de cierre autocontenido. Hecho inicial: cada JSON incluye `report_file` con su nombre y ruta.
 - Informe de cierre accionable. Hecho inicial: cada JSON incluye `summary.recommended_next_action`.
@@ -318,6 +319,7 @@ Auditoria final de producto 100% local:
 40. Hecho inicial: `scripts/ninoctl next-action` imprime el siguiente comando operativo sin leer el resumen completo.
 41. Hecho inicial: `GET /operations/next-action` expone la accion recomendada para clientes ligeros.
 42. Hecho inicial: `scripts/nino-smoke` cubre `GET /operations/next-action` dentro de la puerta local de producto.
-43. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
+43. Hecho inicial: `completion-audit` exige `local_smoke.next_action` dentro de `closing_evidence`.
+44. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

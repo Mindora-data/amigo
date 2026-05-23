@@ -92,7 +92,8 @@ runtime persistente, UI, memoria, agente vivo `nino`, seguridad, backups,
 eval, evidencia de cierre, Claude configurado, Claude vivo y ultimo informe.
 Tambien marca si el ultimo informe corresponde a la revision actual e incluye
 `recommended_next_action` para el siguiente paso de cierre. El requisito
-`closing_evidence` exige que el ultimo informe apunte a la revision instalada.
+`closing_evidence` exige que el ultimo informe apunte a la revision instalada y
+que el smoke cubra la accion siguiente de cierre.
 `GET /operations/completion-audit` y el boton `Terminación` exponen esa matriz
 desde el proceso servido.
 `scripts/ninoctl closing-report` guarda una evidencia local versionable fuera de

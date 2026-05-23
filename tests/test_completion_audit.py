@@ -31,6 +31,7 @@ def _audit_payload() -> dict:
                         "closing_report_read",
                         "closing_report_latest",
                         "closing_report_name_guard",
+                        "next_action",
                     ]
                 },
             },
@@ -93,6 +94,8 @@ def test_completion_audit_maps_requirements_and_blockers(monkeypatch, tmp_path, 
     blocked = {item["id"] for item in result["blockers"]}
     assert blocked == {"claude_configured", "claude_live"}
     assert any(item["id"] == "closing_evidence" and item["ok"] for item in result["requirements"])
+    closing_requirement = next(item for item in result["requirements"] if item["id"] == "closing_evidence")
+    assert "local_smoke.next_action" in closing_requirement["evidence"]
     assert result["latest_report"]["name"] == report_path.name
     assert result["latest_report"]["git_head"] == "abc12345"
     assert result["latest_report_current"]["ok"] is True
