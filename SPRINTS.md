@@ -4,7 +4,7 @@ Estado confirmado el 2026-05-23:
 
 - GitHub se mantiene sincronizado desde los commits de sprint; confirmar hash exacto con `git rev-parse HEAD`.
 - Rama activa: `main`.
-- Suite actual: 124 tests pasando.
+- Suite actual: 125 tests pasando.
 - La memoria viva local (`data/nino.db`) no se versiona en GitHub.
 - El producto publicado es el motor, API, UI minima y pruebas; no incluye datos de uso real.
 
@@ -195,7 +195,7 @@ Objetivo: preparar integraciones externas sin perder control ni seguridad.
 Hecho:
 
 - Adaptador LLM configurable. Hecho inicial: `NINO_LLM_PROVIDER`.
-- Adaptador Claude via Anthropic Messages API. Hecho inicial en Sprint 6 por necesidad de conversacion real; diagnostico local con `GET /operations/claude`, panel LLM, `scripts/ninoctl claude` y configuracion persistente segura con `scripts/ninoctl configure-claude`, `scripts/nino-configure-claude`, `.env.local` o macOS Keychain.
+- Adaptador Claude via Anthropic Messages API. Hecho inicial en Sprint 6 por necesidad de conversacion real; diagnostico local con `GET /operations/claude`, panel LLM, `scripts/ninoctl claude`, errores de configuracion numerica y configuracion persistente segura con `scripts/ninoctl configure-claude`, `scripts/nino-configure-claude`, `.env.local` o macOS Keychain.
 - Prueba viva opcional de Claude. Hecho inicial: `scripts/nino-claude-live --require-key --json`.
 - Politicas de herramienta/accion externa. Hecho inicial: permisos por tipo de accion, bloqueo por defecto y auditoria.
 - Cola de tareas autonomas con limites. Hecho inicial: cola persistente por agente con limite de pendientes, bloqueo por permisos, ejecucion manual y panel en `/app`.
@@ -228,7 +228,7 @@ Auditoria final de producto 100% local:
 11. Hecho inicial: modo offline/local-first claramente definido y visible.
 12. Hecho inicial: preparacion para empaquetado local.
 13. Hecho inicial: validado con servidor real local: `/health`, `/operations/mode`, `/tasks`, `/permissions` y `/app`.
-14. Hecho inicial: diagnostico de Claude sin llamada externa mediante `/operations/claude`.
+14. Hecho inicial: diagnostico de Claude sin llamada externa mediante `/operations/claude`, incluyendo `config_errors` para valores invalidos.
 15. Hecho inicial: puerta local de producto con `scripts/nino-smoke`.
 16. Hecho inicial: checklist de producto en `PRODUCT_READINESS.md` y puerta `scripts/nino-readiness` accesible tambien con `scripts/ninoctl readiness`.
 17. Hecho inicial: plantilla `.env.example`, configuradores `scripts/ninoctl configure-claude` y `scripts/nino-configure-claude`, y carga automatica de `.env.local` para Claude local.

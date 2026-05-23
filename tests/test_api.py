@@ -153,6 +153,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert claude["api_key_present"] is False
     assert claude["api_key_source"] is None
     assert claude["keychain_service"] is None
+    assert claude["config_errors"] == []
     assert "NINO_LLM_PROVIDER" in claude["missing"]
     assert "scripts/ninoctl configure-claude --keychain-service nino-anthropic" in claude["setup_commands"]
     assert "scripts/ninoctl live-audit" in claude["setup_commands"]

@@ -941,6 +941,7 @@ class NinoService:
             "api_key_source": config["api_key_source"],
             "keychain_service": config["keychain_service"],
             "missing": config["missing"],
+            "config_errors": config["config_errors"],
             "probe_endpoint": "/agents/{agent_id}/llm/probe",
             "setup_commands": [
                 "cd ~/Developer/bebe",

@@ -46,7 +46,7 @@ scripts/ninoctl persistent-audit
 | Runtime persistente local | SQLite via `data/nino.db`; `/operations/mode` reporta `sqlite` | Cumplido |
 | UI operativa | `/app` cubierta por tests y smoke `browser_app` | Cumplido |
 | Memoria conversacional | `conversation_history`, `memory_search`, tests de retrieval y persistencia | Cumplido |
-| Claude opcional | `scripts/ninoctl configure-claude`, `scripts/nino-configure-claude`, `.env.local` o macOS Keychain, `NINO_LLM_PROVIDER=claude`, `/operations/claude`, panel LLM, `/llm/probe` | Implementado; prueba viva requiere key real |
+| Claude opcional | `scripts/ninoctl configure-claude`, `scripts/nino-configure-claude`, `.env.local` o macOS Keychain, `NINO_LLM_PROVIDER=claude`, `/operations/claude`, panel LLM, `/llm/probe`, `config_errors` para valores invalidos | Implementado; prueba viva requiere key real |
 | Local-first offline | `/operations/mode`, smoke `local_first_mode`, core sin red | Cumplido |
 | Controles de seguridad | permisos por accion, bloqueo por defecto, export seguro, audit log | Cumplido |
 | Tareas autonomas controladas | smoke `task_enqueue`, `task_run`, `proactive_inbox` | Cumplido |

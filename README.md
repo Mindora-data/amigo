@@ -177,6 +177,10 @@ Check configuration without sending a Claude prompt:
 scripts/ninoctl claude
 ```
 
+If `NINO_LLM_MAX_TOKENS` or `NINO_LLM_TIMEOUT` is invalid, the Claude
+diagnostic reports `config_errors` and keeps Claude disabled until the value is
+fixed.
+
 The same safe setup commands are exposed in `/operations/claude` and the LLM
 panel in `/app`; the API reports whether a key is present, but never returns
 the key value.

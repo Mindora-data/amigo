@@ -54,10 +54,7 @@ class ClaudeClient:
 
 def build_configured_llm() -> LLMClient | None:
     status = llm_config_status()
-    provider = status["provider"]
-    if provider not in {"claude", "anthropic"}:
-        return None
-    if not status["api_key_present"]:
+    if not status["enabled"]:
         return None
     return ClaudeClient(
         api_key=_anthropic_api_key() or "",
@@ -90,6 +87,32 @@ def _anthropic_api_key() -> str | None:
     return _keychain_api_key(os.environ.get("NINO_KEYCHAIN_SERVICE", "").strip())
 
 
+def _parse_positive_int_env(name: str, default: int, errors: list[dict[str, str]]) -> int:
+    raw = os.environ.get(name, str(default)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        errors.append({"name": name, "error": "invalid_integer"})
+        return default
+    if value <= 0:
+        errors.append({"name": name, "error": "must_be_positive"})
+        return default
+    return value
+
+
+def _parse_positive_float_env(name: str, default: float, errors: list[dict[str, str]]) -> float:
+    raw = os.environ.get(name, str(default)).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        errors.append({"name": name, "error": "invalid_float"})
+        return default
+    if value <= 0:
+        errors.append({"name": name, "error": "must_be_positive"})
+        return default
+    return value
+
+
 def llm_config_status() -> dict[str, Any]:
     provider = os.environ.get("NINO_LLM_PROVIDER", "").strip().lower()
     keychain_service = os.environ.get("NINO_KEYCHAIN_SERVICE", "").strip()
@@ -97,10 +120,11 @@ def llm_config_status() -> dict[str, Any]:
     keychain_api_key_present = bool(_keychain_api_key(keychain_service)) if keychain_service else False
     api_key_present = env_api_key_present or keychain_api_key_present
     model = os.environ.get("NINO_CLAUDE_MODEL", "claude-sonnet-4-5").strip() or "claude-sonnet-4-5"
-    max_tokens = int(os.environ.get("NINO_LLM_MAX_TOKENS", "320"))
-    timeout_seconds = float(os.environ.get("NINO_LLM_TIMEOUT", "20"))
+    config_errors: list[dict[str, str]] = []
+    max_tokens = _parse_positive_int_env("NINO_LLM_MAX_TOKENS", 320, config_errors)
+    timeout_seconds = _parse_positive_float_env("NINO_LLM_TIMEOUT", 20.0, config_errors)
     supported_provider = provider in {"claude", "anthropic"}
-    enabled = supported_provider and api_key_present
+    enabled = supported_provider and api_key_present and not config_errors
     missing: list[str] = []
     if not provider:
         missing.append("NINO_LLM_PROVIDER")
@@ -108,6 +132,7 @@ def llm_config_status() -> dict[str, Any]:
         missing.append("supported_provider")
     if supported_provider and not api_key_present:
         missing.append("ANTHROPIC_API_KEY")
+    missing.extend(error["name"] for error in config_errors)
     return {
         "enabled": enabled,
         "provider": provider or None,
@@ -119,6 +144,7 @@ def llm_config_status() -> dict[str, Any]:
         "max_tokens": max_tokens,
         "timeout_seconds": timeout_seconds,
         "missing": missing,
+        "config_errors": config_errors,
     }
 
 

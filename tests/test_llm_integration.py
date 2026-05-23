@@ -132,6 +132,28 @@ def test_llm_config_status_builds_claude_client_without_exposing_key(monkeypatch
     assert getattr(client, "max_tokens") == 111
 
 
+def test_llm_config_status_reports_invalid_numeric_settings(monkeypatch) -> None:
+    monkeypatch.setenv("NINO_LLM_PROVIDER", "claude")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "secret-key")
+    monkeypatch.setenv("NINO_LLM_MAX_TOKENS", "zero")
+    monkeypatch.setenv("NINO_LLM_TIMEOUT", "-1")
+
+    status = llm_config_status()
+
+    assert status["enabled"] is False
+    assert status["api_key_present"] is True
+    assert status["max_tokens"] == 320
+    assert status["timeout_seconds"] == 20.0
+    assert status["config_errors"] == [
+        {"name": "NINO_LLM_MAX_TOKENS", "error": "invalid_integer"},
+        {"name": "NINO_LLM_TIMEOUT", "error": "must_be_positive"},
+    ]
+    assert "NINO_LLM_MAX_TOKENS" in status["missing"]
+    assert "NINO_LLM_TIMEOUT" in status["missing"]
+    assert "secret-key" not in str(status)
+    assert build_configured_llm() is None
+
+
 def test_llm_config_status_can_use_keychain_without_exposing_key(monkeypatch) -> None:
     monkeypatch.setenv("NINO_LLM_PROVIDER", "claude")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
