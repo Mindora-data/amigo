@@ -11,6 +11,7 @@ def test_claude_setup_commands_can_include_runtime_directory() -> None:
 
     assert commands[0] == "cd ~/Developer/bebe"
     assert "scripts/ninoctl finish --key-stdin" in commands
+    assert "scripts/ninoctl finish --skip-configure" in commands
     assert "scripts/ninoctl configure-claude --keychain-service nino-anthropic" in commands
     assert commands[-1] == "scripts/ninoctl final-audit"
 
@@ -25,6 +26,7 @@ def test_live_claude_probe_skips_without_config(monkeypatch) -> None:
     assert result["skipped"] is True
     assert result["reason"] == "claude_not_configured"
     assert "scripts/ninoctl finish --key-stdin" in result["setup_commands"]
+    assert "scripts/ninoctl finish --skip-configure" in result["setup_commands"]
     assert "scripts/ninoctl configure-claude --keychain-service nino-anthropic" in result["setup_commands"]
     assert "scripts/ninoctl final-audit" in result["setup_commands"]
 

@@ -194,7 +194,9 @@ has been configured. It also verifies that the live `nino` agent has persisted
 state plus episodes or cold memory, names the newest closing report and marks
 whether it belongs to the current revision. The closing-evidence requirement is
 only green when that newest report matches the installed revision.
-It also includes `recommended_next_action` for the next closing step.
+It also includes `recommended_next_action` and both closeout paths:
+`scripts/ninoctl finish --key-stdin` for first-time setup and
+`scripts/ninoctl finish --skip-configure` when Claude is already saved.
 The same matrix is available in the UI with `Terminación`, backed by
 `GET /operations/completion-audit`.
 `scripts/ninoctl closing-report` writes a timestamped JSON evidence report under

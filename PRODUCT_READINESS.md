@@ -121,7 +121,9 @@ En JSON, esa ejecucion queda marcada como `audit_profile.strict_final: true` y
 cuando se ejecuta.
 Si falta Claude, la evidencia `claude_configured` y `claude_live` incluye
 comandos seguros de configuracion y vuelve a apuntar a
-`scripts/ninoctl final-audit`.
+`scripts/ninoctl final-audit`. Esos comandos incluyen tanto
+`scripts/ninoctl finish --key-stdin` para primera configuracion como
+`scripts/ninoctl finish --skip-configure` cuando el secreto ya esta guardado.
 `GET /operations/audit` y la UI en `/app` exponen tambien `final_readiness`,
 con estado de auditoria local, servicio persistente observado, bloqueos de
 Claude y comandos siguientes para no interpretar el JSON completo de la

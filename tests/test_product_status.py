@@ -32,7 +32,11 @@ def test_product_status_summarizes_claude_blocker(monkeypatch, tmp_path, capsys)
                 "ok": False,
                 "evidence": {
                     "missing": ["NINO_LLM_PROVIDER"],
-                    "setup_commands": ["scripts/ninoctl configure-claude --keychain-service nino-anthropic"],
+                    "setup_commands": [
+                        "scripts/ninoctl finish --key-stdin",
+                        "scripts/ninoctl finish --skip-configure",
+                        "scripts/ninoctl configure-claude --keychain-service nino-anthropic",
+                    ],
                     "required": True,
                 },
             },
@@ -51,7 +55,11 @@ def test_product_status_summarizes_claude_blocker(monkeypatch, tmp_path, capsys)
     assert status["final_preflight_ok"] is False
     assert status["eval_ok"] is True
     assert status["blockers"][0]["name"] == "claude_configured"
-    assert status["next_commands"] == ["scripts/ninoctl configure-claude --keychain-service nino-anthropic"]
+    assert status["next_commands"] == [
+        "scripts/ninoctl finish --key-stdin",
+        "scripts/ninoctl finish --skip-configure",
+        "scripts/ninoctl configure-claude --keychain-service nino-anthropic",
+    ]
     assert status["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
     assert status["latest_report"]["name"] == report_path.name
     assert status["latest_report"]["git_head"] == "abc123"

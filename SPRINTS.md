@@ -228,6 +228,7 @@ Hecho:
 - Smoke de informes de cierre. Hecho inicial: `scripts/nino-smoke` cubre crear, listar, leer, leer el ultimo y rechazar nombres invalidos de informes.
 - Cierre final guiado. Hecho inicial: `scripts/ninoctl finish --key-stdin` configura Claude en Keychain por defecto, reinicia launchd, ejecuta `final-audit`, genera informe de cierre y lanza `completion-audit`; `--preflight-only` evita la llamada viva.
 - Cierre final sin reconfigurar secreto. Hecho inicial: `scripts/ninoctl finish --skip-configure` reinicia, audita, genera evidencia y lanza `completion-audit` cuando Claude ya esta configurado.
+- Comandos de cierre con doble camino. Hecho inicial: la evidencia `setup_commands` incluye `finish --key-stdin` y `finish --skip-configure` para cubrir primera configuracion y cierre posterior.
 - Matriz de terminacion tras cierre UI. Hecho inicial: `Cierre final` y `Cierre guiado` refrescan la auditoria de terminacion con la evidencia del informe recien generado.
 - Politicas de herramienta/accion externa. Hecho inicial: permisos por tipo de accion, bloqueo por defecto y auditoria.
 - Cola de tareas autonomas con limites. Hecho inicial: cola persistente por agente con limite de pendientes, bloqueo por permisos, ejecucion manual y panel en `/app`.
@@ -304,6 +305,7 @@ Auditoria final de producto 100% local:
 33. Hecho inicial: cierre guiado desde UI con configuracion Claude, reinicio persistente, espera de salud, cierre final e informe de cierre.
 34. Hecho inicial: tras `Cierre final` o `Cierre guiado`, la UI refresca la matriz `Terminación` usando el informe recien escrito.
 35. Hecho inicial: `scripts/ninoctl finish --skip-configure` permite cerrar sin reintroducir la key si Claude ya esta guardado.
-36. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
+36. Hecho inicial: `setup_commands` de Claude expone tanto `finish --key-stdin` como `finish --skip-configure`.
+37. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
