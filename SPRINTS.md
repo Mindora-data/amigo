@@ -4,7 +4,7 @@ Estado confirmado el 2026-05-23:
 
 - GitHub se mantiene sincronizado desde los commits de sprint; confirmar hash exacto con `git rev-parse HEAD`.
 - Rama activa: `main`.
-- Suite actual: 127 tests pasando.
+- Suite actual: 128 tests pasando.
 - La memoria viva local (`data/nino.db`) no se versiona en GitHub.
 - El producto publicado es el motor, API, UI minima y pruebas; no incluye datos de uso real.
 

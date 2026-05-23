@@ -203,7 +203,8 @@ Run `scripts/ninoctl final-audit` from the installed runtime folder used by
 launchd, normally `~/Developer/bebe`; it checks that the audited SQLite database
 is the same database served over HTTP.
 The JSON result is marked with `audit_profile.strict_final: true` only for this
-strict final profile.
+strict final profile, and `audit_profile.required_checks` lists every check
+required for the selected profile.
 The `/operations/audit` endpoint and the `/app` audit button also return this
 strict final command and the required checks.
 

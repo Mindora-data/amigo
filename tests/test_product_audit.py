@@ -217,6 +217,34 @@ def test_product_audit_marks_strict_final_profile(tmp_path, monkeypatch) -> None
     }
 
 
+def test_product_audit_profile_lists_local_smoke_when_enabled(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "nino.db"
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    db_path.write_text("db", encoding="utf-8")
+    backup_dir.joinpath("nino-test.db").write_text("backup", encoding="utf-8")
+
+    def fake_http_json(_base_url: str, path: str, timeout: float = 2.0) -> dict:
+        if path == "/health":
+            return {"ok": True}
+        if path == "/operations/mode":
+            return {"local_first": True, "storage": {"type": "sqlite", "path": str(db_path)}}
+        if path == "/operations/claude":
+            return {"api_key_present": False, "missing": []}
+        raise AssertionError(path)
+
+    monkeypatch.setattr("nino.product_audit._http_json", fake_http_json)
+    monkeypatch.setattr(
+        "nino.product_audit.run_live_claude_probe",
+        lambda require_key=False: {"ok": True, "skipped": True},
+    )
+
+    result = audit_product(db_path=db_path)
+
+    assert "local_smoke" in result["audit_profile"]["required_checks"]
+    assert "local_smoke" in {check["name"] for check in result["checks"]}
+
+
 def test_product_audit_accepts_running_launchd_service_when_required(tmp_path, monkeypatch) -> None:
     db_path = tmp_path / "nino.db"
     db_path.write_text("db", encoding="utf-8")

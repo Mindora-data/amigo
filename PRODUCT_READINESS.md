@@ -67,7 +67,9 @@ scripts/ninoctl final-audit
 
 Debe pasar solo cuando el servicio persistente esta cargado, la DB auditada es
 la misma que usa el servidor y Claude responde con una key real.
-En JSON, esa ejecucion queda marcada como `audit_profile.strict_final: true`.
+En JSON, esa ejecucion queda marcada como `audit_profile.strict_final: true` y
+`audit_profile.required_checks` lista los checks exigidos, incluido `local_smoke`
+cuando se ejecuta.
 
 ## Bloque externo
 
