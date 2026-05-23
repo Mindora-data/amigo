@@ -143,11 +143,19 @@ def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
         _requirement(
             "closing_evidence",
             "Evidencia de cierre generable, listable y legible",
-            _smoke_has(final_audit, "closing_report", "closing_report_list", "closing_report_read", "closing_report_name_guard"),
+            _smoke_has(
+                final_audit,
+                "closing_report",
+                "closing_report_list",
+                "closing_report_read",
+                "closing_report_latest",
+                "closing_report_name_guard",
+            ),
             [
                 "local_smoke.closing_report",
                 "local_smoke.closing_report_list",
                 "local_smoke.closing_report_read",
+                "local_smoke.closing_report_latest",
                 "local_smoke.closing_report_name_guard",
             ],
         ),

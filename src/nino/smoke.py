@@ -141,6 +141,15 @@ def run_smoke(db_path: str | Path) -> SmokeResult:
         checks,
         "closing_report_read",
     )
+    status, latest_report = _request(app, "GET", "/operations/reports/latest")
+    _require(
+        status.startswith("200")
+        and latest_report["ok"] is True
+        and latest_report["name"] == report_name
+        and latest_report["report"]["summary"] == closing["report"]["summary"],
+        checks,
+        "closing_report_latest",
+    )
     status, invalid_report = _request(app, "GET", "/operations/reports/bad.json")
     _require(
         status.startswith("200") and invalid_report == {"ok": False, "error": "invalid_report_name"},

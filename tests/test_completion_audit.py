@@ -29,6 +29,7 @@ def _audit_payload() -> dict:
                         "closing_report",
                         "closing_report_list",
                         "closing_report_read",
+                        "closing_report_latest",
                         "closing_report_name_guard",
                     ]
                 },
