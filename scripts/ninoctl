@@ -386,6 +386,14 @@ finish() {
     return 2
   fi
 
+  if [[ "$skip_configure" == true ]]; then
+    if [[ "${NINO_LLM_PROVIDER:-}" != "claude" || ( -z "${ANTHROPIC_API_KEY:-}" && -z "${NINO_KEYCHAIN_SERVICE:-}" ) ]]; then
+      echo "--skip-configure requires Claude to be configured in $ENV_FILE or the current environment." >&2
+      echo "Use: printf '%s' \"\$ANTHROPIC_API_KEY\" | scripts/ninoctl finish --key-stdin" >&2
+      return 2
+    fi
+  fi
+
   if [[ "$skip_configure" == false && "$use_default_keychain" == true ]]; then
     configure_args+=("--keychain-service" "nino-anthropic")
   fi

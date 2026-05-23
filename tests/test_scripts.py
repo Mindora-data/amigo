@@ -287,15 +287,27 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         capture_output=True,
         text=True,
     )
+    env_skip_configured = {
+        **env,
+        "NINO_LLM_PROVIDER": "claude",
+        "ANTHROPIC_API_KEY": "configured-secret",
+    }
     subprocess.run(
         [str(scripts_dir / "ninoctl"), "finish", "--skip-configure", "--preflight-only"],
         check=True,
-        env=env,
+        env=env_skip_configured,
         capture_output=True,
         text=True,
     )
     invalid_finish = subprocess.run(
         [str(scripts_dir / "ninoctl"), "finish", "--skip-configure", "--model", "claude-test"],
+        check=False,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    missing_config_finish = subprocess.run(
+        [str(scripts_dir / "ninoctl"), "finish", "--skip-configure"],
         check=False,
         env=env,
         capture_output=True,
@@ -332,6 +344,8 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     ]
     assert invalid_finish.returncode == 2
     assert "--skip-configure cannot be combined" in invalid_finish.stderr
+    assert missing_config_finish.returncode == 2
+    assert "--skip-configure requires Claude to be configured" in missing_config_finish.stderr
 
 
 def test_install_local_copies_runtime_and_keeps_existing_data(tmp_path) -> None:
