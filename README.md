@@ -43,6 +43,7 @@ scripts/ninoctl server-audit
 scripts/ninoctl persistent-audit
 scripts/ninoctl final-preflight
 scripts/ninoctl final-audit
+scripts/ninoctl finish
 scripts/ninoctl logs
 scripts/ninoctl backup
 scripts/ninoctl backups
@@ -54,6 +55,15 @@ Follow logs:
 ```bash
 scripts/ninoctl logs -f
 ```
+
+Run the final setup as one flow, keeping the key in macOS Keychain by default:
+
+```bash
+printf '%s' "$ANTHROPIC_API_KEY" | scripts/ninoctl finish --key-stdin
+```
+
+Use `--preflight-only` to stop before the live Claude call, or `--no-keychain`
+to store the key in `.env.local` instead.
 
 Restart:
 

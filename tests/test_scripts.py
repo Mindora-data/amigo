@@ -163,6 +163,7 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-disable-claude",
         "nino-eval",
         "nino-status",
+        "nino-launchd",
     ):
         path = scripts_dir / name
         path.write_text(
@@ -213,6 +214,14 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         capture_output=True,
         text=True,
     )
+    subprocess.run(
+        [str(scripts_dir / "ninoctl"), "finish", "--key-stdin", "--model", "claude-test", "--preflight-only"],
+        check=True,
+        env=env,
+        input="secret\n",
+        capture_output=True,
+        text=True,
+    )
 
     assert calls.read_text(encoding="utf-8").splitlines() == [
         "nino-readiness ",
@@ -226,6 +235,11 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-disable-claude --remove-keychain",
         "nino-eval --json",
         "nino-status --json",
+        "nino-configure-claude --key-stdin --model claude-test --keychain-service nino-anthropic",
+        "nino-launchd stop",
+        "nino-launchd start",
+        "nino-status ",
+        "nino-product-audit --require-launchd --require-claude-config --json",
     ]
 
 

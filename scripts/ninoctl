@@ -50,6 +50,7 @@ Commands:
   live-audit  Run product audit requiring a live Claude key.
   final-preflight Run final local preflight without a live Claude call.
   final-audit Run product audit requiring launchd and live Claude.
+  finish      Configure Claude, restart launchd and run the final audit.
   product-status Summarize final readiness, evaluation and blockers.
   eval        Run deterministic local regression evaluations.
   logs        Show recent logs. Use: scripts/ninoctl logs -f
@@ -307,6 +308,48 @@ final_audit() {
   "$ROOT_DIR/scripts/nino-product-audit" --require-launchd --require-claude-config --require-claude-live --json
 }
 
+finish() {
+  local preflight_only=false
+  local use_default_keychain=true
+  local configure_args=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --preflight-only)
+        preflight_only=true
+        shift
+        ;;
+      --no-keychain)
+        use_default_keychain=false
+        shift
+        ;;
+      --keychain-service)
+        use_default_keychain=false
+        configure_args+=("$1" "${2:-}")
+        shift 2
+        ;;
+      *)
+        configure_args+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  if [[ "$use_default_keychain" == true ]]; then
+    configure_args+=("--keychain-service" "nino-anthropic")
+  fi
+
+  configure_claude "${configure_args[@]}"
+  "$ROOT_DIR/scripts/nino-launchd" stop
+  "$ROOT_DIR/scripts/nino-launchd" start
+  product_status || true
+  if [[ "$preflight_only" == true ]]; then
+    final_preflight
+  else
+    final_audit
+  fi
+}
+
 product_status() {
   "$ROOT_DIR/scripts/nino-status" "$@"
 }
@@ -339,6 +382,7 @@ case "$command" in
   live-audit) live_audit ;;
   final-preflight) final_preflight ;;
   final-audit) final_audit ;;
+  finish) finish "$@" ;;
   product-status) product_status "$@" ;;
   eval) eval_local "$@" ;;
   logs) logs "${1:-}" ;;

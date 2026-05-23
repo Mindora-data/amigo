@@ -25,6 +25,7 @@ scripts/ninoctl live-audit
 scripts/ninoctl final-preflight
 scripts/ninoctl final-audit
 scripts/ninoctl product-status
+printf '%s' "$ANTHROPIC_API_KEY" | scripts/ninoctl finish --key-stdin
 ```
 
 Para auditar tambien el servidor persistente ya arrancado:
@@ -74,6 +75,9 @@ una llamada viva. `final-audit` anade la respuesta real de Claude con una key
 real.
 `scripts/ninoctl product-status` resume ese preflight, la eval local y los
 bloqueos restantes en formato legible, o en JSON con `--json`.
+`scripts/ninoctl finish --key-stdin` ejecuta el cierre guiado completo:
+configura Claude en Keychain por defecto, reinicia launchd y lanza el cierre
+final. Con `--preflight-only` valida la configuracion sin gastar llamada viva.
 En JSON, esa ejecucion queda marcada como `audit_profile.strict_final: true` y
 `audit_profile.required_checks` lista los checks exigidos, incluido `local_smoke`
 cuando se ejecuta.
