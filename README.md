@@ -169,6 +169,10 @@ Check configuration without sending a Claude prompt:
 scripts/ninoctl claude
 ```
 
+The same safe setup commands are exposed in `/operations/claude` and the LLM
+panel in `/app`; the API reports whether a key is present, but never returns
+the key value.
+
 Run a live probe only after the key is configured:
 
 ```bash

@@ -268,6 +268,7 @@ APP_HTML = """<!doctype html>
           <button id="llmStatus" class="secondary">Estado</button>
         </div>
         <div id="llmSummary" class="muted">Sin comprobar.</div>
+        <div id="llmSetup" class="muted"></div>
         <div class="row">
           <button id="claudeConfig" class="secondary">Config</button>
           <button id="llmProbe" class="secondary">Probar Claude</button>
@@ -411,6 +412,7 @@ APP_HTML = """<!doctype html>
       const last = llm.last_response?.source ? ` · último origen: ${llm.last_response.source}` : "";
       const error = llm.last_response?.error ? ` · error: ${llm.last_response.error}` : "";
       $("llmSummary").textContent = `${mode}${last}${error}`;
+      $("llmSetup").textContent = "";
       print($("llm"), out);
       return out;
     }
@@ -639,7 +641,15 @@ APP_HTML = """<!doctype html>
     $("quality").onclick = async () => print($("memory"), await api(agentPath("/eval/conversation")));
     $("recordQuality").onclick = async () => print($("memory"), await api(agentPath("/eval/conversation/record"), {method: "POST", body: "{}"}));
     $("qualityHistory").onclick = async () => print($("memory"), await api(agentPath("/eval/conversation/history")));
-    $("claudeConfig").onclick = async () => print($("llm"), await api("/operations/claude"));
+    $("claudeConfig").onclick = async () => {
+      const out = await api("/operations/claude");
+      if (out.configured) {
+        $("llmSetup").textContent = "Claude configurado en runtime.";
+      } else {
+        $("llmSetup").textContent = `Configurar: ${out.setup_commands?.join(" && ") || "scripts/nino-configure-claude"}`;
+      }
+      print($("llm"), out);
+    };
     $("llmStatus").onclick = loadLLMStatus;
     $("llmProbe").onclick = probeLLM;
     $("permissions").onclick = async () => print($("permissionsOut"), await api(agentPath("/permissions")));
@@ -930,6 +940,17 @@ class NinoService:
             "api_key_present": config["api_key_present"],
             "missing": config["missing"],
             "probe_endpoint": "/agents/{agent_id}/llm/probe",
+            "setup_commands": [
+                "cd ~/Developer/bebe",
+                "scripts/nino-configure-claude",
+                "scripts/nino-launchd stop",
+                "scripts/nino-launchd start",
+                "scripts/nino-product-audit --require-claude-live --json",
+            ],
+            "notes": [
+                "La API key se guarda solo en .env.local con permisos 600.",
+                "El plist de launchd no incrusta ANTHROPIC_API_KEY.",
+            ],
         }
 
     def product_audit(self) -> dict[str, Any]:

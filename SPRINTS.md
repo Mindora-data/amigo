@@ -195,7 +195,7 @@ Objetivo: preparar integraciones externas sin perder control ni seguridad.
 Hecho:
 
 - Adaptador LLM configurable. Hecho inicial: `NINO_LLM_PROVIDER`.
-- Adaptador Claude via Anthropic Messages API. Hecho inicial en Sprint 6 por necesidad de conversacion real; diagnostico local con `GET /operations/claude`, `scripts/ninoctl claude` y configuracion persistente segura con `scripts/nino-configure-claude`.
+- Adaptador Claude via Anthropic Messages API. Hecho inicial en Sprint 6 por necesidad de conversacion real; diagnostico local con `GET /operations/claude`, panel LLM, `scripts/ninoctl claude` y configuracion persistente segura con `scripts/nino-configure-claude`.
 - Prueba viva opcional de Claude. Hecho inicial: `scripts/nino-claude-live --require-key --json`.
 - Politicas de herramienta/accion externa. Hecho inicial: permisos por tipo de accion, bloqueo por defecto y auditoria.
 - Cola de tareas autonomas con limites. Hecho inicial: cola persistente por agente con limite de pendientes, bloqueo por permisos, ejecucion manual y panel en `/app`.
