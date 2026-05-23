@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 from pathlib import Path
+import subprocess
 import tempfile
 from typing import Any
 from urllib import error, request
@@ -20,11 +22,61 @@ def _check(name: str, ok: bool, evidence: dict[str, Any] | None = None) -> dict[
     return {"name": name, "ok": ok, "evidence": evidence or {}}
 
 
+def _summarize_launchctl_output(output: str) -> str:
+    safe_prefixes = ("state =", "path =", "program =", "working directory =")
+    safe_lines = []
+    for line in output.splitlines():
+        stripped = line.strip()
+        if any(stripped.startswith(prefix) for prefix in safe_prefixes):
+            safe_lines.append(stripped)
+    return "\n".join(safe_lines)[:500]
+
+
+def _launchd_check(*, require_launchd: bool, label: str) -> dict[str, Any]:
+    if platform.system() != "Darwin":
+        return _check(
+            "launchd_service",
+            not require_launchd,
+            {"skipped": True, "reason": "not_macos", "required": require_launchd, "label": label},
+        )
+
+    plist = Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
+    evidence: dict[str, Any] = {
+        "label": label,
+        "plist": str(plist),
+        "plist_exists": plist.exists(),
+        "required": require_launchd,
+    }
+    if not plist.exists():
+        evidence["skipped"] = not require_launchd
+        evidence["reason"] = "plist_missing"
+        return _check("launchd_service", not require_launchd, evidence)
+
+    try:
+        result = subprocess.run(
+            ["launchctl", "print", f"gui/{os.getuid()}/{label}"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        evidence["launchctl_returncode"] = result.returncode
+        evidence["launchctl_output"] = _summarize_launchctl_output(result.stdout or result.stderr)
+        running = result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        evidence["error"] = exc.__class__.__name__
+        running = False
+
+    return _check("launchd_service", running if require_launchd else True, evidence)
+
+
 def audit_product(
     *,
     db_path: str | Path,
     base_url: str = "http://127.0.0.1:8000",
     require_claude_live: bool = False,
+    require_launchd: bool = False,
+    launchd_label: str = "local.nino.server",
     run_local_smoke: bool = True,
     http_checks: bool = True,
 ) -> dict[str, Any]:
@@ -41,6 +93,7 @@ def audit_product(
             {"path": str(backup_dir), "count": len(list(backup_dir.glob("*.db"))) if backup_dir.exists() else 0},
         )
     )
+    checks.append(_launchd_check(require_launchd=require_launchd, label=launchd_label))
 
     if run_local_smoke:
         from .smoke import run_smoke
@@ -89,6 +142,7 @@ def audit_product(
         "base_url": base_url,
         "db_path": str(db),
         "require_claude_live": require_claude_live,
+        "require_launchd": require_launchd,
     }
 
 
@@ -97,6 +151,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", default=os.environ.get("NINO_DB_PATH", "data/nino.db"))
     parser.add_argument("--base-url", default=os.environ.get("NINO_BASE_URL", "http://127.0.0.1:8000"))
     parser.add_argument("--require-claude-live", action="store_true")
+    parser.add_argument("--require-launchd", action="store_true")
+    parser.add_argument("--launchd-label", default=os.environ.get("NINO_LAUNCHD_LABEL", "local.nino.server"))
     parser.add_argument("--skip-smoke", action="store_true")
     parser.add_argument("--skip-http", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -109,6 +165,8 @@ def main(argv: list[str] | None = None) -> int:
         db_path=args.db,
         base_url=args.base_url,
         require_claude_live=args.require_claude_live,
+        require_launchd=args.require_launchd,
+        launchd_label=args.launchd_label,
         run_local_smoke=not args.skip_smoke,
         http_checks=not args.skip_http,
     )

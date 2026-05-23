@@ -44,6 +44,7 @@ Commands:
   readiness   Run tests, smoke and local product audit.
   audit       Run local product audit without requiring a running server.
   server-audit Run product audit against the configured local server.
+  persistent-audit Run product audit requiring the macOS launchd service.
   live-audit  Run product audit requiring a live Claude key.
   logs        Show recent logs. Use: scripts/ninoctl logs -f
   backup      Create a timestamped SQLite backup.
@@ -276,6 +277,10 @@ server_audit() {
   "$ROOT_DIR/scripts/nino-product-audit" --json
 }
 
+persistent_audit() {
+  "$ROOT_DIR/scripts/nino-product-audit" --require-launchd --json
+}
+
 live_audit() {
   "$ROOT_DIR/scripts/nino-product-audit" --require-claude-live --json
 }
@@ -298,6 +303,7 @@ case "$command" in
   readiness) readiness ;;
   audit) product_audit ;;
   server-audit) server_audit ;;
+  persistent-audit) persistent_audit ;;
   live-audit) live_audit ;;
   logs) logs "${1:-}" ;;
   backup) backup ;;

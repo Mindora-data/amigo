@@ -39,6 +39,7 @@ scripts/ninoctl doctor
 scripts/ninoctl readiness
 scripts/ninoctl audit
 scripts/ninoctl server-audit
+scripts/ninoctl persistent-audit
 scripts/ninoctl logs
 scripts/ninoctl backup
 scripts/ninoctl backups
@@ -94,6 +95,7 @@ cd ~/Developer/bebe
 scripts/nino-launchd install
 scripts/nino-launchd status
 scripts/nino-launchd doctor
+scripts/ninoctl persistent-audit
 scripts/nino-launchd uninstall
 ```
 

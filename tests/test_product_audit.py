@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 from nino.product_audit import audit_product
 
 
@@ -100,3 +103,63 @@ def test_product_audit_smoke_uses_fresh_database_each_run(tmp_path, monkeypatch)
 
     assert first["ok"] is True
     assert second["ok"] is True
+
+
+def test_product_audit_blocks_when_launchd_is_required_but_missing(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "nino.db"
+    db_path.write_text("db", encoding="utf-8")
+    monkeypatch.setattr("nino.product_audit.platform.system", lambda: "Darwin")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(
+        "nino.product_audit.run_live_claude_probe",
+        lambda require_key=False: {"ok": True, "skipped": True},
+    )
+
+    result = audit_product(
+        db_path=db_path,
+        require_launchd=True,
+        run_local_smoke=False,
+        http_checks=False,
+        launchd_label="local.nino.test",
+    )
+    launchd = [check for check in result["checks"] if check["name"] == "launchd_service"][0]
+
+    assert result["ok"] is False
+    assert launchd["ok"] is False
+    assert launchd["evidence"]["reason"] == "plist_missing"
+
+
+def test_product_audit_accepts_running_launchd_service_when_required(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "nino.db"
+    db_path.write_text("db", encoding="utf-8")
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    backup_dir.joinpath("nino-test.db").write_text("backup", encoding="utf-8")
+    plist = tmp_path / "Library" / "LaunchAgents" / "local.nino.test.plist"
+    plist.parent.mkdir(parents=True)
+    plist.write_text("<plist/>", encoding="utf-8")
+    monkeypatch.setattr("nino.product_audit.platform.system", lambda: "Darwin")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(
+        "nino.product_audit.run_live_claude_probe",
+        lambda require_key=False: {"ok": True, "skipped": True},
+    )
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout="state = running\n", stderr="")
+
+    monkeypatch.setattr("nino.product_audit.subprocess.run", fake_run)
+
+    result = audit_product(
+        db_path=db_path,
+        require_launchd=True,
+        run_local_smoke=False,
+        http_checks=False,
+        launchd_label="local.nino.test",
+    )
+    launchd = [check for check in result["checks"] if check["name"] == "launchd_service"][0]
+
+    assert result["ok"] is True
+    assert launchd["ok"] is True
+    assert launchd["evidence"]["plist_exists"] is True
+    assert launchd["evidence"]["launchctl_returncode"] == 0
