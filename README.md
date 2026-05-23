@@ -349,6 +349,7 @@ Run the broader local product gate:
 
 ```bash
 scripts/nino-smoke --json
+scripts/ninoctl product-status
 ```
 
 Proactivity is closed by default. Enable it explicitly:

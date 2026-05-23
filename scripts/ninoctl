@@ -50,6 +50,7 @@ Commands:
   live-audit  Run product audit requiring a live Claude key.
   final-preflight Run final local preflight without a live Claude call.
   final-audit Run product audit requiring launchd and live Claude.
+  product-status Summarize final readiness, evaluation and blockers.
   eval        Run deterministic local regression evaluations.
   logs        Show recent logs. Use: scripts/ninoctl logs -f
   backup      Create a timestamped SQLite backup.
@@ -306,6 +307,10 @@ final_audit() {
   "$ROOT_DIR/scripts/nino-product-audit" --require-launchd --require-claude-config --require-claude-live --json
 }
 
+product_status() {
+  "$ROOT_DIR/scripts/nino-status" "$@"
+}
+
 eval_local() {
   "$ROOT_DIR/scripts/nino-eval" "$@"
 }
@@ -334,6 +339,7 @@ case "$command" in
   live-audit) live_audit ;;
   final-preflight) final_preflight ;;
   final-audit) final_audit ;;
+  product-status) product_status "$@" ;;
   eval) eval_local "$@" ;;
   logs) logs "${1:-}" ;;
   backup) backup ;;
