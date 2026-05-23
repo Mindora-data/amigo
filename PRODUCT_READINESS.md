@@ -22,6 +22,7 @@ La prueba viva de Claude queda separada porque requiere red y una key real:
 scripts/nino-claude-live --require-key --json
 scripts/nino-product-audit --require-claude-live --json
 scripts/ninoctl live-audit
+scripts/ninoctl final-audit
 ```
 
 Para auditar tambien el servidor persistente ya arrancado:
@@ -57,6 +58,14 @@ scripts/ninoctl persistent-audit
 | Contrato API | `GET /openapi.json`, `openapi/README.md`, tests de alineacion con `GET /` | Cumplido |
 | Regresion objetiva | `eval/memory_regression.json`, `nino.eval_runner`, pytest | Cumplido |
 | Auditoria final repetible | `GET /operations/audit`, `scripts/nino-product-audit --json`; `--require-launchd` para exigir servicio persistente; `--require-claude-live` para cerrar Claude real | Cumplido local; Claude vivo requiere key real |
+
+La auditoria estricta de cierre es:
+
+```bash
+scripts/ninoctl final-audit
+```
+
+Debe pasar solo cuando el servicio persistente esta cargado y Claude responde con una key real.
 
 ## Bloque externo
 
