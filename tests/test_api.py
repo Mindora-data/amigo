@@ -159,7 +159,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert claude["config_errors"] == []
     assert "NINO_LLM_PROVIDER" in claude["missing"]
     assert "scripts/ninoctl configure-claude --keychain-service nino-anthropic" in claude["setup_commands"]
-    assert "scripts/ninoctl live-audit" in claude["setup_commands"]
+    assert "scripts/ninoctl final-audit" in claude["setup_commands"]
+    assert "scripts/ninoctl live-audit" not in claude["setup_commands"]
     assert "ANTHROPIC_API_KEY" not in json.dumps(claude["setup_commands"])
     assert product_audit["ok"] is True
     assert {check["name"] for check in product_audit["checks"]} >= {

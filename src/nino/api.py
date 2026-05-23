@@ -961,7 +961,7 @@ class NinoService:
                 "scripts/ninoctl configure-claude --keychain-service nino-anthropic",
                 "scripts/nino-launchd stop",
                 "scripts/nino-launchd start",
-                "scripts/ninoctl live-audit",
+                "scripts/ninoctl final-audit",
             ],
             "notes": [
                 "Con --keychain-service, .env.local guarda solo NINO_KEYCHAIN_SERVICE.",
