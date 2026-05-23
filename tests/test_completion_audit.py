@@ -133,11 +133,13 @@ def test_completion_audit_json_output(monkeypatch, tmp_path, capsys) -> None:
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    assert main(["--root", str(tmp_path), "--json"]) == 0
+    assert main(["--root", str(tmp_path), "--json"]) == 1
     payload = json.loads(capsys.readouterr().out)
-    assert payload["ok"] is True
-    assert all(item["ok"] for item in payload["requirements"])
+    assert payload["ok"] is False
+    closing_evidence = next(item for item in payload["requirements"] if item["id"] == "closing_evidence")
+    assert closing_evidence["ok"] is False
+    assert "latest_report_current" in closing_evidence["evidence"]
     assert payload["latest_report"]["ok"] is False
     assert payload["latest_report_current"]["ok"] is False
     assert payload["latest_report_current"]["reason"] == "report_not_found"
-    assert payload["recommended_next_action"] == "scripts/ninoctl final-audit"
+    assert payload["recommended_next_action"] == "scripts/ninoctl closing-report"

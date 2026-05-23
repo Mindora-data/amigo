@@ -159,6 +159,8 @@ def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
     claude_live = _check(final_audit, "claude_live")
     claude_live_ok = claude_live.get("ok") is True and claude_live.get("evidence", {}).get("skipped") is not True
     living_agent = _living_agent_evidence(final_audit)
+    latest_report = _latest_report(root_path)
+    latest_report_current = _latest_report_current(root_path, latest_report)
 
     requirements = [
         _requirement(
@@ -214,13 +216,15 @@ def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
                 "closing_report_read",
                 "closing_report_latest",
                 "closing_report_name_guard",
-            ),
+            )
+            and latest_report_current.get("ok") is True,
             [
                 "local_smoke.closing_report",
                 "local_smoke.closing_report_list",
                 "local_smoke.closing_report_read",
                 "local_smoke.closing_report_latest",
                 "local_smoke.closing_report_name_guard",
+                "latest_report_current",
             ],
         ),
         _requirement(
@@ -238,7 +242,6 @@ def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
     ]
     blockers = [item for item in requirements if not item["ok"]]
     commands = _next_commands(final_audit)
-    latest_report = _latest_report(root_path)
     return {
         "ok": not blockers,
         "requirements": requirements,
@@ -246,7 +249,7 @@ def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
         "next_commands": commands,
         "recommended_next_action": _recommended_next_action(not blockers, blockers, commands),
         "latest_report": latest_report,
-        "latest_report_current": _latest_report_current(root_path, latest_report),
+        "latest_report_current": latest_report_current,
         "living_agent": living_agent,
         "final_audit": final_audit,
         "eval": eval_result,
@@ -268,6 +271,8 @@ def _recommended_next_action(ok: bool, blockers: list[dict[str, Any]], commands:
     blocker_ids = {str(blocker.get("id") or blocker.get("name")) for blocker in blockers}
     if "claude_configured" in blocker_ids:
         return "scripts/ninoctl finish --key-stdin"
+    if "closing_evidence" in blocker_ids:
+        return "scripts/ninoctl closing-report"
     return commands[0] if commands else ""
 
 

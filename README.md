@@ -187,7 +187,8 @@ It also exposes `recommended_next_action`, usually `scripts/ninoctl finish
 completion matrix, including the remaining Claude live blocker when no real key
 has been configured. It also verifies that the live `nino` agent has persisted
 state plus episodes or cold memory, names the newest closing report and marks
-whether it belongs to the current revision.
+whether it belongs to the current revision. The closing-evidence requirement is
+only green when that newest report matches the installed revision.
 It also includes `recommended_next_action` for the next closing step.
 The same matrix is available in the UI with `Terminación`, backed by
 `GET /operations/completion-audit`.

@@ -1266,6 +1266,22 @@ def _attach_current_report_summary(report: dict[str, Any]) -> None:
         if isinstance(section, dict):
             section["latest_report"] = latest_report
             section["latest_report_current"] = latest_report_current
+    completion_audit = report.get("completion_audit")
+    if isinstance(completion_audit, dict):
+        requirements = completion_audit.get("requirements", [])
+        if not requirements:
+            return
+        for requirement in requirements:
+            if requirement.get("id") == "closing_evidence":
+                requirement["ok"] = True
+                evidence = requirement.setdefault("evidence", [])
+                if "latest_report_current" not in evidence:
+                    evidence.append("latest_report_current")
+        completion_audit["blockers"] = [item for item in requirements if not item.get("ok")]
+        completion_audit["ok"] = not completion_audit["blockers"]
+        report["summary"]["completion_audit_ok"] = bool(completion_audit.get("ok"))
+        report["summary"]["ok"] = bool(completion_audit.get("ok"))
+        report["summary"]["blockers"] = [item.get("id") or item.get("name") for item in completion_audit.get("blockers", [])]
 
 
 def _redact_log_line(line: str) -> str:
@@ -1900,6 +1916,8 @@ class NinoService:
         blocker_names = {str(blocker.get("name") or blocker.get("id")) for blocker in blockers}
         if "claude_configured" in blocker_names:
             return "scripts/ninoctl finish --key-stdin"
+        if "closing_evidence" in blocker_names:
+            return "scripts/ninoctl closing-report"
         return commands[0] if commands else ""
 
     def _latest_report_summary(self) -> dict[str, Any]:
@@ -2014,6 +2032,8 @@ class NinoService:
 
         claude_live = checks.get("claude_live", {})
         claude_live_ok = claude_live.get("ok") is True and claude_live.get("evidence", {}).get("skipped") is not True
+        latest_report = self._latest_report_summary()
+        latest_report_current = self._latest_report_current_summary(latest_report)
         requirements = [
             self._completion_requirement(
                 "runtime_persistent",
@@ -2068,13 +2088,14 @@ class NinoService:
             self._completion_requirement(
                 "closing_evidence",
                 "Evidencia de cierre generable, listable y legible",
-                True,
+                latest_report_current.get("ok") is True,
                 [
                     "POST /operations/closing-report",
                     "GET /operations/reports",
                     "GET /operations/reports/latest",
                     "GET /operations/reports/{report_name}",
                     "tests/test_smoke.py closing_report_*",
+                    "latest_report_current",
                 ],
             ),
             self._completion_requirement(
@@ -2092,7 +2113,6 @@ class NinoService:
         ]
         blockers = [requirement for requirement in requirements if not requirement["ok"]]
         commands = audit.get("final_readiness", {}).get("next_commands", [])
-        latest_report = self._latest_report_summary()
         return {
             "ok": not blockers,
             "requirements": requirements,
@@ -2100,7 +2120,7 @@ class NinoService:
             "next_commands": commands,
             "recommended_next_action": self._recommended_next_action(not blockers, blockers, commands),
             "latest_report": latest_report,
-            "latest_report_current": self._latest_report_current_summary(latest_report),
+            "latest_report_current": latest_report_current,
             "audit": audit,
             "eval": eval_result,
             "notes": [

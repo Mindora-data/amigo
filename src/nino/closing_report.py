@@ -74,6 +74,22 @@ def _attach_current_report(report: dict[str, Any]) -> None:
         if isinstance(section, dict):
             section["latest_report"] = latest_report
             section["latest_report_current"] = latest_report_current
+    completion_audit = report.get("completion_audit")
+    if isinstance(completion_audit, dict):
+        requirements = completion_audit.get("requirements", [])
+        if not requirements:
+            return
+        for requirement in requirements:
+            if requirement.get("id") == "closing_evidence":
+                requirement["ok"] = True
+                evidence = requirement.setdefault("evidence", [])
+                if "latest_report_current" not in evidence:
+                    evidence.append("latest_report_current")
+        completion_audit["blockers"] = [item for item in requirements if not item.get("ok")]
+        completion_audit["ok"] = not completion_audit["blockers"]
+        report["summary"]["completion_audit_ok"] = bool(completion_audit.get("ok"))
+        report["summary"]["ok"] = bool(completion_audit.get("ok"))
+        report["summary"]["blockers"] = [item.get("id") or item.get("name") for item in completion_audit.get("blockers", [])]
 
 
 def build_closing_report(root: str | Path = ".", report_path: str | Path | None = None) -> dict[str, Any]:

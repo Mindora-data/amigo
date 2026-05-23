@@ -320,7 +320,13 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     }
     closing_evidence = next(item for item in completion_audit["requirements"] if item["id"] == "closing_evidence")
     assert "GET /operations/reports/latest" in closing_evidence["evidence"]
-    assert {item["id"] for item in completion_audit["blockers"]} == {"claude_configured", "claude_live"}
+    assert "latest_report_current" in closing_evidence["evidence"]
+    assert closing_evidence["ok"] is False
+    assert {item["id"] for item in completion_audit["blockers"]} == {
+        "closing_evidence",
+        "claude_configured",
+        "claude_live",
+    }
     assert "scripts/ninoctl finish --key-stdin" in completion_audit["next_commands"]
     assert closing_report["ok"] is True
     assert Path(closing_report["path"]).exists()
