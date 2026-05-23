@@ -138,6 +138,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"renderReports" in body
     assert b"/operations/reports/" in body
     assert b"Ver JSON" in body
+    assert b"/operations/reports/latest" in body
+    assert "Último informe".encode("utf-8") in body
+    assert b"latestReport" in body
     assert b"renderCompletionAudit" in body
     assert b"Auditor" in body
 
@@ -163,6 +166,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     closing_report = _request(app, "POST", "/operations/closing-report", {})
     reports = _request(app, "GET", "/operations/reports")
     report = _request(app, "GET", f"/operations/reports/{reports['reports'][0]['name']}")
+    latest_report = _request(app, "GET", "/operations/reports/latest")
     invalid_report = _request(app, "GET", "/operations/reports/bad.json")
     product_eval = _request(app, "GET", "/operations/eval")
     final_preflight = _request(app, "GET", "/operations/final-preflight")
@@ -208,6 +212,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /operations/completion-audit" in root["endpoints"]
     assert "POST /operations/closing-report" in root["endpoints"]
     assert "GET /operations/reports" in root["endpoints"]
+    assert "GET /operations/reports/latest" in root["endpoints"]
     assert "GET /operations/reports/{report_name}" in root["endpoints"]
     assert "GET /operations/eval" in root["endpoints"]
     assert "GET /operations/final-preflight" in root["endpoints"]
@@ -229,6 +234,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "/operations/closing-report" in openapi["paths"]
     assert "post" in openapi["paths"]["/operations/closing-report"]
     assert "/operations/reports" in openapi["paths"]
+    assert "/operations/reports/latest" in openapi["paths"]
     assert "/operations/reports/{report_name}" in openapi["paths"]
     assert openapi["paths"]["/operations/reports/{report_name}"]["get"]["parameters"][0]["name"] == "report_name"
     assert "/operations/eval" in openapi["paths"]
@@ -312,6 +318,9 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert report["ok"] is True
     assert report["name"] == reports["reports"][0]["name"]
     assert report["report"]["summary"] == closing_report["report"]["summary"]
+    assert latest_report["ok"] is True
+    assert latest_report["name"] == report["name"]
+    assert latest_report["report"]["summary"] == closing_report["report"]["summary"]
     assert invalid_report == {"ok": False, "error": "invalid_report_name"}
     assert product_eval["ok"] is True
     assert product_eval["path"] == "eval"

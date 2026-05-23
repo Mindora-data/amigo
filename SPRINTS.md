@@ -211,6 +211,7 @@ Hecho:
 - Ultimo informe desde CLI. Hecho inicial: `scripts/ninoctl report latest` imprime el informe mas reciente.
 - Informe de cierre desde API/UI. Hecho inicial: `POST /operations/closing-report` y boton `Informe cierre`.
 - Listado de informes desde API/UI. Hecho inicial: `GET /operations/reports` y boton `Ver informes`.
+- Ultimo informe desde API/UI. Hecho inicial: `GET /operations/reports/latest` y boton `Último informe`.
 - Lectura segura de informes desde API/UI. Hecho inicial: `GET /operations/reports/{report_name}` y boton `Ver JSON`, limitado a nombres `nino-closing-*.json`.
 - Smoke de informes de cierre. Hecho inicial: `scripts/nino-smoke` cubre crear, listar, leer y rechazar nombres invalidos de informes.
 - Cierre final guiado. Hecho inicial: `scripts/ninoctl finish --key-stdin` configura Claude en Keychain por defecto, reinicia launchd y ejecuta `final-audit`; `--preflight-only` evita la llamada viva.
@@ -270,6 +271,7 @@ Auditoria final de producto 100% local:
 31c3. Hecho inicial: lectura del ultimo informe desde CLI con `scripts/ninoctl report latest`.
 31d. Hecho inicial: informe de cierre desde API/UI con `POST /operations/closing-report` y boton `Informe cierre`.
 31e. Hecho inicial: listado de informes desde API/UI con `GET /operations/reports` y boton `Ver informes`.
+31e2. Hecho inicial: lectura del ultimo informe desde API/UI con `GET /operations/reports/latest` y boton `Último informe`.
 31f. Hecho inicial: lectura segura de informes desde API/UI con `GET /operations/reports/{report_name}` y boton `Ver JSON`.
 31g. Hecho inicial: smoke de informes de cierre con checks `closing_report`, `closing_report_list`, `closing_report_read` y `closing_report_name_guard`.
 32. Hecho inicial: cierre final guiado con `scripts/ninoctl finish --key-stdin`, Keychain por defecto y modo `--preflight-only`.

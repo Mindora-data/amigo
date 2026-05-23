@@ -196,6 +196,8 @@ Existing reports can be listed with `Ver informes`, backed by
 Each listed report can be opened and downloaded from the UI with `Ver JSON`,
 backed by `GET /operations/reports/{report_name}`. The API only accepts
 timestamped `nino-closing-*.json` names from the local reports directory.
+`Último informe` opens the newest report directly with
+`GET /operations/reports/latest`.
 The same panel includes `Desactivar Claude`, backed by
 `POST /operations/claude/disable`, to remove Claude settings from `.env.local`,
 disable the runtime client immediately, and optionally delete the configured
@@ -306,6 +308,7 @@ GET  /operations/product-status
 GET  /operations/completion-audit
 POST /operations/closing-report
 GET  /operations/reports
+GET  /operations/reports/latest
 GET  /operations/reports/{report_name}
 GET  /operations/eval
 GET  /operations/final-preflight

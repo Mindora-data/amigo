@@ -364,6 +364,9 @@ APP_HTML = """<!doctype html>
           <button id="reports" class="secondary">Ver informes</button>
         </div>
         <div class="row">
+          <button id="latestReport" class="secondary">Último informe</button>
+        </div>
+        <div class="row">
           <button id="evalProduct" class="secondary">Eval local</button>
           <button id="finalPreflight" class="secondary">Preflight final</button>
         </div>
@@ -755,6 +758,12 @@ APP_HTML = """<!doctype html>
       return out;
     };
     $("reports").onclick = loadReports;
+    $("latestReport").onclick = async () => {
+      const out = await api("/operations/reports/latest");
+      print($("backupsOut"), out);
+      downloadJson(out.name || "nino-closing-latest.json", out.report);
+      status(out.ok ? `Último informe: ${out.name}` : "No hay informe de cierre.");
+    };
     $("evalProduct").onclick = async () => {
       const out = await api("/operations/eval");
       print($("backupsOut"), out);
@@ -1058,6 +1067,7 @@ API_ENDPOINTS = [
     "GET /operations/completion-audit",
     "POST /operations/closing-report",
     "GET /operations/reports",
+    "GET /operations/reports/latest",
     "GET /operations/reports/{report_name}",
     "GET /operations/eval",
     "GET /operations/final-preflight",
@@ -1323,6 +1333,11 @@ class NinoService:
     def get_report(self, report_name: str) -> dict[str, Any]:
         if self.db_path is None:
             return {"ok": False, "error": "db_path_unavailable"}
+        if report_name == "latest":
+            reports = self.list_reports()
+            if not reports.get("reports"):
+                return {"ok": False, "error": "report_not_found", "report_dir": reports.get("report_dir")}
+            report_name = str(reports["reports"][0]["name"])
         if not re.fullmatch(r"nino-closing-\d{8}-\d{6}[.]json", report_name):
             return {"ok": False, "error": "invalid_report_name"}
         report_path = self.db_path.parent / "reports" / report_name
