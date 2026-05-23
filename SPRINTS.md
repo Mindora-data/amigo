@@ -222,7 +222,7 @@ Hecho:
 - Ultimo informe desde API/UI. Hecho inicial: `GET /operations/reports/latest` y boton `Último informe`.
 - Lectura segura de informes desde API/UI. Hecho inicial: `GET /operations/reports/{report_name}` y boton `Ver JSON`, limitado a nombres `nino-closing-*.json`.
 - Smoke de informes de cierre. Hecho inicial: `scripts/nino-smoke` cubre crear, listar, leer, leer el ultimo y rechazar nombres invalidos de informes.
-- Cierre final guiado. Hecho inicial: `scripts/ninoctl finish --key-stdin` configura Claude en Keychain por defecto, reinicia launchd y ejecuta `final-audit`; `--preflight-only` evita la llamada viva.
+- Cierre final guiado. Hecho inicial: `scripts/ninoctl finish --key-stdin` configura Claude en Keychain por defecto, reinicia launchd, ejecuta `final-audit` y genera informe de cierre; `--preflight-only` evita la llamada viva.
 - Politicas de herramienta/accion externa. Hecho inicial: permisos por tipo de accion, bloqueo por defecto y auditoria.
 - Cola de tareas autonomas con limites. Hecho inicial: cola persistente por agente con limite de pendientes, bloqueo por permisos, ejecucion manual y panel en `/app`.
 - Agenda proactiva con ventanas horarias. Hecho inicial: `active_hours_start`/`active_hours_end` bloquean envios fuera de ventana y se configuran desde `/app`.
@@ -290,7 +290,7 @@ Auditoria final de producto 100% local:
 31e2. Hecho inicial: lectura del ultimo informe desde API/UI con `GET /operations/reports/latest` y boton `Último informe`.
 31f. Hecho inicial: lectura segura de informes desde API/UI con `GET /operations/reports/{report_name}` y boton `Ver JSON`.
 31g. Hecho inicial: smoke de informes de cierre con checks `closing_report`, `closing_report_list`, `closing_report_read`, `closing_report_latest` y `closing_report_name_guard`.
-32. Hecho inicial: cierre final guiado con `scripts/ninoctl finish --key-stdin`, Keychain por defecto y modo `--preflight-only`.
+32. Hecho inicial: cierre final guiado con `scripts/ninoctl finish --key-stdin`, Keychain por defecto, modo `--preflight-only` e informe de cierre al final del flujo.
 33. Hecho inicial: cierre guiado desde UI con configuracion Claude, reinicio persistente, espera de salud y cierre final.
 34. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 

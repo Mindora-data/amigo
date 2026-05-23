@@ -68,7 +68,8 @@ printf '%s' "$ANTHROPIC_API_KEY" | scripts/ninoctl finish --key-stdin
 ```
 
 Use `--preflight-only` to stop before the live Claude call, or `--no-keychain`
-to store the key in `.env.local` instead.
+to store the key in `.env.local` instead. The flow also writes a fresh closing
+report so the final evidence matches the audited revision.
 
 Restart:
 

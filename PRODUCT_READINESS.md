@@ -107,7 +107,9 @@ mas reciente sin copiar el nombre.
 validando que el nombre sea un `nino-closing-*.json` local.
 `scripts/ninoctl finish --key-stdin` ejecuta el cierre guiado completo:
 configura Claude en Keychain por defecto, reinicia launchd y lanza el cierre
-final. Con `--preflight-only` valida la configuracion sin gastar llamada viva.
+final. Tambien escribe un informe de cierre actualizado para dejar evidencia
+del resultado. Con `--preflight-only` valida la configuracion sin gastar llamada
+viva.
 En JSON, esa ejecucion queda marcada como `audit_profile.strict_final: true` y
 `audit_profile.required_checks` lista los checks exigidos, incluido `local_smoke`
 cuando se ejecuta.

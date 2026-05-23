@@ -51,7 +51,7 @@ Commands:
   live-audit  Run product audit requiring a live Claude key.
   final-preflight Run final local preflight without a live Claude call.
   final-audit Run product audit requiring launchd and live Claude.
-  finish      Configure Claude, restart launchd and run the final audit.
+  finish      Configure Claude, restart launchd, audit and write a closing report.
   product-status Summarize final readiness, evaluation and blockers.
   completion-audit Audit every completion requirement and remaining blockers.
   closing-report Write a JSON evidence report for the current product state.
@@ -383,11 +383,18 @@ finish() {
   "$ROOT_DIR/scripts/nino-launchd" stop
   "$ROOT_DIR/scripts/nino-launchd" start
   product_status || true
+  local audit_rc=0
+  set +e
   if [[ "$preflight_only" == true ]]; then
     final_preflight
+    audit_rc=$?
   else
     final_audit
+    audit_rc=$?
   fi
+  set -e
+  closing_report --json || true
+  return "$audit_rc"
 }
 
 product_status() {
