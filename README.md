@@ -48,6 +48,7 @@ scripts/ninoctl completion-audit
 scripts/ninoctl closing-report
 scripts/ninoctl reports
 scripts/ninoctl report nino-closing-YYYYMMDD-HHMMSS.json
+scripts/ninoctl report latest
 scripts/ninoctl logs
 scripts/ninoctl backup
 scripts/ninoctl backups
@@ -187,6 +188,7 @@ The same matrix is available in the UI with `Terminación`, backed by
 `nino` profile.
 `scripts/ninoctl reports` lists those reports and `scripts/ninoctl report
 <name>` prints a single timestamped report after validating the local filename.
+Use `scripts/ninoctl report latest` to print the newest report.
 The same evidence can be generated from `/app` with `Informe cierre`, backed by
 `POST /operations/closing-report`.
 Existing reports can be listed with `Ver informes`, backed by

@@ -175,6 +175,13 @@ def test_ninoctl_can_list_and_read_closing_reports(tmp_path) -> None:
         capture_output=True,
         text=True,
     )
+    latest = subprocess.run(
+        ["scripts/ninoctl", "report", "latest"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
     invalid = subprocess.run(
         ["scripts/ninoctl", "report", "../nino.db"],
         check=False,
@@ -185,6 +192,7 @@ def test_ninoctl_can_list_and_read_closing_reports(tmp_path) -> None:
 
     assert str(report_path) in listed.stdout
     assert json.loads(read.stdout) == {"ok": True}
+    assert json.loads(latest.stdout) == {"ok": True}
     assert invalid.returncode == 2
     assert "Invalid report name" in invalid.stderr
 
