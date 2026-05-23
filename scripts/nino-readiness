@@ -10,6 +10,10 @@ else
 fi
 
 cd "$ROOT_DIR"
-PYTHONPATH=src "$PYTHON_BIN" -m pytest
+if [[ -d tests ]]; then
+  PYTHONPATH=src "$PYTHON_BIN" -m pytest
+else
+  echo "pytest: skipped (tests directory not installed in this runtime copy)"
+fi
 scripts/nino-smoke --json
 scripts/nino-product-audit --skip-http --json

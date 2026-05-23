@@ -325,6 +325,7 @@ Auditoria final de producto 100% local:
 46. Hecho inicial: `scripts/ninoctl status` y `wait-health` muestran el ultimo error de `curl` para distinguir permisos/red de servicio caido.
 47. Hecho inicial: `scripts/ninoctl finish --key-env` permite cerrar usando `ANTHROPIC_API_KEY` ya exportada, sin tuberia stdin.
 48. Hecho inicial: `product-status` y `completion-audit` ordenan los siguientes comandos de cierre para mostrar juntos `finish --key-stdin`, `finish --key-env` y `finish --skip-configure` antes del reinicio/auditoria.
-49. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --key-env`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
+49. Hecho inicial: `scripts/nino-readiness` funciona en la copia runtime instalada aunque no incluya `tests/`, saltando solo la suite de desarrollo y manteniendo smoke/audit de producto.
+50. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --key-env`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

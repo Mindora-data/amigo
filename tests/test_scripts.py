@@ -616,6 +616,39 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     assert "--skip-configure requires Claude to be configured" in missing_config_finish.stderr
 
 
+def test_nino_readiness_skips_pytest_when_tests_are_not_installed(tmp_path) -> None:
+    root = tmp_path / "runtime"
+    scripts_dir = root / "scripts"
+    scripts_dir.mkdir(parents=True)
+    readiness = Path("scripts/nino-readiness").read_text(encoding="utf-8")
+    (scripts_dir / "nino-readiness").write_text(readiness, encoding="utf-8")
+    (scripts_dir / "nino-readiness").chmod(0o755)
+    calls = tmp_path / "calls.log"
+    for name in ("nino-smoke", "nino-product-audit"):
+        path = scripts_dir / name
+        path.write_text(
+            "#!/usr/bin/env bash\n"
+            "printf '%s %s\\n' \"$(basename \"$0\")\" \"$*\" >> \"$NINO_CALLS_LOG\"\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+    env = {**os.environ, "NINO_CALLS_LOG": str(calls)}
+
+    result = subprocess.run(
+        [str(scripts_dir / "nino-readiness")],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "pytest: skipped (tests directory not installed in this runtime copy)" in result.stdout
+    assert calls.read_text(encoding="utf-8").splitlines() == [
+        "nino-smoke --json",
+        "nino-product-audit --skip-http --json",
+    ]
+
+
 def test_install_local_copies_runtime_and_keeps_existing_data(tmp_path) -> None:
     install_dir = tmp_path / "installed"
     data_dir = install_dir / "data"
