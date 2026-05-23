@@ -6,18 +6,21 @@ ENV_FILE="${NINO_ENV_FILE:-$ROOT_DIR/.env.local}"
 MODEL="${NINO_CLAUDE_MODEL:-claude-sonnet-4-5}"
 KEY="${ANTHROPIC_API_KEY:-}"
 READ_STDIN=false
+KEYCHAIN_SERVICE=""
 
 usage() {
   cat <<EOF
-Usage: scripts/nino-configure-claude [--model MODEL] [--key-stdin] [--env-file PATH]
+Usage: scripts/nino-configure-claude [--model MODEL] [--key-stdin] [--keychain-service NAME] [--env-file PATH]
 
 Writes Claude settings to a local untracked env file with mode 600.
 The key is never printed. Prefer --key-stdin or an interactive prompt over
-passing secrets as command-line arguments.
+passing secrets as command-line arguments. With --keychain-service, the key is
+stored in macOS Keychain and .env.local stores only the service name.
 
 Examples:
   scripts/nino-configure-claude
   printf '%s' "\$ANTHROPIC_API_KEY" | scripts/nino-configure-claude --key-stdin
+  printf '%s' "\$ANTHROPIC_API_KEY" | scripts/nino-configure-claude --key-stdin --keychain-service nino-anthropic
   scripts/nino-configure-claude --model claude-sonnet-4-5
 EOF
 }
@@ -35,6 +38,10 @@ while [[ $# -gt 0 ]]; do
     --key-stdin)
       READ_STDIN=true
       shift
+      ;;
+    --keychain-service)
+      KEYCHAIN_SERVICE="${2:-}"
+      shift 2
       ;;
     -h|--help|help)
       usage
@@ -72,16 +79,27 @@ if [[ -z "$KEY" ]]; then
   echo "ANTHROPIC_API_KEY cannot be empty." >&2
   exit 2
 fi
+if [[ -n "$KEYCHAIN_SERVICE" ]]; then
+  if ! command -v security >/dev/null 2>&1; then
+    echo "macOS security command not found; cannot use --keychain-service." >&2
+    exit 1
+  fi
+  security add-generic-password -U -a "$USER" -s "$KEYCHAIN_SERVICE" -w "$KEY" >/dev/null
+fi
 
 mkdir -p "$(dirname "$ENV_FILE")"
 tmp="$(mktemp)"
 if [[ -f "$ENV_FILE" ]]; then
-  grep -vE '^(NINO_LLM_PROVIDER|NINO_CLAUDE_MODEL|ANTHROPIC_API_KEY)=' "$ENV_FILE" > "$tmp" || true
+  grep -vE '^(NINO_LLM_PROVIDER|NINO_CLAUDE_MODEL|ANTHROPIC_API_KEY|NINO_KEYCHAIN_SERVICE)=' "$ENV_FILE" > "$tmp" || true
 fi
 {
   echo "NINO_LLM_PROVIDER=claude"
   echo "NINO_CLAUDE_MODEL=$MODEL"
-  echo "ANTHROPIC_API_KEY=$KEY"
+  if [[ -n "$KEYCHAIN_SERVICE" ]]; then
+    echo "NINO_KEYCHAIN_SERVICE=$KEYCHAIN_SERVICE"
+  else
+    echo "ANTHROPIC_API_KEY=$KEY"
+  fi
 } >> "$tmp"
 mv "$tmp" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
@@ -89,4 +107,8 @@ chmod 600 "$ENV_FILE"
 echo "Claude configuration written: $ENV_FILE"
 echo "Provider: claude"
 echo "Model: $MODEL"
-echo "API key: present"
+if [[ -n "$KEYCHAIN_SERVICE" ]]; then
+  echo "API key: present in macOS Keychain service $KEYCHAIN_SERVICE"
+else
+  echo "API key: present"
+fi

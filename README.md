@@ -138,10 +138,13 @@ For a non-interactive setup:
 
 ```bash
 printf '%s' "$ANTHROPIC_API_KEY" | scripts/nino-configure-claude --key-stdin
+printf '%s' "$ANTHROPIC_API_KEY" | scripts/nino-configure-claude --key-stdin --keychain-service nino-anthropic
 ```
 
 The script writes `.env.local` with file mode `600`, preserves unrelated local
-overrides, and never prints the key. Then start the server:
+overrides, and never prints the key. With `--keychain-service`, the secret is
+stored in macOS Keychain and `.env.local` stores only `NINO_KEYCHAIN_SERVICE`.
+Then start the server:
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m nino.server --db data/nino.db --host 127.0.0.1 --port 8000 --scheduler-interval 60

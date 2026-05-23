@@ -938,17 +938,20 @@ class NinoService:
             "provider": "claude" if client is not None else config["provider"],
             "model": getattr(client, "model", None) if client is not None else config["model"],
             "api_key_present": config["api_key_present"],
+            "api_key_source": config["api_key_source"],
+            "keychain_service": config["keychain_service"],
             "missing": config["missing"],
             "probe_endpoint": "/agents/{agent_id}/llm/probe",
             "setup_commands": [
                 "cd ~/Developer/bebe",
-                "scripts/nino-configure-claude",
+                "scripts/nino-configure-claude --keychain-service nino-anthropic",
                 "scripts/nino-launchd stop",
                 "scripts/nino-launchd start",
                 "scripts/nino-product-audit --require-claude-live --json",
             ],
             "notes": [
-                "La API key se guarda solo en .env.local con permisos 600.",
+                "Con --keychain-service, .env.local guarda solo NINO_KEYCHAIN_SERVICE.",
+                "Sin Keychain, la API key se guarda solo en .env.local con permisos 600.",
                 "El plist de launchd no incrusta ANTHROPIC_API_KEY.",
             ],
         }

@@ -132,6 +132,23 @@ def test_llm_config_status_builds_claude_client_without_exposing_key(monkeypatch
     assert getattr(client, "max_tokens") == 111
 
 
+def test_llm_config_status_can_use_keychain_without_exposing_key(monkeypatch) -> None:
+    monkeypatch.setenv("NINO_LLM_PROVIDER", "claude")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("NINO_KEYCHAIN_SERVICE", "nino-test")
+    monkeypatch.setattr("nino.llm._keychain_api_key", lambda service: "keychain-secret" if service == "nino-test" else None)
+
+    status = llm_config_status()
+    client = build_configured_llm()
+
+    assert status["enabled"] is True
+    assert status["api_key_present"] is True
+    assert status["api_key_source"] == "keychain"
+    assert status["keychain_service"] == "nino-test"
+    assert "keychain-secret" not in str(status)
+    assert client is not None
+
+
 def test_llm_prompt_includes_recent_turns_cold_facts_and_redacts_sensitive_context() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

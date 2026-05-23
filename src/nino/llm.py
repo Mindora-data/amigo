@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 import os
 import re
+import subprocess
 from typing import Any, Protocol
 from urllib import request
 
@@ -59,16 +60,42 @@ def build_configured_llm() -> LLMClient | None:
     if not status["api_key_present"]:
         return None
     return ClaudeClient(
-        api_key=os.environ["ANTHROPIC_API_KEY"].strip(),
+        api_key=_anthropic_api_key() or "",
         model=status["model"],
         max_tokens=status["max_tokens"],
         timeout_seconds=status["timeout_seconds"],
     )
 
 
+def _keychain_api_key(service: str) -> str | None:
+    if not service:
+        return None
+    try:
+        completed = subprocess.run(
+            ["/usr/bin/security", "find-generic-password", "-w", "-s", service],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return completed.stdout.strip() or None
+
+
+def _anthropic_api_key() -> str | None:
+    env_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if env_key:
+        return env_key
+    return _keychain_api_key(os.environ.get("NINO_KEYCHAIN_SERVICE", "").strip())
+
+
 def llm_config_status() -> dict[str, Any]:
     provider = os.environ.get("NINO_LLM_PROVIDER", "").strip().lower()
-    api_key_present = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+    keychain_service = os.environ.get("NINO_KEYCHAIN_SERVICE", "").strip()
+    env_api_key_present = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+    keychain_api_key_present = bool(_keychain_api_key(keychain_service)) if keychain_service else False
+    api_key_present = env_api_key_present or keychain_api_key_present
     model = os.environ.get("NINO_CLAUDE_MODEL", "claude-sonnet-4-5").strip() or "claude-sonnet-4-5"
     max_tokens = int(os.environ.get("NINO_LLM_MAX_TOKENS", "320"))
     timeout_seconds = float(os.environ.get("NINO_LLM_TIMEOUT", "20"))
@@ -86,6 +113,8 @@ def llm_config_status() -> dict[str, Any]:
         "provider": provider or None,
         "supported_provider": supported_provider,
         "api_key_present": api_key_present,
+        "api_key_source": "env" if env_api_key_present else "keychain" if keychain_api_key_present else None,
+        "keychain_service": keychain_service or None,
         "model": model,
         "max_tokens": max_tokens,
         "timeout_seconds": timeout_seconds,

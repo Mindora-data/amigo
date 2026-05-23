@@ -226,3 +226,44 @@ def test_configure_claude_writes_untracked_env_without_printing_key(tmp_path) ->
     assert "NINO_CLAUDE_MODEL=claude-test" in content
     assert "new-secret-key" not in result.stdout
     assert oct(env_file.stat().st_mode & 0o777) == "0o600"
+
+
+def test_configure_claude_can_store_key_in_keychain_without_env_secret(tmp_path) -> None:
+    env_file = tmp_path / ".env.local"
+    security = tmp_path / "security"
+    security.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' \"$@\" > \"$NINO_SECURITY_ARGS_FILE\"\n",
+        encoding="utf-8",
+    )
+    security.chmod(0o755)
+    args_file = tmp_path / "security.args"
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_SECURITY_ARGS_FILE": str(args_file),
+    }
+
+    result = subprocess.run(
+        [
+            "scripts/nino-configure-claude",
+            "--env-file",
+            str(env_file),
+            "--key-stdin",
+            "--keychain-service",
+            "nino-test",
+        ],
+        check=True,
+        env=env,
+        input="keychain-secret\n",
+        capture_output=True,
+        text=True,
+    )
+    content = env_file.read_text(encoding="utf-8")
+
+    assert "ANTHROPIC_API_KEY" not in content
+    assert "keychain-secret" not in content
+    assert "NINO_KEYCHAIN_SERVICE=nino-test" in content
+    assert "keychain-secret" not in result.stdout
+    assert "nino-test" in result.stdout
+    assert "keychain-secret" in args_file.read_text(encoding="utf-8")

@@ -4,7 +4,7 @@ Estado confirmado el 2026-05-23:
 
 - GitHub se mantiene sincronizado desde los commits de sprint; confirmar hash exacto con `git rev-parse HEAD`.
 - Rama activa: `main`.
-- Suite actual: 119 tests pasando.
+- Suite actual: 121 tests pasando.
 - La memoria viva local (`data/nino.db`) no se versiona en GitHub.
 - El producto publicado es el motor, API, UI minima y pruebas; no incluye datos de uso real.
 
@@ -195,7 +195,7 @@ Objetivo: preparar integraciones externas sin perder control ni seguridad.
 Hecho:
 
 - Adaptador LLM configurable. Hecho inicial: `NINO_LLM_PROVIDER`.
-- Adaptador Claude via Anthropic Messages API. Hecho inicial en Sprint 6 por necesidad de conversacion real; diagnostico local con `GET /operations/claude`, panel LLM, `scripts/ninoctl claude` y configuracion persistente segura con `scripts/nino-configure-claude`.
+- Adaptador Claude via Anthropic Messages API. Hecho inicial en Sprint 6 por necesidad de conversacion real; diagnostico local con `GET /operations/claude`, panel LLM, `scripts/ninoctl claude` y configuracion persistente segura con `scripts/nino-configure-claude`, `.env.local` o macOS Keychain.
 - Prueba viva opcional de Claude. Hecho inicial: `scripts/nino-claude-live --require-key --json`.
 - Politicas de herramienta/accion externa. Hecho inicial: permisos por tipo de accion, bloqueo por defecto y auditoria.
 - Cola de tareas autonomas con limites. Hecho inicial: cola persistente por agente con limite de pendientes, bloqueo por permisos, ejecucion manual y panel en `/app`.
