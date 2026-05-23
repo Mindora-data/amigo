@@ -21,12 +21,15 @@ La prueba viva de Claude queda separada porque requiere red y una key real:
 ```bash
 scripts/nino-claude-live --require-key --json
 scripts/nino-product-audit --require-claude-live --json
+scripts/ninoctl live-audit
 ```
 
 Para auditar tambien el servidor persistente ya arrancado:
 
 ```bash
 scripts/nino-product-audit --json
+scripts/ninoctl audit
+scripts/ninoctl server-audit
 ```
 
 ## Requisitos del producto

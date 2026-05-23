@@ -4,7 +4,7 @@ Estado confirmado el 2026-05-23:
 
 - GitHub se mantiene sincronizado desde los commits de sprint; confirmar hash exacto con `git rev-parse HEAD`.
 - Rama activa: `main`.
-- Suite actual: 121 tests pasando.
+- Suite actual: 122 tests pasando.
 - La memoria viva local (`data/nino.db`) no se versiona en GitHub.
 - El producto publicado es el motor, API, UI minima y pruebas; no incluye datos de uso real.
 
@@ -118,7 +118,7 @@ Hecho:
 - Historial conversacional legible. Hecho inicial: `/app` carga episodios persistidos al abrir o cambiar de agente.
 - Backups locales de `data/nino.db`. Hecho inicial: `scripts/ninoctl backup`, `scripts/ninoctl backups`, `scripts/ninoctl restore`, `POST /operations/backup` y `GET /operations/backups` desde UI.
 - Logs operativos claros. Hecho inicial: `scripts/ninoctl logs`.
-- Comando de diagnostico: salud, modo local-first, agentes, episodios, memoria, inbox y ultimo ciclo. Hecho inicial: `scripts/ninoctl doctor`.
+- Comando de diagnostico: salud, modo local-first, agentes, episodios, memoria, inbox, ultimo ciclo, readiness y auditorias. Hecho inicial: `scripts/ninoctl doctor`, `scripts/ninoctl readiness`, `scripts/ninoctl audit`, `scripts/ninoctl server-audit`, `scripts/ninoctl live-audit`.
 - Validar continuidad entre sesiones reales. Hecho inicial: `nino` conserva episodios y memoria tras reinicio.
 
 Criterios de salida:
@@ -230,7 +230,7 @@ Auditoria final de producto 100% local:
 13. Hecho inicial: validado con servidor real local: `/health`, `/operations/mode`, `/tasks`, `/permissions` y `/app`.
 14. Hecho inicial: diagnostico de Claude sin llamada externa mediante `/operations/claude`.
 15. Hecho inicial: puerta local de producto con `scripts/nino-smoke`.
-16. Hecho inicial: checklist de producto en `PRODUCT_READINESS.md` y puerta `scripts/nino-readiness`.
+16. Hecho inicial: checklist de producto en `PRODUCT_READINESS.md` y puerta `scripts/nino-readiness` accesible tambien con `scripts/ninoctl readiness`.
 17. Hecho inicial: plantilla `.env.example`, configurador `scripts/nino-configure-claude` y carga automatica de `.env.local` para Claude local.
 18. Hecho inicial: launchd carga `.env.local` en runtime sin incrustar `ANTHROPIC_API_KEY` en el plist, diagnostica bloqueos de permisos macOS y puede instalarse desde una copia local no protegida.
 19. Hecho inicial: prueba viva opcional de Claude con `scripts/nino-claude-live`.

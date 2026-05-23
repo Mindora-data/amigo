@@ -36,6 +36,9 @@ scripts/ninoctl claude
 scripts/ninoctl snapshot
 scripts/ninoctl agents
 scripts/ninoctl doctor
+scripts/ninoctl readiness
+scripts/ninoctl audit
+scripts/ninoctl server-audit
 scripts/ninoctl logs
 scripts/ninoctl backup
 scripts/ninoctl backups
@@ -180,6 +183,7 @@ Run a live probe only after the key is configured:
 ```bash
 scripts/nino-claude-live --require-key --json
 scripts/nino-product-audit --require-claude-live --json
+scripts/ninoctl live-audit
 
 curl -X POST http://127.0.0.1:8000/agents/nino/llm/probe \
   -H 'Content-Type: application/json' \

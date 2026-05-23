@@ -148,6 +148,41 @@ def test_ninoctl_can_list_and_restore_backups(tmp_path) -> None:
     assert list(backup_dir.glob("pre-restore-*.db"))
 
 
+def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
+    root = tmp_path / "repo"
+    scripts_dir = root / "scripts"
+    scripts_dir.mkdir(parents=True)
+    ninoctl = Path("scripts/ninoctl").read_text(encoding="utf-8")
+    (scripts_dir / "ninoctl").write_text(ninoctl, encoding="utf-8")
+    (scripts_dir / "ninoctl").chmod(0o755)
+    calls = tmp_path / "calls.log"
+    for name in ("nino-readiness", "nino-product-audit"):
+        path = scripts_dir / name
+        path.write_text(
+            "#!/usr/bin/env bash\n"
+            "printf '%s %s\\n' \"$(basename \"$0\")\" \"$*\" >> \"$NINO_CALLS_LOG\"\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+    env = {
+        **os.environ,
+        "NINO_CALLS_LOG": str(calls),
+        "NINO_PORT": "65531",
+    }
+
+    subprocess.run([str(scripts_dir / "ninoctl"), "readiness"], check=True, env=env, capture_output=True, text=True)
+    subprocess.run([str(scripts_dir / "ninoctl"), "audit"], check=True, env=env, capture_output=True, text=True)
+    subprocess.run([str(scripts_dir / "ninoctl"), "server-audit"], check=True, env=env, capture_output=True, text=True)
+    subprocess.run([str(scripts_dir / "ninoctl"), "live-audit"], check=True, env=env, capture_output=True, text=True)
+
+    assert calls.read_text(encoding="utf-8").splitlines() == [
+        "nino-readiness ",
+        "nino-product-audit --skip-http --json",
+        "nino-product-audit --json",
+        "nino-product-audit --require-claude-live --json",
+    ]
+
+
 def test_install_local_copies_runtime_and_keeps_existing_data(tmp_path) -> None:
     install_dir = tmp_path / "installed"
     data_dir = install_dir / "data"

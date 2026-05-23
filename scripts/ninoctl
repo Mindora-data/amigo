@@ -41,6 +41,10 @@ Commands:
   agents      Request GET /agents.
   snapshot    Request GET /development/snapshot.
   doctor      Run health, agents, snapshot and nino LLM status checks.
+  readiness   Run tests, smoke and local product audit.
+  audit       Run local product audit without requiring a running server.
+  server-audit Run product audit against the configured local server.
+  live-audit  Run product audit requiring a live Claude key.
   logs        Show recent logs. Use: scripts/ninoctl logs -f
   backup      Create a timestamped SQLite backup.
   backups     List local SQLite backups.
@@ -260,6 +264,22 @@ doctor() {
   request "/agents/nino/llm/status" || true
 }
 
+readiness() {
+  "$ROOT_DIR/scripts/nino-readiness"
+}
+
+product_audit() {
+  "$ROOT_DIR/scripts/nino-product-audit" --skip-http --json
+}
+
+server_audit() {
+  "$ROOT_DIR/scripts/nino-product-audit" --json
+}
+
+live_audit() {
+  "$ROOT_DIR/scripts/nino-product-audit" --require-claude-live --json
+}
+
 command="${1:-}"
 shift || true
 
@@ -275,6 +295,10 @@ case "$command" in
   agents) request "/agents" ;;
   snapshot) request "/development/snapshot" ;;
   doctor) doctor ;;
+  readiness) readiness ;;
+  audit) product_audit ;;
+  server-audit) server_audit ;;
+  live-audit) live_audit ;;
   logs) logs "${1:-}" ;;
   backup) backup ;;
   backups) backups ;;
