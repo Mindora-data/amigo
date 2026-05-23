@@ -12,3 +12,4 @@ fi
 cd "$ROOT_DIR"
 PYTHONPATH=src "$PYTHON_BIN" -m pytest
 scripts/nino-smoke --json
+scripts/nino-product-audit --skip-http --json

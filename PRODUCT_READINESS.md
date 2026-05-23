@@ -8,20 +8,25 @@ Ejecutar:
 
 ```bash
 scripts/nino-readiness
-scripts/nino-product-audit --json
 ```
 
 Esta puerta corre:
 
 - `.venv/bin/python -m pytest`
 - `scripts/nino-smoke --json`
-- `scripts/nino-product-audit --json` para evidencias de runtime local
+- `scripts/nino-product-audit --skip-http --json` para evidencias locales sin depender de un servidor ya arrancado
 
 La prueba viva de Claude queda separada porque requiere red y una key real:
 
 ```bash
 scripts/nino-claude-live --require-key --json
 scripts/nino-product-audit --require-claude-live --json
+```
+
+Para auditar tambien el servidor persistente ya arrancado:
+
+```bash
+scripts/nino-product-audit --json
 ```
 
 ## Requisitos del producto

@@ -79,7 +79,6 @@ Run the full local readiness gate:
 
 ```bash
 scripts/nino-readiness
-scripts/nino-product-audit --json
 ```
 
 See `PRODUCT_READINESS.md` for the requirement-by-requirement product checklist.
