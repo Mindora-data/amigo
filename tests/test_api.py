@@ -68,6 +68,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/operations/claude/configure" in body
     assert b"/operations/claude/disable" in body
     assert b"Guardar Claude" in body
+    assert b"Cierre guiado" in body
+    assert b"guidedFinal" in body
+    assert b"waitForHealth" in body
     assert b"Desactivar Claude" in body
     assert b"claudeSecretMode" in body
     assert b"nino-anthropic" in body
@@ -90,6 +93,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/operations/logs" in body
     assert b"Logs" in body
     assert b"/operations/restart" in body
+    assert b"Guardar Claude, reiniciar el servicio" in body
     assert b"Reiniciar servicio" in body
     assert b"/operations/eval" in body
     assert b"Eval local" in body

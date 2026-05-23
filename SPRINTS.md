@@ -155,6 +155,7 @@ Hecho:
 - Acciones rapidas para consolidar, sonar, ciclo interno y scheduler. Hecho inicial: consolidar y operaciones internas via API/UI.
 - Respuestas naturales con Claude usando memoria local como contexto. Hecho inicial: adaptador opcional `NINO_LLM_PROVIDER=claude`.
 - Contexto mixto para Claude. Hecho inicial: ultimos turnos, memoria recuperada, hechos frios activos y redaccion de email/numeros largos.
+- Cierre guiado desde UI. Hecho inicial: el panel LLM puede guardar Claude, reiniciar el servicio persistente, esperar `/health` y ejecutar `Cierre final`.
 
 Criterios de salida:
 
@@ -247,11 +248,12 @@ Auditoria final de producto 100% local:
 25. Hecho inicial: resumen accionable de cierre en `/operations/audit` y `/app` con `final_readiness`, auditoria local, servicio persistente observado, bloqueos y siguientes comandos.
 26. Hecho inicial: evaluacion local de regresion accesible desde `/operations/eval` y boton `Eval local` en `/app`.
 27. Hecho inicial: preflight y cierre final accesibles desde API/UI con `GET /operations/final-preflight`, `POST /operations/final-audit`, botones `Preflight final` y `Cierre final`.
-28. Hecho inicial: configuracion y desactivacion de Claude desde API/UI/CLI con `POST /operations/claude/configure`, `POST /operations/claude/disable`, `scripts/ninoctl configure-claude`, `scripts/ninoctl disable-claude`, botones `Guardar Claude` y `Desactivar Claude`, sin devolver la key, con Keychain por defecto o `.env.local` con modo `600`.
+28. Hecho inicial: configuracion y desactivacion de Claude desde API/UI/CLI con `POST /operations/claude/configure`, `POST /operations/claude/disable`, `scripts/ninoctl configure-claude`, `scripts/ninoctl disable-claude`, botones `Guardar Claude`, `Cierre guiado` y `Desactivar Claude`, sin devolver la key, con Keychain por defecto o `.env.local` con modo `600`.
 29. Hecho inicial: reinicio del servicio persistente desde API/UI con `POST /operations/restart` y boton `Reiniciar servicio`, usando `launchd KeepAlive`.
 30. Hecho inicial: evaluacion local de regresion tambien disponible por CLI con `scripts/ninoctl eval` y console script `nino-eval`.
 31. Hecho inicial: estado final resumido con `scripts/ninoctl product-status` y console script `nino-status`.
 32. Hecho inicial: cierre final guiado con `scripts/ninoctl finish --key-stdin`, Keychain por defecto y modo `--preflight-only`.
-33. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl final-audit` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
+33. Hecho inicial: cierre guiado desde UI con configuracion Claude, reinicio persistente, espera de salud y cierre final.
+34. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

@@ -318,6 +318,9 @@ APP_HTML = """<!doctype html>
           <button id="llmProbe" class="secondary">Probar Claude</button>
         </div>
         <div class="row">
+          <button id="guidedFinal" class="danger">Cierre guiado</button>
+        </div>
+        <div class="row">
           <button id="disableClaude" class="danger">Desactivar Claude</button>
         </div>
         <div class="output"><pre id="llm">{}</pre></div>
@@ -403,6 +406,7 @@ APP_HTML = """<!doctype html>
     const status = (text) => { $("status").textContent = text; };
     const fmt = (value) => Number.isFinite(Number(value)) ? Number(value).toFixed(3).replace(/0+$/, "").replace(/[.]$/, "") : "0";
     const clearList = (target) => { target.textContent = ""; };
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const downloadJson = (filename, value) => {
       const blob = new Blob([JSON.stringify(value, null, 2)], {type: "application/json"});
       const url = URL.createObjectURL(blob);
@@ -452,6 +456,16 @@ APP_HTML = """<!doctype html>
         addEntry(`${role} · ${turn.intent}`, turn.text);
       });
       return out;
+    }
+    async function waitForHealth() {
+      for (let attempt = 0; attempt < 15; attempt += 1) {
+        try {
+          const res = await fetch("/health", {cache: "no-store"});
+          if (res.ok) return true;
+        } catch (_err) {}
+        await sleep(1000);
+      }
+      return false;
     }
     async function refreshState() {
       const [profile, metrics] = await Promise.all([
@@ -847,13 +861,15 @@ APP_HTML = """<!doctype html>
       }
       print($("llm"), out);
     };
-    $("saveClaude").onclick = async () => {
+    async function configureClaudeFromForm() {
       const apiKey = $("claudeKey").value.trim();
       const model = $("claudeModel").value.trim() || "claude-sonnet-4-5";
       const mode = $("claudeSecretMode").value;
       const keychainService = $("claudeKeychainService").value.trim() || "nino-anthropic";
-      if (!apiKey) return status("Pega una ANTHROPIC_API_KEY para configurar Claude.");
-      if (!confirm(mode === "keychain" ? "Guardar Claude en macOS Keychain y referencia en .env.local?" : "Guardar Claude en .env.local con permisos locales 600?")) return;
+      if (!apiKey) {
+        status("Pega una ANTHROPIC_API_KEY para configurar Claude.");
+        return null;
+      }
       const out = await api("/operations/claude/configure", {
         method: "POST",
         body: JSON.stringify({api_key: apiKey, model, use_keychain: mode === "keychain", keychain_service: keychainService})
@@ -861,8 +877,33 @@ APP_HTML = """<!doctype html>
       $("claudeKey").value = "";
       $("llmSummary").textContent = describeClaudeConfig(out.claude || out);
       print($("llm"), out);
+      return out;
+    }
+    $("saveClaude").onclick = async () => {
+      const mode = $("claudeSecretMode").value;
+      if (!confirm(mode === "keychain" ? "Guardar Claude en macOS Keychain y referencia en .env.local?" : "Guardar Claude en .env.local con permisos locales 600?")) return;
+      const out = await configureClaudeFromForm();
+      if (!out) return;
       status(out.ok ? "Claude configurado. Reinicia launchd para persistencia completa." : `Claude no configurado: ${out.error || "error"}`);
       await loadLLMStatus();
+    };
+    $("guidedFinal").onclick = async () => {
+      const mode = $("claudeSecretMode").value;
+      if (!confirm(mode === "keychain" ? "Guardar Claude, reiniciar el servicio y ejecutar cierre final con llamada real a Claude?" : "Guardar Claude en .env.local, reiniciar el servicio y ejecutar cierre final con llamada real a Claude?")) return;
+      const configured = await configureClaudeFromForm();
+      if (!configured?.ok) return status(`Claude no configurado: ${configured?.error || "error"}`);
+      status("Claude configurado. Reiniciando servicio...");
+      const restarted = await api("/operations/restart", {method: "POST", body: JSON.stringify({confirm: true})});
+      print($("backupsOut"), restarted);
+      if (!restarted.ok) return status(`Reinicio no programado: ${restarted.error || "bloqueado"}`);
+      status("Esperando al servicio para cierre final...");
+      const healthy = await waitForHealth();
+      if (!healthy) return status("Servicio no respondió tras el reinicio.");
+      await loadLLMStatus();
+      const out = await api("/operations/final-audit", {method: "POST", body: "{}"});
+      print($("backupsOut"), out);
+      renderFinalReadiness(out);
+      status(out.ok ? "Cierre guiado OK" : "Cierre guiado con bloqueos");
     };
     $("disableClaude").onclick = async () => {
       const removeKeychain = $("claudeSecretMode").value === "keychain";

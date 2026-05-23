@@ -168,6 +168,8 @@ By default it stores the secret in macOS Keychain and writes only
 as an explicit option. The API never returns the key and the response recommends
 restarting launchd so the persistent service reloads the file from a clean
 process.
+`Cierre guiado` uses the same panel to save Claude, restart the persistent
+service, wait for `/health` and run the final audit.
 The same panel includes `Desactivar Claude`, backed by
 `POST /operations/claude/disable`, to remove Claude settings from `.env.local`,
 disable the runtime client immediately, and optionally delete the configured
