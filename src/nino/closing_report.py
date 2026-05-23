@@ -62,6 +62,8 @@ def build_closing_report(root: str | Path = ".", report_path: str | Path | None 
             "completion_audit_ok": bool(completion_audit.get("ok")),
             "blockers": [item.get("id") or item.get("name") for item in completion_audit.get("blockers", [])],
             "next_commands": completion_audit.get("next_commands", []),
+            "recommended_next_action": completion_audit.get("recommended_next_action")
+            or product_status.get("recommended_next_action"),
         },
         "nino_profile": nino_profile,
         "product_status": product_status,

@@ -215,6 +215,7 @@ Hecho:
 - Requisito explicito de evidencia de cierre. Hecho inicial: `completion-audit` incluye `closing_evidence` cubierto por smoke y API.
 - Informe de cierre local. Hecho inicial: `scripts/ninoctl closing-report` y `nino-closing-report` escriben JSON de evidencias en `data/reports/`.
 - Informe de cierre autocontenido. Hecho inicial: cada JSON incluye `report_file` con su nombre y ruta.
+- Informe de cierre accionable. Hecho inicial: cada JSON incluye `summary.recommended_next_action`.
 - Lectura de informes desde CLI. Hecho inicial: `scripts/ninoctl reports` lista informes y `scripts/ninoctl report <name>` imprime un informe validando el nombre.
 - Ultimo informe desde CLI. Hecho inicial: `scripts/ninoctl report latest` imprime el informe mas reciente.
 - Informe de cierre desde API/UI. Hecho inicial: `POST /operations/closing-report` y boton `Informe cierre`.
@@ -283,6 +284,7 @@ Auditoria final de producto 100% local:
 31b2. Hecho inicial: requisito `closing_evidence` en auditoria de terminacion para comprobar informes de cierre.
 31c. Hecho inicial: informe de cierre local con `scripts/ninoctl closing-report` y `nino-closing-report`.
 31c4. Hecho inicial: cada informe de cierre incluye `report_file` para identificarse sin depender del listado externo.
+31c5. Hecho inicial: cada informe de cierre incluye `summary.recommended_next_action` para saber el siguiente paso desde el propio archivo.
 31c2. Hecho inicial: lectura de informes desde CLI con `scripts/ninoctl reports` y `scripts/ninoctl report <name>`.
 31c3. Hecho inicial: lectura del ultimo informe desde CLI con `scripts/ninoctl report latest`.
 31d. Hecho inicial: informe de cierre desde API/UI con `POST /operations/closing-report` y boton `Informe cierre`.

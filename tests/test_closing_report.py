@@ -17,6 +17,7 @@ def test_closing_report_writes_summary(monkeypatch, tmp_path, capsys) -> None:
             "ok": False,
             "blockers": [{"id": "claude_live"}],
             "next_commands": ["scripts/ninoctl finish --key-stdin"],
+            "recommended_next_action": "scripts/ninoctl finish --key-stdin",
         },
     )
     monkeypatch.setattr("nino.closing_report._run_json", lambda command, root: {"ok": True, "profile": {"agent_id": "nino"}})
@@ -27,6 +28,7 @@ def test_closing_report_writes_summary(monkeypatch, tmp_path, capsys) -> None:
 
     assert payload["summary"]["ok"] is False
     assert payload["summary"]["blockers"] == ["claude_live"]
+    assert payload["summary"]["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
     assert payload["nino_profile"]["profile"]["agent_id"] == "nino"
     assert payload["report_file"]["path"] == str(path)
     assert payload["report_file"]["name"] == "report.json"

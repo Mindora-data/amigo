@@ -93,7 +93,8 @@ Tambien marca si el ultimo informe corresponde a la revision actual e incluye
 desde el proceso servido.
 `scripts/ninoctl closing-report` guarda una evidencia local versionable fuera de
 Git con estado git, perfil de `nino`, estado final y auditoria de terminacion.
-Cada JSON incluye `report_file` con su propio nombre y ruta local.
+Cada JSON incluye `report_file` con su propio nombre/ruta local y
+`recommended_next_action`.
 `scripts/ninoctl reports`, `scripts/ninoctl report <name>` y `scripts/ninoctl
 report latest` listan y leen esos informes desde terminal validando el nombre
 local.
