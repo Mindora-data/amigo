@@ -361,6 +361,7 @@ APP_HTML = """<!doctype html>
         </div>
         <div class="row">
           <button id="closingReport" class="secondary">Informe cierre</button>
+          <button id="reports" class="secondary">Ver informes</button>
         </div>
         <div class="row">
           <button id="evalProduct" class="secondary">Eval local</button>
@@ -597,6 +598,18 @@ APP_HTML = """<!doctype html>
         item.appendChild(command);
       });
     }
+    function renderReports(out) {
+      const target = $("backupList");
+      clearList(target);
+      if (!out.reports?.length) {
+        addListItem(target, "Sin informes", out.report_dir || "");
+        return;
+      }
+      out.reports.forEach((report) => {
+        const size = report.size_bytes ? `${report.size_bytes} bytes` : "sin tamaño";
+        addListItem(target, report.name || report.path, `${size} · ${report.modified_at || ""}`);
+      });
+    }
     $("send").onclick = async () => {
       const payload = {intent: $("intent").value || "chat", text: $("text").value, salience: 0.7, confidence: 0.9};
       if (!payload.text.trim()) return;
@@ -724,7 +737,15 @@ APP_HTML = """<!doctype html>
       print($("backupsOut"), out);
       renderCompletionAudit(out.report?.completion_audit || out);
       status(out.ok ? `Informe de cierre creado: ${out.path}` : "Informe de cierre fallido");
+      await loadReports();
     };
+    async function loadReports() {
+      const out = await api("/operations/reports");
+      renderReports(out);
+      print($("backupsOut"), out);
+      return out;
+    };
+    $("reports").onclick = loadReports;
     $("evalProduct").onclick = async () => {
       const out = await api("/operations/eval");
       print($("backupsOut"), out);
@@ -1027,6 +1048,7 @@ API_ENDPOINTS = [
     "GET /operations/product-status",
     "GET /operations/completion-audit",
     "POST /operations/closing-report",
+    "GET /operations/reports",
     "GET /operations/eval",
     "GET /operations/final-preflight",
     "POST /operations/final-audit",
@@ -1268,6 +1290,25 @@ class NinoService:
                 }
             )
         return {"ok": True, "backup_dir": str(backup_dir), "backups": backups}
+
+    def list_reports(self) -> dict[str, Any]:
+        if self.db_path is None:
+            return {"ok": False, "error": "db_path_unavailable", "reports": []}
+        report_dir = self.db_path.parent / "reports"
+        if not report_dir.exists():
+            return {"ok": True, "report_dir": str(report_dir), "reports": []}
+        reports = []
+        for path in sorted(report_dir.glob("nino-closing-*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+            stat = path.stat()
+            reports.append(
+                {
+                    "path": str(path),
+                    "name": path.name,
+                    "size_bytes": stat.st_size,
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                }
+            )
+        return {"ok": True, "report_dir": str(report_dir), "reports": reports}
 
     def logs(self, *, limit: int = 80) -> dict[str, Any]:
         if self.db_path is None:
@@ -2095,6 +2136,8 @@ class NinoHttpApp:
             return "200 OK", self.service.completion_audit()
         if method == "POST" and path == "/operations/closing-report":
             return "200 OK", self.service.closing_report()
+        if method == "GET" and path == "/operations/reports":
+            return "200 OK", self.service.list_reports()
         if method == "GET" and path == "/operations/eval":
             return "200 OK", self.service.product_eval()
         if method == "GET" and path == "/operations/final-preflight":

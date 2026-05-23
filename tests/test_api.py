@@ -133,6 +133,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/operations/closing-report" in body
     assert b"Informe cierre" in body
     assert b"closingReport" in body
+    assert b"/operations/reports" in body
+    assert b"Ver informes" in body
+    assert b"renderReports" in body
     assert b"renderCompletionAudit" in body
     assert b"Auditor" in body
 
@@ -156,6 +159,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     product_status = _request(app, "GET", "/operations/product-status")
     completion_audit = _request(app, "GET", "/operations/completion-audit")
     closing_report = _request(app, "POST", "/operations/closing-report", {})
+    reports = _request(app, "GET", "/operations/reports")
     product_eval = _request(app, "GET", "/operations/eval")
     final_preflight = _request(app, "GET", "/operations/final-preflight")
     final_audit = _request(app, "POST", "/operations/final-audit", {})
@@ -199,6 +203,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /operations/product-status" in root["endpoints"]
     assert "GET /operations/completion-audit" in root["endpoints"]
     assert "POST /operations/closing-report" in root["endpoints"]
+    assert "GET /operations/reports" in root["endpoints"]
     assert "GET /operations/eval" in root["endpoints"]
     assert "GET /operations/final-preflight" in root["endpoints"]
     assert "POST /operations/final-audit" in root["endpoints"]
@@ -218,6 +223,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "/operations/completion-audit" in openapi["paths"]
     assert "/operations/closing-report" in openapi["paths"]
     assert "post" in openapi["paths"]["/operations/closing-report"]
+    assert "/operations/reports" in openapi["paths"]
     assert "/operations/eval" in openapi["paths"]
     assert "/operations/final-preflight" in openapi["paths"]
     assert "/operations/final-audit" in openapi["paths"]
@@ -290,6 +296,11 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert closing_report["report"]["summary"]["completion_audit_ok"] is False
     assert closing_report["report"]["product_status"]["eval_ok"] is True
     assert closing_report["report"]["nino_profile"]["profile"]["agent_id"] == "nino"
+    assert reports["ok"] is True
+    assert reports["report_dir"] == str(tmp_path / "reports")
+    assert reports["reports"][0]["path"] == closing_report["path"]
+    assert reports["reports"][0]["name"].startswith("nino-closing-")
+    assert reports["reports"][0]["size_bytes"] > 0
     assert product_eval["ok"] is True
     assert product_eval["path"] == "eval"
     assert product_eval["case_count"] >= 1
