@@ -67,6 +67,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/llm/probe" in body
     assert b"llmSetup" in body
     assert b"ninoctl configure-claude" in body
+    assert b"describeClaudeConfig" in body
+    assert b"config_errors" in body
+    assert b"Corrige los valores indicados" in body
     assert b"Marcar entregado" in body
     assert b"clear-delivered" in body
     assert b"/operations/backup" in body

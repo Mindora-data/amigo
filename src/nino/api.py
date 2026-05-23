@@ -427,6 +427,16 @@ APP_HTML = """<!doctype html>
       print($("llm"), out);
       return out;
     }
+    function describeClaudeConfig(out) {
+      const errors = out.config_errors || [];
+      if (errors.length) {
+        const names = errors.map(error => `${error.name}: ${error.error}`).join(", ");
+        return `Configuración Claude inválida · ${names}`;
+      }
+      if (out.configured) return "Claude configurado en runtime.";
+      const missing = out.missing?.length ? ` · falta: ${out.missing.join(", ")}` : "";
+      return `Claude no configurado${missing}`;
+    }
     $("send").onclick = async () => {
       const payload = {intent: $("intent").value || "chat", text: $("text").value, salience: 0.7, confidence: 0.9};
       if (!payload.text.trim()) return;
@@ -643,8 +653,11 @@ APP_HTML = """<!doctype html>
     $("qualityHistory").onclick = async () => print($("memory"), await api(agentPath("/eval/conversation/history")));
     $("claudeConfig").onclick = async () => {
       const out = await api("/operations/claude");
+      $("llmSummary").textContent = describeClaudeConfig(out);
       if (out.configured) {
         $("llmSetup").textContent = "Claude configurado en runtime.";
+      } else if (out.config_errors?.length) {
+        $("llmSetup").textContent = "Corrige los valores indicados y reinicia el servicio antes de probar Claude.";
       } else {
         $("llmSetup").textContent = `Configurar: ${out.setup_commands?.join(" && ") || "scripts/ninoctl configure-claude"}`;
       }
