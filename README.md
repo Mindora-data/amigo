@@ -331,6 +331,7 @@ curl -X POST http://127.0.0.1:8000/agents/demo/internal/cycle \
 Run deterministic local regression evaluations:
 
 ```bash
+scripts/ninoctl eval --json
 curl http://127.0.0.1:8000/operations/eval
 ```
 

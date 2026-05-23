@@ -171,7 +171,7 @@ Objetivo: medir si NIÑO mejora como sistema de memoria y continuidad.
 
 Hecho:
 
-- Evaluaciones repetibles de continuidad conversacional. Hecho inicial: `nino.eval_runner`, `GET /operations/eval` y boton `Eval local` en `/app`.
+- Evaluaciones repetibles de continuidad conversacional. Hecho inicial: `nino.eval_runner`, `scripts/ninoctl eval`, `nino-eval`, `GET /operations/eval` y boton `Eval local` en `/app`.
 - Dataset local de conversaciones de prueba. Hecho inicial: `eval/memory_regression.json`.
 - Pruebas de regresion para memoria realista. Hecho inicial: tests del eval runner.
 - Smoke test local de producto. Hecho inicial: `scripts/nino-smoke` valida UI servida, memoria, permisos, tareas, inbox, export seguro y backup con SQLite temporal.
@@ -247,6 +247,7 @@ Auditoria final de producto 100% local:
 27. Hecho inicial: preflight y cierre final accesibles desde API/UI con `GET /operations/final-preflight`, `POST /operations/final-audit`, botones `Preflight final` y `Cierre final`.
 28. Hecho inicial: configuracion y desactivacion de Claude desde API/UI/CLI con `POST /operations/claude/configure`, `POST /operations/claude/disable`, `scripts/ninoctl configure-claude`, `scripts/ninoctl disable-claude`, botones `Guardar Claude` y `Desactivar Claude`, sin devolver la key, con Keychain por defecto o `.env.local` con modo `600`.
 29. Hecho inicial: reinicio del servicio persistente desde API/UI con `POST /operations/restart` y boton `Reiniciar servicio`, usando `launchd KeepAlive`.
-30. Siguiente: ejecutar `scripts/ninoctl final-audit` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
+30. Hecho inicial: evaluacion local de regresion tambien disponible por CLI con `scripts/ninoctl eval` y console script `nino-eval`.
+31. Siguiente: ejecutar `scripts/ninoctl final-audit` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

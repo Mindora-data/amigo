@@ -55,9 +55,9 @@ scripts/ninoctl persistent-audit
 | Proactividad limitada | consentimiento, intervalo minimo, maximo diario y ventanas horarias | Cumplido |
 | Backups | `scripts/ninoctl backup`, `scripts/ninoctl backups`, `scripts/ninoctl restore`, `/operations/backup`, `/operations/backups`, lista UI con comando exacto de restore, smoke `sqlite_backup` y `sqlite_backup_list` | Cumplido |
 | Operacion local | `scripts/ninoctl`, `scripts/nino-install-local`, `scripts/nino-launchd`, `scripts/nino-launchd doctor`, `scripts/ninoctl persistent-audit`, `GET /operations/logs`, `POST /operations/restart`, panel Logs y reinicio en UI, `nino-server`, `nino-smoke` | Cumplido |
-| Empaquetado local | `pyproject.toml`, console scripts `nino-server` y `nino-smoke` | Cumplido |
+| Empaquetado local | `pyproject.toml`, console scripts `nino-server`, `nino-smoke`, `nino-eval` | Cumplido |
 | Contrato API | `GET /openapi.json`, `openapi/README.md`, tests de alineacion con `GET /` | Cumplido |
-| Regresion objetiva | `eval/memory_regression.json`, `nino.eval_runner`, `GET /operations/eval`, boton `Eval local` en `/app`, pytest | Cumplido |
+| Regresion objetiva | `eval/memory_regression.json`, `nino.eval_runner`, `scripts/ninoctl eval`, `nino-eval`, `GET /operations/eval`, boton `Eval local` en `/app`, pytest | Cumplido |
 | Auditoria final repetible | `GET /operations/audit`, `GET /operations/final-preflight`, `POST /operations/final-audit`, `scripts/nino-product-audit --json`; `--require-launchd` para exigir servicio persistente; `--require-claude-config` para preflight sin llamada viva; `--require-claude-live` para cerrar Claude real | Cumplido local; Claude vivo requiere key real |
 
 La auditoria estricta de cierre es:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 from typing import Any
@@ -83,3 +84,27 @@ def run_eval_dir(path: str | Path) -> dict[str, Any]:
         "case_count": len(results),
         "results": results,
     }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run deterministic NIÑO local regression evaluations.")
+    parser.add_argument("path", nargs="?", default="eval", help="Evaluation JSON file or directory. Defaults to eval.")
+    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    args = parser.parse_args(argv)
+
+    path = Path(args.path)
+    result = run_eval_case(path) if path.is_file() else {"path": str(path), **run_eval_dir(path)}
+    if args.json:
+        print(json.dumps(result, indent=2))
+    else:
+        status = "ok" if result["ok"] else "failed"
+        print(f"eval: {status}")
+        print(f"case_count: {result.get('case_count', 1)}")
+        for item in result.get("results", [result]):
+            marker = "ok" if item["ok"] else "failed"
+            print(f"{marker}: {item['name']}")
+    return 0 if result["ok"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -10,4 +10,4 @@ else
 fi
 
 cd "$ROOT_DIR"
-PYTHONPATH=src "$PYTHON_BIN" -m nino.smoke "$@"
+PYTHONPATH=src "$PYTHON_BIN" -m nino.eval_runner "$@"

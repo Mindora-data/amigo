@@ -156,7 +156,7 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     (scripts_dir / "ninoctl").write_text(ninoctl, encoding="utf-8")
     (scripts_dir / "ninoctl").chmod(0o755)
     calls = tmp_path / "calls.log"
-    for name in ("nino-readiness", "nino-product-audit", "nino-configure-claude", "nino-disable-claude"):
+    for name in ("nino-readiness", "nino-product-audit", "nino-configure-claude", "nino-disable-claude", "nino-eval"):
         path = scripts_dir / name
         path.write_text(
             "#!/usr/bin/env bash\n"
@@ -192,6 +192,13 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         capture_output=True,
         text=True,
     )
+    subprocess.run(
+        [str(scripts_dir / "ninoctl"), "eval", "--json"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
 
     assert calls.read_text(encoding="utf-8").splitlines() == [
         "nino-readiness ",
@@ -203,6 +210,7 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-product-audit --require-launchd --require-claude-config --require-claude-live --json",
         "nino-configure-claude --key-stdin --model claude-test",
         "nino-disable-claude --remove-keychain",
+        "nino-eval --json",
     ]
 
 
@@ -384,3 +392,10 @@ def test_disable_claude_can_remove_keychain_service(tmp_path) -> None:
     assert "delete-generic-password" in args_file.read_text(encoding="utf-8")
     assert "nino-test" in args_file.read_text(encoding="utf-8")
     assert "nino-test" in result.stdout
+
+
+def test_runtime_scripts_fall_back_to_system_python() -> None:
+    for script in ("scripts/nino-smoke", "scripts/nino-eval"):
+        content = Path(script).read_text(encoding="utf-8")
+        assert 'DEFAULT_PYTHON="$ROOT_DIR/.venv/bin/python"' in content
+        assert "command -v python3" in content
