@@ -195,7 +195,7 @@ Objetivo: preparar integraciones externas sin perder control ni seguridad.
 Hecho:
 
 - Adaptador LLM configurable. Hecho inicial: `NINO_LLM_PROVIDER`.
-- Adaptador Claude via Anthropic Messages API. Hecho inicial en Sprint 6 por necesidad de conversacion real; diagnostico local con `GET /operations/claude`, panel LLM, `scripts/ninoctl claude` y configuracion persistente segura con `scripts/nino-configure-claude`, `.env.local` o macOS Keychain.
+- Adaptador Claude via Anthropic Messages API. Hecho inicial en Sprint 6 por necesidad de conversacion real; diagnostico local con `GET /operations/claude`, panel LLM, `scripts/ninoctl claude` y configuracion persistente segura con `scripts/ninoctl configure-claude`, `scripts/nino-configure-claude`, `.env.local` o macOS Keychain.
 - Prueba viva opcional de Claude. Hecho inicial: `scripts/nino-claude-live --require-key --json`.
 - Politicas de herramienta/accion externa. Hecho inicial: permisos por tipo de accion, bloqueo por defecto y auditoria.
 - Cola de tareas autonomas con limites. Hecho inicial: cola persistente por agente con limite de pendientes, bloqueo por permisos, ejecucion manual y panel en `/app`.
@@ -231,7 +231,7 @@ Auditoria final de producto 100% local:
 14. Hecho inicial: diagnostico de Claude sin llamada externa mediante `/operations/claude`.
 15. Hecho inicial: puerta local de producto con `scripts/nino-smoke`.
 16. Hecho inicial: checklist de producto en `PRODUCT_READINESS.md` y puerta `scripts/nino-readiness` accesible tambien con `scripts/ninoctl readiness`.
-17. Hecho inicial: plantilla `.env.example`, configurador `scripts/nino-configure-claude` y carga automatica de `.env.local` para Claude local.
+17. Hecho inicial: plantilla `.env.example`, configuradores `scripts/ninoctl configure-claude` y `scripts/nino-configure-claude`, y carga automatica de `.env.local` para Claude local.
 18. Hecho inicial: launchd carga `.env.local` en runtime sin incrustar `ANTHROPIC_API_KEY` en el plist, diagnostica bloqueos de permisos macOS y puede instalarse desde una copia local no protegida.
 19. Hecho inicial: prueba viva opcional de Claude con `scripts/nino-claude-live`.
 20. Hecho inicial: contrato OpenAPI local con `/openapi.json`.

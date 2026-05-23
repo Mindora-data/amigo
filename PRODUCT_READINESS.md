@@ -46,7 +46,7 @@ scripts/ninoctl persistent-audit
 | Runtime persistente local | SQLite via `data/nino.db`; `/operations/mode` reporta `sqlite` | Cumplido |
 | UI operativa | `/app` cubierta por tests y smoke `browser_app` | Cumplido |
 | Memoria conversacional | `conversation_history`, `memory_search`, tests de retrieval y persistencia | Cumplido |
-| Claude opcional | `scripts/nino-configure-claude`, `.env.local` o macOS Keychain, `NINO_LLM_PROVIDER=claude`, `/operations/claude`, panel LLM, `/llm/probe` | Implementado; prueba viva requiere key real |
+| Claude opcional | `scripts/ninoctl configure-claude`, `scripts/nino-configure-claude`, `.env.local` o macOS Keychain, `NINO_LLM_PROVIDER=claude`, `/operations/claude`, panel LLM, `/llm/probe` | Implementado; prueba viva requiere key real |
 | Local-first offline | `/operations/mode`, smoke `local_first_mode`, core sin red | Cumplido |
 | Controles de seguridad | permisos por accion, bloqueo por defecto, export seguro, audit log | Cumplido |
 | Tareas autonomas controladas | smoke `task_enqueue`, `task_run`, `proactive_inbox` | Cumplido |
@@ -82,7 +82,7 @@ scripts/nino-claude-live --require-key --json
 No se debe commitear `ANTHROPIC_API_KEY`.
 
 Para uso diario, guardar esos valores en `.env.local` a partir de `.env.example`.
-`scripts/nino-configure-claude` escribe `.env.local` con permisos `600` sin
+`scripts/ninoctl configure-claude` y `scripts/nino-configure-claude` escriben `.env.local` con permisos `600` sin
 imprimir la key. Con `--keychain-service`, guarda el secreto en macOS Keychain
 y `.env.local` solo contiene `NINO_KEYCHAIN_SERVICE`. `scripts/ninoctl` y
 `scripts/nino-launchd` cargan `.env.local` automaticamente, y `.env.local` esta ignorado por Git.

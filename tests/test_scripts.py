@@ -156,7 +156,7 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     (scripts_dir / "ninoctl").write_text(ninoctl, encoding="utf-8")
     (scripts_dir / "ninoctl").chmod(0o755)
     calls = tmp_path / "calls.log"
-    for name in ("nino-readiness", "nino-product-audit"):
+    for name in ("nino-readiness", "nino-product-audit", "nino-configure-claude"):
         path = scripts_dir / name
         path.write_text(
             "#!/usr/bin/env bash\n"
@@ -175,6 +175,14 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     subprocess.run([str(scripts_dir / "ninoctl"), "server-audit"], check=True, env=env, capture_output=True, text=True)
     subprocess.run([str(scripts_dir / "ninoctl"), "persistent-audit"], check=True, env=env, capture_output=True, text=True)
     subprocess.run([str(scripts_dir / "ninoctl"), "live-audit"], check=True, env=env, capture_output=True, text=True)
+    subprocess.run(
+        [str(scripts_dir / "ninoctl"), "configure-claude", "--key-stdin", "--model", "claude-test"],
+        check=True,
+        env=env,
+        input="secret\n",
+        capture_output=True,
+        text=True,
+    )
 
     assert calls.read_text(encoding="utf-8").splitlines() == [
         "nino-readiness ",
@@ -182,6 +190,7 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-product-audit --json",
         "nino-product-audit --require-launchd --json",
         "nino-product-audit --require-claude-live --json",
+        "nino-configure-claude --key-stdin --model claude-test",
     ]
 
 

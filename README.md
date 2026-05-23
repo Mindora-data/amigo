@@ -33,6 +33,7 @@ scripts/ninoctl status
 scripts/ninoctl health
 scripts/ninoctl mode
 scripts/ninoctl claude
+scripts/ninoctl configure-claude
 scripts/ninoctl snapshot
 scripts/ninoctl agents
 scripts/ninoctl doctor
@@ -136,6 +137,7 @@ responses while keeping NIÑO memory and state local, set:
 
 ```bash
 scripts/nino-configure-claude
+scripts/ninoctl configure-claude
 ```
 
 For a non-interactive setup:
@@ -143,6 +145,7 @@ For a non-interactive setup:
 ```bash
 printf '%s' "$ANTHROPIC_API_KEY" | scripts/nino-configure-claude --key-stdin
 printf '%s' "$ANTHROPIC_API_KEY" | scripts/nino-configure-claude --key-stdin --keychain-service nino-anthropic
+printf '%s' "$ANTHROPIC_API_KEY" | scripts/ninoctl configure-claude --key-stdin --keychain-service nino-anthropic
 ```
 
 The script writes `.env.local` with file mode `600`, preserves unrelated local
@@ -165,7 +168,7 @@ restart launchd:
 
 ```bash
 cd ~/Developer/bebe
-scripts/nino-configure-claude
+scripts/ninoctl configure-claude
 scripts/nino-launchd stop
 scripts/nino-launchd start
 ```

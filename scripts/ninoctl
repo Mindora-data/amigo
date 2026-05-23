@@ -38,6 +38,7 @@ Commands:
   deep-health Request GET /health/deep.
   mode        Request GET /operations/mode.
   claude      Show Claude configuration status without sending a prompt.
+  configure-claude Configure Claude in .env.local or macOS Keychain.
   agents      Request GET /agents.
   snapshot    Request GET /development/snapshot.
   doctor      Run health, agents, snapshot and nino LLM status checks.
@@ -185,6 +186,10 @@ request() {
   echo
 }
 
+configure_claude() {
+  "$ROOT_DIR/scripts/nino-configure-claude" "$@"
+}
+
 logs() {
   ensure_dirs
   touch "$LOG_FILE"
@@ -297,6 +302,7 @@ case "$command" in
   deep-health) request "/health/deep" ;;
   mode) request "/operations/mode" ;;
   claude) request "/operations/claude" ;;
+  configure-claude) configure_claude "$@" ;;
   agents) request "/agents" ;;
   snapshot) request "/development/snapshot" ;;
   doctor) doctor ;;
