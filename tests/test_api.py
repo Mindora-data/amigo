@@ -66,7 +66,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/llm/status" in body
     assert b"/llm/probe" in body
     assert b"llmSetup" in body
-    assert b"nino-configure-claude" in body
+    assert b"ninoctl configure-claude" in body
     assert b"Marcar entregado" in body
     assert b"clear-delivered" in body
     assert b"/operations/backup" in body
@@ -154,7 +154,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert claude["api_key_source"] is None
     assert claude["keychain_service"] is None
     assert "NINO_LLM_PROVIDER" in claude["missing"]
-    assert "scripts/nino-configure-claude --keychain-service nino-anthropic" in claude["setup_commands"]
+    assert "scripts/ninoctl configure-claude --keychain-service nino-anthropic" in claude["setup_commands"]
+    assert "scripts/ninoctl live-audit" in claude["setup_commands"]
     assert "ANTHROPIC_API_KEY" not in json.dumps(claude["setup_commands"])
     assert product_audit["ok"] is True
     assert {check["name"] for check in product_audit["checks"]} >= {

@@ -646,7 +646,7 @@ APP_HTML = """<!doctype html>
       if (out.configured) {
         $("llmSetup").textContent = "Claude configurado en runtime.";
       } else {
-        $("llmSetup").textContent = `Configurar: ${out.setup_commands?.join(" && ") || "scripts/nino-configure-claude"}`;
+        $("llmSetup").textContent = `Configurar: ${out.setup_commands?.join(" && ") || "scripts/ninoctl configure-claude"}`;
       }
       print($("llm"), out);
     };
@@ -944,10 +944,10 @@ class NinoService:
             "probe_endpoint": "/agents/{agent_id}/llm/probe",
             "setup_commands": [
                 "cd ~/Developer/bebe",
-                "scripts/nino-configure-claude --keychain-service nino-anthropic",
+                "scripts/ninoctl configure-claude --keychain-service nino-anthropic",
                 "scripts/nino-launchd stop",
                 "scripts/nino-launchd start",
-                "scripts/nino-product-audit --require-claude-live --json",
+                "scripts/ninoctl live-audit",
             ],
             "notes": [
                 "Con --keychain-service, .env.local guarda solo NINO_KEYCHAIN_SERVICE.",

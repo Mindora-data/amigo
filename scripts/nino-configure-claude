@@ -18,10 +18,10 @@ passing secrets as command-line arguments. With --keychain-service, the key is
 stored in macOS Keychain and .env.local stores only the service name.
 
 Examples:
-  scripts/nino-configure-claude
-  printf '%s' "\$ANTHROPIC_API_KEY" | scripts/nino-configure-claude --key-stdin
-  printf '%s' "\$ANTHROPIC_API_KEY" | scripts/nino-configure-claude --key-stdin --keychain-service nino-anthropic
-  scripts/nino-configure-claude --model claude-sonnet-4-5
+  scripts/ninoctl configure-claude
+  printf '%s' "\$ANTHROPIC_API_KEY" | scripts/ninoctl configure-claude --key-stdin
+  printf '%s' "\$ANTHROPIC_API_KEY" | scripts/ninoctl configure-claude --key-stdin --keychain-service nino-anthropic
+  scripts/ninoctl configure-claude --model claude-sonnet-4-5
 EOF
 }
 
