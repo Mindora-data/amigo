@@ -242,6 +242,7 @@ GET  /development/snapshot
 GET  /operations/mode
 GET  /operations/claude
 GET  /operations/audit
+GET  /operations/eval
 GET  /operations/backups
 GET  /operations/logs
 POST /operations/backup
@@ -303,6 +304,13 @@ curl -X POST http://127.0.0.1:8000/agents/demo/internal/cycle \
 ## Evaluations
 
 Run deterministic local regression evaluations:
+
+```bash
+curl http://127.0.0.1:8000/operations/eval
+```
+
+The same check is available from the `/app` operation panel as `Eval local`.
+For direct module use:
 
 ```bash
 PYTHONPATH=src .venv/bin/python - <<'PY'

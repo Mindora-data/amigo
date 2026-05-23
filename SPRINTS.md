@@ -171,7 +171,7 @@ Objetivo: medir si NIÑO mejora como sistema de memoria y continuidad.
 
 Hecho:
 
-- Evaluaciones repetibles de continuidad conversacional. Hecho inicial: `nino.eval_runner`.
+- Evaluaciones repetibles de continuidad conversacional. Hecho inicial: `nino.eval_runner`, `GET /operations/eval` y boton `Eval local` en `/app`.
 - Dataset local de conversaciones de prueba. Hecho inicial: `eval/memory_regression.json`.
 - Pruebas de regresion para memoria realista. Hecho inicial: tests del eval runner.
 - Smoke test local de producto. Hecho inicial: `scripts/nino-smoke` valida UI servida, memoria, permisos, tareas, inbox, export seguro y backup con SQLite temporal.
@@ -243,6 +243,7 @@ Auditoria final de producto 100% local:
 23. Hecho inicial: comando unico de cierre estricto `scripts/ninoctl final-audit`, que exige servicio persistente, misma DB auditada/servida y Claude vivo, y marca `audit_profile.strict_final`.
 24. Hecho inicial: preflight final sin llamada externa con `scripts/ninoctl final-preflight`, que exige launchd, DB runtime alineada y Claude configurado antes de gastar una llamada viva.
 25. Hecho inicial: resumen accionable de cierre en `/operations/audit` y `/app` con `final_readiness`, auditoria local, servicio persistente observado, bloqueos y siguientes comandos.
-26. Siguiente: ejecutar `scripts/ninoctl final-audit` con una `ANTHROPIC_API_KEY` real.
+26. Hecho inicial: evaluacion local de regresion accesible desde `/operations/eval` y boton `Eval local` en `/app`.
+27. Siguiente: ejecutar `scripts/ninoctl final-audit` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

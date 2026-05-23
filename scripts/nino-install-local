@@ -41,6 +41,7 @@ install_runtime() {
 
   mkdir -p "$INSTALL_DIR" "$INSTALL_DIR/data"
   copy_dir "$ROOT_DIR/src" "$INSTALL_DIR/src"
+  copy_dir "$ROOT_DIR/eval" "$INSTALL_DIR/eval"
   copy_dir "$ROOT_DIR/scripts" "$INSTALL_DIR/scripts"
   cp "$ROOT_DIR/pyproject.toml" "$INSTALL_DIR/pyproject.toml"
   cp "$ROOT_DIR/README.md" "$INSTALL_DIR/README.md"

@@ -336,6 +336,9 @@ APP_HTML = """<!doctype html>
           <button id="backups" class="secondary">Ver backups</button>
           <button id="auditProduct" class="secondary">Auditoría</button>
         </div>
+        <div class="row">
+          <button id="evalProduct" class="secondary">Eval local</button>
+        </div>
         <div id="finalReadiness" class="readiness"></div>
         <div class="row">
           <button id="mode" class="secondary">Modo</button>
@@ -637,6 +640,11 @@ APP_HTML = """<!doctype html>
       const final = out.final_audit_command ? ` · cierre: ${out.final_audit_command}` : "";
       status(out.ok ? `Auditoría local OK${preflight}${final}` : `Auditoría con bloqueos${preflight}${final}`);
     };
+    $("evalProduct").onclick = async () => {
+      const out = await api("/operations/eval");
+      print($("backupsOut"), out);
+      status(out.ok ? `Eval local OK · ${out.case_count} casos` : `Eval local con fallos · ${out.case_count} casos`);
+    };
     $("mode").onclick = async () => print($("state"), await api("/operations/mode"));
     $("logs").onclick = async () => print($("backupsOut"), await api("/operations/logs"));
     $("saveProactivity").onclick = async () => {
@@ -850,6 +858,7 @@ API_ENDPOINTS = [
     "GET /operations/mode",
     "GET /operations/claude",
     "GET /operations/audit",
+    "GET /operations/eval",
     "GET /operations/backups",
     "GET /operations/logs",
     "POST /operations/backup",
@@ -1204,6 +1213,15 @@ class NinoService:
         )
         return {**result, **final_metadata(result)}
 
+    def product_eval(self) -> dict[str, Any]:
+        from .eval_runner import run_eval_dir
+
+        eval_dir = Path("eval")
+        if not eval_dir.exists():
+            return {"ok": False, "error": "eval_dir_missing", "path": str(eval_dir), "case_count": 0, "results": []}
+        result = run_eval_dir(eval_dir)
+        return {"path": str(eval_dir), **_to_jsonable(result)}
+
     def tick(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.tick(agent_id, payload))
 
@@ -1464,6 +1482,8 @@ class NinoHttpApp:
             return "200 OK", self.service.claude_config()
         if method == "GET" and path == "/operations/audit":
             return "200 OK", self.service.product_audit()
+        if method == "GET" and path == "/operations/eval":
+            return "200 OK", self.service.product_eval()
         if method == "GET" and path == "/operations/backups":
             return "200 OK", self.service.list_backups()
         if method == "GET" and path == "/operations/logs":

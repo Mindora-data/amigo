@@ -83,6 +83,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"scripts/ninoctl restore" in body
     assert b"/operations/logs" in body
     assert b"Logs" in body
+    assert b"/operations/eval" in body
+    assert b"Eval local" in body
     assert b"Descargar seguro" in body
     assert b"Descargar completo" in body
     assert b"Eliminar episodio" in body
@@ -119,6 +121,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     claude = _request(app, "GET", "/operations/claude")
     _request(app, "POST", "/operations/backup", {})
     product_audit = _request(app, "GET", "/operations/audit")
+    product_eval = _request(app, "GET", "/operations/eval")
     tick = _request(
         app,
         "POST",
@@ -154,6 +157,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /operations/mode" in root["endpoints"]
     assert "GET /operations/claude" in root["endpoints"]
     assert "GET /operations/audit" in root["endpoints"]
+    assert "GET /operations/eval" in root["endpoints"]
     assert "GET /operations/logs" in root["endpoints"]
     assert "POST /agents/{agent_id}/tasks/run-next" in root["endpoints"]
     assert openapi["openapi"] == "3.1.0"
@@ -163,6 +167,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "delete" in openapi["paths"]["/agents/{agent_id}/memory/facts/{fact_id}"]
     assert "/operations/claude" in openapi["paths"]
     assert "/operations/audit" in openapi["paths"]
+    assert "/operations/eval" in openapi["paths"]
     assert "/operations/logs" in openapi["paths"]
     assert health == {"ok": True, "service": "nino"}
     assert mode["local_first"] is True
@@ -201,6 +206,10 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
         "backup_directory_available",
         "claude_live",
     }
+    assert product_eval["ok"] is True
+    assert product_eval["path"] == "eval"
+    assert product_eval["case_count"] >= 1
+    assert product_eval["results"][0]["ok"] is True
     assert tick["tick"] == 1
     assert state["tick"] == 1
     assert len(episodes["episodes"]) == 1
