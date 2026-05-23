@@ -55,6 +55,8 @@ def test_product_status_summarizes_claude_blocker(monkeypatch, tmp_path, capsys)
     assert status["latest_report"]["git_head"] == "abc123"
     assert "claude_configured missing=NINO_LLM_PROVIDER" in format_product_status(status)
     assert f"latest_report: {report_path.name}" in format_product_status(status)
+    assert "head=abc123" in format_product_status(status)
+    assert "blockers=claude_configured" in format_product_status(status)
 
     assert main(["--root", str(root)]) == 1
     assert "NIÑO product status: blocked" in capsys.readouterr().out

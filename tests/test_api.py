@@ -142,6 +142,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert "Último informe".encode("utf-8") in body
     assert b"latestReport" in body
     assert b"renderProductStatus" in body
+    assert b"git_head" in body
     assert b"renderCompletionAudit" in body
     assert b"Auditor" in body
 

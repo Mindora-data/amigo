@@ -596,7 +596,13 @@ APP_HTML = """<!doctype html>
       name.textContent = "Último informe";
       const pill = document.createElement("span");
       pill.className = latest.ok ? "pill" : "pill blocked";
-      pill.textContent = latest.ok ? latest.name : "sin informe";
+      if (latest.ok) {
+        const head = latest.git_head ? ` · ${latest.git_head.slice(0, 8)}` : "";
+        const blockers = latest.blockers?.length ? ` · ${latest.blockers.join(", ")}` : "";
+        pill.textContent = `${latest.name}${head}${blockers}`;
+      } else {
+        pill.textContent = "sin informe";
+      }
       row.appendChild(name);
       row.appendChild(pill);
       box.appendChild(row);

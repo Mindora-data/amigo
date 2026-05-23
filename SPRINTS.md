@@ -204,6 +204,7 @@ Hecho:
 - Estado final resumido. Hecho inicial: `scripts/ninoctl product-status` y `nino-status` muestran preflight, eval local y bloqueos restantes.
 - Estado final desde API/UI. Hecho inicial: `GET /operations/product-status` y boton `Estado final` muestran el mismo resumen de preflight, eval y bloqueos.
 - Estado final con evidencia de cierre. Hecho inicial: `product-status` y `/operations/product-status` incluyen `latest_report` con el ultimo informe disponible.
+- Estado final legible con head y bloqueos. Hecho inicial: `product-status` y UI muestran head corto y bloqueos del ultimo informe.
 - Auditoria de terminacion. Hecho inicial: `scripts/ninoctl completion-audit` y `nino-completion-audit` listan requisitos, evidencias y bloqueos restantes, incluyendo agente vivo `nino`.
 - Auditoria de terminacion desde API/UI. Hecho inicial: `GET /operations/completion-audit` y boton `Terminación`.
 - Requisito explicito de evidencia de cierre. Hecho inicial: `completion-audit` incluye `closing_evidence` cubierto por smoke y API.
@@ -267,6 +268,7 @@ Auditoria final de producto 100% local:
 30. Hecho inicial: evaluacion local de regresion tambien disponible por CLI con `scripts/ninoctl eval` y console script `nino-eval`.
 31. Hecho inicial: estado final resumido con `scripts/ninoctl product-status`, console script `nino-status`, `GET /operations/product-status` y boton `Estado final`.
 31a2. Hecho inicial: `product-status` y `/operations/product-status` incluyen `latest_report` con nombre, ruta, head y bloqueos del ultimo informe.
+31a3. Hecho inicial: salida legible y UI de `Estado final` muestran head corto y bloqueos de `latest_report`.
 31b. Hecho inicial: auditoria de terminacion requisito por requisito con `scripts/ninoctl completion-audit`, `nino-completion-audit`, `GET /operations/completion-audit` y boton `Terminación`, incluyendo agente vivo `nino`.
 31b2. Hecho inicial: requisito `closing_evidence` en auditoria de terminacion para comprobar informes de cierre.
 31c. Hecho inicial: informe de cierre local con `scripts/ninoctl closing-report` y `nino-closing-report`.

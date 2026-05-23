@@ -106,7 +106,11 @@ def format_product_status(status: dict[str, Any]) -> str:
             lines.append(f"- {blocker['name']}{detail}")
     latest_report = status.get("latest_report", {})
     if latest_report.get("ok"):
-        lines.append(f"latest_report: {latest_report['name']}")
+        head = str(latest_report.get("git_head") or "")[:8]
+        blockers = ", ".join(latest_report.get("blockers") or [])
+        detail_parts = [part for part in [f"head={head}" if head else "", f"blockers={blockers}" if blockers else ""] if part]
+        detail = f" ({'; '.join(detail_parts)})" if detail_parts else ""
+        lines.append(f"latest_report: {latest_report['name']}{detail}")
     commands = status.get("next_commands", [])
     if commands:
         lines.append("next:")
