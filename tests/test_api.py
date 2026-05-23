@@ -78,6 +78,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"clear-delivered" in body
     assert b"/operations/backup" in body
     assert b"Backup DB" in body
+    assert b"backupList" in body
+    assert b"renderBackups" in body
+    assert b"scripts/ninoctl restore" in body
     assert b"Descargar seguro" in body
     assert b"Descargar completo" in body
     assert b"Eliminar episodio" in body

@@ -336,6 +336,7 @@ APP_HTML = """<!doctype html>
           <button id="mode" class="secondary">Modo</button>
           <button id="reset" class="danger">Reset agente</button>
         </div>
+        <div id="backupList" class="list"></div>
         <div class="output"><pre id="backupsOut">{}</pre></div>
       </div>
       <div class="panel">
@@ -502,6 +503,22 @@ APP_HTML = """<!doctype html>
         box.appendChild(next);
       }
     }
+    function renderBackups(out) {
+      const target = $("backupList");
+      clearList(target);
+      if (!out.backups?.length) {
+        addListItem(target, "Sin backups", out.backup_dir || "");
+        return;
+      }
+      out.backups.forEach((backup) => {
+        const size = backup.size_bytes ? `${backup.size_bytes} bytes` : "sin tamaño";
+        const item = addListItem(target, backup.name || backup.path, `${size} · ${backup.modified_at || ""}`);
+        const command = document.createElement("div");
+        command.className = "muted";
+        command.textContent = `Restaurar con NIÑO parado: scripts/ninoctl restore ${backup.path}`;
+        item.appendChild(command);
+      });
+    }
     $("send").onclick = async () => {
       const payload = {intent: $("intent").value || "chat", text: $("text").value, salience: 0.7, confidence: 0.9};
       if (!payload.text.trim()) return;
@@ -599,6 +616,7 @@ APP_HTML = """<!doctype html>
     };
     async function loadBackups() {
       const out = await api("/operations/backups");
+      renderBackups(out);
       print($("backupsOut"), out);
       return out;
     }
