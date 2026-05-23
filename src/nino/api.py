@@ -4,6 +4,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime
 import json
 from pathlib import Path
+import re
 import sqlite3
 from typing import Any
 from urllib.parse import urlparse
@@ -334,6 +335,9 @@ APP_HTML = """<!doctype html>
         <div id="finalReadiness" class="readiness"></div>
         <div class="row">
           <button id="mode" class="secondary">Modo</button>
+          <button id="logs" class="secondary">Logs</button>
+        </div>
+        <div class="row">
           <button id="reset" class="danger">Reset agente</button>
         </div>
         <div id="backupList" class="list"></div>
@@ -630,6 +634,7 @@ APP_HTML = """<!doctype html>
       status(out.ok ? `Auditoría local OK${preflight}${final}` : `Auditoría con bloqueos${preflight}${final}`);
     };
     $("mode").onclick = async () => print($("state"), await api("/operations/mode"));
+    $("logs").onclick = async () => print($("backupsOut"), await api("/operations/logs"));
     $("saveProactivity").onclick = async () => {
       const payload = {
         consent: $("consent").value,
@@ -833,6 +838,7 @@ API_ENDPOINTS = [
     "GET /operations/claude",
     "GET /operations/audit",
     "GET /operations/backups",
+    "GET /operations/logs",
     "POST /operations/backup",
     "GET /agents",
     "POST /agents/prune",
@@ -890,6 +896,12 @@ def _json_default(value: Any) -> Any:
 
 def _to_jsonable(value: Any) -> Any:
     return json.loads(json.dumps(value, default=_json_default))
+
+
+def _redact_log_line(line: str) -> str:
+    line = re.sub(r"(ANTHROPIC_API_KEY=)[^\s]+", r"\1[REDACTED]", line)
+    line = re.sub(r"(sk-ant-[A-Za-z0-9_-]{8})[A-Za-z0-9_-]+", r"\1[REDACTED]", line)
+    return line
 
 
 def _parse_datetime(value: str) -> datetime:
@@ -1030,6 +1042,20 @@ class NinoService:
                 }
             )
         return {"ok": True, "backup_dir": str(backup_dir), "backups": backups}
+
+    def logs(self, *, limit: int = 80) -> dict[str, Any]:
+        if self.db_path is None:
+            return {"ok": False, "error": "db_path_unavailable", "lines": []}
+        log_path = self.db_path.parent / "nino-server.log"
+        if not log_path.exists():
+            return {"ok": True, "path": str(log_path), "exists": False, "lines": []}
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-limit:]
+        return {
+            "ok": True,
+            "path": str(log_path),
+            "exists": True,
+            "lines": [_redact_log_line(line) for line in lines],
+        }
 
     def operating_mode(self) -> dict[str, Any]:
         llm_client = self.runtime.llm_client
@@ -1427,6 +1453,8 @@ class NinoHttpApp:
             return "200 OK", self.service.product_audit()
         if method == "GET" and path == "/operations/backups":
             return "200 OK", self.service.list_backups()
+        if method == "GET" and path == "/operations/logs":
+            return "200 OK", self.service.logs()
         if method == "POST" and path == "/operations/backup":
             return "200 OK", self.service.backup()
 

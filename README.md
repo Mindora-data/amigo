@@ -243,6 +243,7 @@ GET  /operations/mode
 GET  /operations/claude
 GET  /operations/audit
 GET  /operations/backups
+GET  /operations/logs
 POST /operations/backup
 GET  /agents
 POST /agents/{agent_id}/tick

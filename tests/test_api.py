@@ -81,6 +81,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"backupList" in body
     assert b"renderBackups" in body
     assert b"scripts/ninoctl restore" in body
+    assert b"/operations/logs" in body
+    assert b"Logs" in body
     assert b"Descargar seguro" in body
     assert b"Descargar completo" in body
     assert b"Eliminar episodio" in body
@@ -149,6 +151,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /operations/mode" in root["endpoints"]
     assert "GET /operations/claude" in root["endpoints"]
     assert "GET /operations/audit" in root["endpoints"]
+    assert "GET /operations/logs" in root["endpoints"]
     assert "POST /agents/{agent_id}/tasks/run-next" in root["endpoints"]
     assert openapi["openapi"] == "3.1.0"
     assert "/agents/{agent_id}/tick" in openapi["paths"]
@@ -157,6 +160,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "delete" in openapi["paths"]["/agents/{agent_id}/memory/facts/{fact_id}"]
     assert "/operations/claude" in openapi["paths"]
     assert "/operations/audit" in openapi["paths"]
+    assert "/operations/logs" in openapi["paths"]
     assert health == {"ok": True, "service": "nino"}
     assert mode["local_first"] is True
     assert mode["network_required_for_core"] is False
@@ -239,6 +243,27 @@ def test_http_api_creates_database_backup(tmp_path) -> None:
     assert backups["ok"] is True
     assert backups["backups"][0]["path"] == backup["path"]
     assert backups["backups"][0]["size_bytes"] > 0
+
+
+def test_http_api_reads_redacted_server_logs(tmp_path) -> None:
+    db_path = tmp_path / "nino.db"
+    log_path = tmp_path / "nino-server.log"
+    log_path.write_text(
+        "ok\nANTHROPIC_API_KEY=secret-value\nheader sk-ant-12345678SECRET\n",
+        encoding="utf-8",
+    )
+    app = create_app(db_path)
+
+    logs = _request(app, "GET", "/operations/logs")
+
+    assert logs["ok"] is True
+    assert logs["exists"] is True
+    assert logs["path"] == str(log_path)
+    assert "ok" in logs["lines"]
+    rendered = "\n".join(logs["lines"])
+    assert "secret-value" not in rendered
+    assert "sk-ant-12345678SECRET" not in rendered
+    assert "[REDACTED]" in rendered
 
 
 def test_http_api_exposes_autonomy_status_and_run_once(tmp_path) -> None:

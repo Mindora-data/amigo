@@ -118,7 +118,7 @@ Hecho:
 - Historial conversacional legible. Hecho inicial: `/app` carga episodios persistidos al abrir o cambiar de agente.
 - Backups locales de `data/nino.db`. Hecho inicial: `scripts/ninoctl backup`, `scripts/ninoctl backups`, `scripts/ninoctl restore`, `POST /operations/backup` y `GET /operations/backups` desde UI.
 - Restauracion guiada de backups. Hecho inicial: la UI lista backups y muestra el comando exacto `scripts/ninoctl restore` para usarlo con el servidor parado.
-- Logs operativos claros. Hecho inicial: `scripts/ninoctl logs`.
+- Logs operativos claros. Hecho inicial: `scripts/ninoctl logs`, `GET /operations/logs` y boton Logs en `/app`.
 - Comando de diagnostico: salud, modo local-first, agentes, episodios, memoria, inbox, ultimo ciclo, readiness y auditorias. Hecho inicial: `scripts/ninoctl doctor`, `scripts/ninoctl readiness`, `scripts/ninoctl audit`, `scripts/ninoctl server-audit`, `scripts/ninoctl persistent-audit`, `scripts/ninoctl live-audit`, `scripts/ninoctl final-audit`.
 - Validar continuidad entre sesiones reales. Hecho inicial: `nino` conserva episodios y memoria tras reinicio.
 
