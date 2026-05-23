@@ -162,6 +162,8 @@ The same panel includes `Desactivar Claude`, backed by
 `POST /operations/claude/disable`, to remove Claude settings from `.env.local`,
 disable the runtime client immediately, and optionally delete the configured
 Keychain item.
+The same cleanup is available from terminal with `scripts/ninoctl disable-claude`
+or `scripts/ninoctl disable-claude --remove-keychain`.
 The `Reiniciar servicio` button calls `POST /operations/restart`; when NIÑO is
 running under launchd, the process exits after responding and launchd `KeepAlive`
 starts it again.

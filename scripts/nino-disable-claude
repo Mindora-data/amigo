@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${NINO_ENV_FILE:-$ROOT_DIR/.env.local}"
+KEYCHAIN_SERVICE=""
+REMOVE_KEYCHAIN=false
+
+usage() {
+  cat <<EOF
+Usage: scripts/nino-disable-claude [--env-file PATH] [--keychain-service NAME] [--remove-keychain]
+
+Removes Claude settings from the local untracked env file. With
+--remove-keychain, also deletes the named macOS Keychain service.
+
+Examples:
+  scripts/ninoctl disable-claude
+  scripts/ninoctl disable-claude --keychain-service nino-anthropic --remove-keychain
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --env-file)
+      ENV_FILE="${2:-}"
+      shift 2
+      ;;
+    --keychain-service)
+      KEYCHAIN_SERVICE="${2:-}"
+      shift 2
+      ;;
+    --remove-keychain)
+      REMOVE_KEYCHAIN=true
+      shift
+      ;;
+    -h|--help|help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$ENV_FILE" ]]; then
+  echo "Env file cannot be empty." >&2
+  exit 2
+fi
+
+mkdir -p "$(dirname "$ENV_FILE")"
+tmp="$(mktemp)"
+if [[ -f "$ENV_FILE" ]]; then
+  if [[ -z "$KEYCHAIN_SERVICE" ]]; then
+    KEYCHAIN_SERVICE="$(grep -E '^NINO_KEYCHAIN_SERVICE=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
+  fi
+  grep -vE '^(NINO_LLM_PROVIDER|NINO_CLAUDE_MODEL|ANTHROPIC_API_KEY|NINO_KEYCHAIN_SERVICE)=' "$ENV_FILE" > "$tmp" || true
+fi
+mv "$tmp" "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
+if [[ "$REMOVE_KEYCHAIN" == true && -n "$KEYCHAIN_SERVICE" ]]; then
+  if ! command -v security >/dev/null 2>&1; then
+    echo "macOS security command not found; cannot remove Keychain service." >&2
+    exit 1
+  fi
+  security delete-generic-password -s "$KEYCHAIN_SERVICE" >/dev/null 2>&1 || true
+  echo "Keychain service removed if present: $KEYCHAIN_SERVICE"
+fi
+
+echo "Claude configuration removed: $ENV_FILE"

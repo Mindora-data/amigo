@@ -39,6 +39,7 @@ Commands:
   mode        Request GET /operations/mode.
   claude      Show Claude configuration status without sending a prompt.
   configure-claude Configure Claude in .env.local or macOS Keychain.
+  disable-claude Remove Claude settings from .env.local and optionally Keychain.
   agents      Request GET /agents.
   snapshot    Request GET /development/snapshot.
   doctor      Run health, agents, snapshot and nino LLM status checks.
@@ -192,6 +193,10 @@ configure_claude() {
   "$ROOT_DIR/scripts/nino-configure-claude" "$@"
 }
 
+disable_claude() {
+  "$ROOT_DIR/scripts/nino-disable-claude" "$@"
+}
+
 logs() {
   ensure_dirs
   touch "$LOG_FILE"
@@ -313,6 +318,7 @@ case "$command" in
   mode) request "/operations/mode" ;;
   claude) request "/operations/claude" ;;
   configure-claude) configure_claude "$@" ;;
+  disable-claude) disable_claude "$@" ;;
   agents) request "/agents" ;;
   snapshot) request "/development/snapshot" ;;
   doctor) doctor ;;

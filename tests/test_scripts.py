@@ -317,3 +317,62 @@ def test_configure_claude_can_store_key_in_keychain_without_env_secret(tmp_path)
     assert "keychain-secret" not in result.stdout
     assert "nino-test" in result.stdout
     assert "keychain-secret" in args_file.read_text(encoding="utf-8")
+
+
+def test_disable_claude_removes_env_settings_without_printing_key(tmp_path) -> None:
+    env_file = tmp_path / ".env.local"
+    env_file.write_text(
+        "NINO_PORT=8010\n"
+        "NINO_LLM_PROVIDER=claude\n"
+        "NINO_CLAUDE_MODEL=claude-test\n"
+        "ANTHROPIC_API_KEY=secret-key\n"
+        "NINO_KEYCHAIN_SERVICE=nino-test\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["scripts/nino-disable-claude", "--env-file", str(env_file)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    content = env_file.read_text(encoding="utf-8")
+
+    assert "NINO_PORT=8010" in content
+    assert "NINO_LLM_PROVIDER" not in content
+    assert "NINO_CLAUDE_MODEL" not in content
+    assert "ANTHROPIC_API_KEY" not in content
+    assert "NINO_KEYCHAIN_SERVICE" not in content
+    assert "secret-key" not in result.stdout
+    assert oct(env_file.stat().st_mode & 0o777) == "0o600"
+
+
+def test_disable_claude_can_remove_keychain_service(tmp_path) -> None:
+    env_file = tmp_path / ".env.local"
+    env_file.write_text("NINO_KEYCHAIN_SERVICE=nino-test\n", encoding="utf-8")
+    security = tmp_path / "security"
+    security.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' \"$@\" > \"$NINO_SECURITY_ARGS_FILE\"\n",
+        encoding="utf-8",
+    )
+    security.chmod(0o755)
+    args_file = tmp_path / "security.args"
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_SECURITY_ARGS_FILE": str(args_file),
+    }
+
+    result = subprocess.run(
+        ["scripts/nino-disable-claude", "--env-file", str(env_file), "--remove-keychain"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "NINO_KEYCHAIN_SERVICE" not in env_file.read_text(encoding="utf-8")
+    assert "delete-generic-password" in args_file.read_text(encoding="utf-8")
+    assert "nino-test" in args_file.read_text(encoding="utf-8")
+    assert "nino-test" in result.stdout
