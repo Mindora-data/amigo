@@ -143,6 +143,12 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     mode = _request(app, "GET", "/operations/mode")
     claude = _request(app, "GET", "/operations/claude")
     _request(app, "POST", "/operations/backup", {})
+    _request(
+        app,
+        "POST",
+        "/agents/nino/tick",
+        {"intent": "identity", "text": "soy nino persistente", "salience": 0.9, "confidence": 0.9},
+    )
     product_audit = _request(app, "GET", "/operations/audit")
     product_status = _request(app, "GET", "/operations/product-status")
     completion_audit = _request(app, "GET", "/operations/completion-audit")
@@ -263,6 +269,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
         "memory_continuity",
         "safety_controls",
         "backups",
+        "living_agent",
         "regression_eval",
         "claude_configured",
         "claude_live",

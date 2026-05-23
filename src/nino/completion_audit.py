@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,30 @@ def _requirement(requirement_id: str, label: str, ok: bool, evidence: list[str])
     }
 
 
+def _living_agent_evidence(audit: dict[str, Any]) -> dict[str, Any]:
+    db_path = audit.get("db_path")
+    if not db_path:
+        return {"ok": False, "agent_id": "nino", "error": "db_path_missing"}
+    path = Path(str(db_path))
+    if not path.exists():
+        return {"ok": False, "agent_id": "nino", "path": str(path), "error": "db_missing"}
+    try:
+        with sqlite3.connect(path) as conn:
+            state_count = conn.execute("SELECT COUNT(*) FROM agent_states WHERE agent_id = ?", ("nino",)).fetchone()[0]
+            episode_count = conn.execute("SELECT COUNT(*) FROM episodes WHERE agent_id = ?", ("nino",)).fetchone()[0]
+            fact_count = conn.execute("SELECT COUNT(*) FROM memory_facts WHERE agent_id = ?", ("nino",)).fetchone()[0]
+    except sqlite3.Error as exc:
+        return {"ok": False, "agent_id": "nino", "path": str(path), "error": exc.__class__.__name__}
+    return {
+        "ok": state_count > 0 and (episode_count > 0 or fact_count > 0),
+        "agent_id": "nino",
+        "path": str(path),
+        "state_count": state_count,
+        "episode_count": episode_count,
+        "cold_memory_count": fact_count,
+    }
+
+
 def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
     root_path = Path(root).resolve()
     final_audit = _run_json(
@@ -69,6 +94,7 @@ def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
     claude_config_ok = _check(final_audit, "claude_configured").get("ok") is True
     claude_live = _check(final_audit, "claude_live")
     claude_live_ok = claude_live.get("ok") is True and claude_live.get("evidence", {}).get("skipped") is not True
+    living_agent = _living_agent_evidence(final_audit)
 
     requirements = [
         _requirement(
@@ -103,6 +129,12 @@ def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
             ["local_smoke.sqlite_backup", "local_smoke.sqlite_backup_list", "backup_directory_available"],
         ),
         _requirement(
+            "living_agent",
+            "Agente vivo nino con continuidad persistida",
+            living_agent["ok"] is True,
+            ["agent_states.nino", "episodes.nino or memory_facts.nino"],
+        ),
+        _requirement(
             "regression_eval",
             "Evaluacion local de regresion",
             eval_result.get("ok") is True and eval_result.get("case_count", 0) >= 1,
@@ -127,6 +159,7 @@ def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
         "requirements": requirements,
         "blockers": blockers,
         "next_commands": _next_commands(final_audit),
+        "living_agent": living_agent,
         "final_audit": final_audit,
         "eval": eval_result,
     }

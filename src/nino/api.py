@@ -1713,6 +1713,16 @@ class NinoService:
                 ["backup_directory_available", "sqlite_backup cubierto por smoke/readiness"],
             ),
             self._completion_requirement(
+                "living_agent",
+                "Agente vivo nino con continuidad persistida",
+                "nino" in self.runtime.list_agents()
+                and (
+                    self.runtime.metrics("nino").get("episode_count", 0) > 0
+                    or self.runtime.metrics("nino").get("cold_memory_count", 0) > 0
+                ),
+                ["runtime.list_agents.nino", "metrics.nino.episode_count or cold_memory_count"],
+            ),
+            self._completion_requirement(
                 "regression_eval",
                 "Evaluacion local de regresion",
                 eval_result.get("ok") is True and eval_result.get("case_count", 0) >= 1,

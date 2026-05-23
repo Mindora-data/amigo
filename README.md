@@ -175,7 +175,8 @@ service, wait for `/health` and run the final audit.
 preflight/eval/blocker summary as the CLI status command.
 `scripts/ninoctl completion-audit` prints the requirement-by-requirement
 completion matrix, including the remaining Claude live blocker when no real key
-has been configured.
+has been configured. It also verifies that the live `nino` agent has persisted
+state plus episodes or cold memory.
 The same matrix is available in the UI with `Terminación`, backed by
 `GET /operations/completion-audit`.
 The same panel includes `Desactivar Claude`, backed by

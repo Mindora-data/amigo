@@ -51,6 +51,7 @@ scripts/ninoctl persistent-audit
 | Runtime persistente local | SQLite via `data/nino.db`; `/operations/mode` reporta `sqlite` | Cumplido |
 | UI operativa | `/app` cubierta por tests y smoke `browser_app` | Cumplido |
 | Memoria conversacional | `conversation_history`, `memory_search`, tests de retrieval y persistencia; borrado seguro de episodios y hechos desde API/UI; decay configurable desde API/UI | Cumplido |
+| Agente vivo persistente | `scripts/ninoctl completion-audit`, `GET /operations/completion-audit` verifican agente `nino` con estado y memoria/episodios persistidos | Cumplido |
 | Claude opcional | `scripts/ninoctl configure-claude`, `scripts/ninoctl disable-claude`, `scripts/nino-configure-claude`, `scripts/nino-disable-claude`, `.env.local` o macOS Keychain, `NINO_LLM_PROVIDER=claude`, `/operations/claude`, `POST /operations/claude/configure`, `POST /operations/claude/disable`, panel LLM con `Guardar Claude`, `Cierre guiado`, `Desactivar Claude` y modo Keychain por defecto, `/llm/probe`, `config_errors` para valores invalidos | Implementado; prueba viva requiere key real |
 | Local-first offline | `/operations/mode`, smoke `local_first_mode`, core sin red | Cumplido |
 | Controles de seguridad | permisos por accion, bloqueo por defecto, export seguro, audit log | Cumplido |
@@ -80,8 +81,8 @@ bloqueos restantes en formato legible, o en JSON con `--json`.
 `GET /operations/product-status` expone el mismo resumen a la UI con el boton
 `Estado final`.
 `scripts/ninoctl completion-audit` muestra una matriz requisito por requisito:
-runtime persistente, UI, memoria, seguridad, backups, eval, Claude configurado
-y Claude vivo.
+runtime persistente, UI, memoria, agente vivo `nino`, seguridad, backups,
+eval, Claude configurado y Claude vivo.
 `GET /operations/completion-audit` y el boton `Terminación` exponen esa matriz
 desde el proceso servido.
 `scripts/ninoctl finish --key-stdin` ejecuta el cierre guiado completo:

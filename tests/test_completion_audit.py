@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 
 from nino.completion_audit import build_completion_audit, format_completion_audit, main
@@ -53,8 +54,17 @@ def _audit_payload() -> dict:
 
 
 def test_completion_audit_maps_requirements_and_blockers(monkeypatch, tmp_path, capsys) -> None:
+    db_path = tmp_path / "nino.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE agent_states (agent_id TEXT PRIMARY KEY)")
+        conn.execute("CREATE TABLE episodes (agent_id TEXT)")
+        conn.execute("CREATE TABLE memory_facts (agent_id TEXT)")
+        conn.execute("INSERT INTO agent_states (agent_id) VALUES ('nino')")
+        conn.execute("INSERT INTO episodes (agent_id) VALUES ('nino')")
+    audit_payload = {**_audit_payload(), "db_path": str(db_path)}
+
     def fake_run(command, **kwargs):
-        payload = _audit_payload() if "nino-product-audit" in command[0] else {"ok": True, "case_count": 1}
+        payload = audit_payload if "nino-product-audit" in command[0] else {"ok": True, "case_count": 1}
         return subprocess.CompletedProcess(command, 1 if payload["ok"] is False else 0, json.dumps(payload), "")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -63,6 +73,7 @@ def test_completion_audit_maps_requirements_and_blockers(monkeypatch, tmp_path, 
     assert result["ok"] is False
     blocked = {item["id"] for item in result["blockers"]}
     assert blocked == {"claude_configured", "claude_live"}
+    assert result["living_agent"]["episode_count"] == 1
     assert "scripts/ninoctl finish --key-stdin" in result["next_commands"]
     assert "blocked: claude_live" in format_completion_audit(result)
 
@@ -71,7 +82,15 @@ def test_completion_audit_maps_requirements_and_blockers(monkeypatch, tmp_path, 
 
 
 def test_completion_audit_json_output(monkeypatch, tmp_path, capsys) -> None:
+    db_path = tmp_path / "nino.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE agent_states (agent_id TEXT PRIMARY KEY)")
+        conn.execute("CREATE TABLE episodes (agent_id TEXT)")
+        conn.execute("CREATE TABLE memory_facts (agent_id TEXT)")
+        conn.execute("INSERT INTO agent_states (agent_id) VALUES ('nino')")
+        conn.execute("INSERT INTO memory_facts (agent_id) VALUES ('nino')")
     audit = _audit_payload()
+    audit["db_path"] = str(db_path)
     for check in audit["checks"]:
         if check["name"] in {"claude_configured", "claude_live"}:
             check["ok"] = True
