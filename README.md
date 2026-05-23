@@ -177,13 +177,15 @@ process.
 service, wait for `/health` and run the final audit.
 `Estado final` calls `GET /operations/product-status` and shows the same
 preflight/eval/blocker summary as the CLI status command, including the newest
-closing report name, git head and blockers when one exists.
+closing report name, git head and blockers when one exists. It also reports
+whether that newest report matches the current installed revision.
 It also exposes `recommended_next_action`, usually `scripts/ninoctl finish
 --key-stdin` until Claude is configured.
 `scripts/ninoctl completion-audit` prints the requirement-by-requirement
 completion matrix, including the remaining Claude live blocker when no real key
 has been configured. It also verifies that the live `nino` agent has persisted
-state plus episodes or cold memory and names the newest closing report.
+state plus episodes or cold memory, names the newest closing report and marks
+whether it belongs to the current revision.
 It also includes `recommended_next_action` for the next closing step.
 The same matrix is available in the UI with `Terminación`, backed by
 `GET /operations/completion-audit`.

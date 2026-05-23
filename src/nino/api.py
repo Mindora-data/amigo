@@ -597,6 +597,21 @@ APP_HTML = """<!doctype html>
         row.appendChild(pill);
         box.appendChild(row);
       }
+      const current = out.latest_report_current;
+      if (current) {
+        const row = document.createElement("div");
+        row.className = "readinessRow";
+        const name = document.createElement("span");
+        name.textContent = "Informe actual";
+        const pill = document.createElement("span");
+        pill.className = current.ok ? "pill" : "pill blocked";
+        const currentHead = current.current_head ? current.current_head.slice(0, 8) : "sin head";
+        const reportHead = current.latest_report_head ? current.latest_report_head.slice(0, 8) : "sin informe";
+        pill.textContent = current.ok ? currentHead : `${currentHead} / ${reportHead}`;
+        row.appendChild(name);
+        row.appendChild(pill);
+        box.appendChild(row);
+      }
       if (out.recommended_next_action) {
         const row = document.createElement("div");
         row.className = "readinessRow";
@@ -649,6 +664,20 @@ APP_HTML = """<!doctype html>
       row.appendChild(name);
       row.appendChild(pill);
       box.appendChild(row);
+      const current = out.latest_report_current;
+      if (!current) return;
+      const currentRow = document.createElement("div");
+      currentRow.className = "readinessRow";
+      const currentName = document.createElement("span");
+      currentName.textContent = "Informe actual";
+      const currentPill = document.createElement("span");
+      currentPill.className = current.ok ? "pill" : "pill blocked";
+      const currentHead = current.current_head ? current.current_head.slice(0, 8) : "sin head";
+      const reportHead = current.latest_report_head ? current.latest_report_head.slice(0, 8) : "sin informe";
+      currentPill.textContent = current.ok ? currentHead : `${currentHead} / ${reportHead}`;
+      currentRow.appendChild(currentName);
+      currentRow.appendChild(currentPill);
+      box.appendChild(currentRow);
     }
     function renderBackups(out) {
       const target = $("backupList");
@@ -1809,6 +1838,7 @@ class NinoService:
             )
         ok = bool(audit.get("ok")) and bool(eval_result.get("ok"))
         commands = audit.get("final_readiness", {}).get("next_commands", [])
+        latest_report = self._latest_report_summary()
         return {
             "ok": ok,
             "final_preflight_ok": bool(audit.get("ok")),
@@ -1817,7 +1847,8 @@ class NinoService:
             "blockers": blockers,
             "next_commands": commands,
             "recommended_next_action": self._recommended_next_action(ok, blockers, commands),
-            "latest_report": self._latest_report_summary(),
+            "latest_report": latest_report,
+            "latest_report_current": self._latest_report_current_summary(latest_report),
             "audit": audit,
             "eval": eval_result,
         }
@@ -1845,6 +1876,19 @@ class NinoService:
             "blockers": report.get("summary", {}).get("blockers", []),
         }
 
+    def _latest_report_current_summary(self, latest_report: dict[str, Any]) -> dict[str, Any]:
+        current_head = self._current_revision(Path.cwd())
+        latest_head = latest_report.get("git_head") if latest_report.get("ok") else None
+        return {
+            "ok": bool(current_head and latest_head and current_head == latest_head),
+            "current_head": current_head,
+            "latest_report_head": latest_head,
+            "report_name": latest_report.get("name") if latest_report.get("ok") else None,
+            "reason": None
+            if current_head and latest_head and current_head == latest_head
+            else ("report_not_found" if not latest_report.get("ok") else "revision_mismatch"),
+        }
+
     @staticmethod
     def _metadata_value(root: Path, filename: str) -> str | None:
         path = root / filename
@@ -1852,6 +1896,13 @@ class NinoService:
             return None
         value = path.read_text(encoding="utf-8").strip()
         return value or None
+
+    @staticmethod
+    def _current_revision(root: Path) -> str | None:
+        revision = NinoService._metadata_value(root, "REVISION")
+        if revision:
+            return revision
+        return NinoService._git_metadata(root).get("head")
 
     @staticmethod
     def _git_metadata(root: Path) -> dict[str, Any]:
@@ -1998,13 +2049,15 @@ class NinoService:
         ]
         blockers = [requirement for requirement in requirements if not requirement["ok"]]
         commands = audit.get("final_readiness", {}).get("next_commands", [])
+        latest_report = self._latest_report_summary()
         return {
             "ok": not blockers,
             "requirements": requirements,
             "blockers": blockers,
             "next_commands": commands,
             "recommended_next_action": self._recommended_next_action(not blockers, blockers, commands),
-            "latest_report": self._latest_report_summary(),
+            "latest_report": latest_report,
+            "latest_report_current": self._latest_report_current_summary(latest_report),
             "audit": audit,
             "eval": eval_result,
             "notes": [

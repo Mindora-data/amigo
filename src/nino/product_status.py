@@ -48,6 +48,36 @@ def _recommended_next_action(ok: bool, blockers: list[dict[str, Any]], commands:
     return commands[0] if commands else ""
 
 
+def _metadata_value(root: Path, filename: str) -> str | None:
+    path = root / filename
+    if not path.exists():
+        return None
+    value = path.read_text(encoding="utf-8").strip()
+    return value or None
+
+
+def _current_revision(root: Path) -> str | None:
+    revision = _metadata_value(root, "REVISION")
+    if revision:
+        return revision
+    if not (root / ".git").exists():
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
 def _latest_report(root: Path) -> dict[str, Any]:
     report_dir = root / "data" / "reports"
     reports = sorted(report_dir.glob("nino-closing-*.json"))
@@ -65,6 +95,20 @@ def _latest_report(root: Path) -> dict[str, Any]:
         "generated_at": payload.get("generated_at"),
         "git_head": payload.get("git", {}).get("head"),
         "blockers": payload.get("summary", {}).get("blockers", []),
+    }
+
+
+def _latest_report_current(root: Path, latest_report: dict[str, Any]) -> dict[str, Any]:
+    current_head = _current_revision(root)
+    latest_head = latest_report.get("git_head") if latest_report.get("ok") else None
+    return {
+        "ok": bool(current_head and latest_head and current_head == latest_head),
+        "current_head": current_head,
+        "latest_report_head": latest_head,
+        "report_name": latest_report.get("name") if latest_report.get("ok") else None,
+        "reason": None
+        if current_head and latest_head and current_head == latest_head
+        else ("report_not_found" if not latest_report.get("ok") else "revision_mismatch"),
     }
 
 
@@ -89,6 +133,7 @@ def build_product_status(root: str | Path = ".") -> dict[str, Any]:
 
     ok = bool(audit.get("ok")) and bool(eval_result.get("ok"))
     commands = _setup_commands(audit)
+    latest_report = _latest_report(root_path)
     return {
         "ok": ok,
         "final_preflight_ok": bool(audit.get("ok")),
@@ -97,7 +142,8 @@ def build_product_status(root: str | Path = ".") -> dict[str, Any]:
         "blockers": blockers,
         "next_commands": commands,
         "recommended_next_action": _recommended_next_action(ok, blockers, commands),
-        "latest_report": _latest_report(root_path),
+        "latest_report": latest_report,
+        "latest_report_current": _latest_report_current(root_path, latest_report),
         "audit": audit,
         "eval": eval_result,
     }
@@ -123,6 +169,15 @@ def format_product_status(status: dict[str, Any]) -> str:
         detail_parts = [part for part in [f"head={head}" if head else "", f"blockers={blockers}" if blockers else ""] if part]
         detail = f" ({'; '.join(detail_parts)})" if detail_parts else ""
         lines.append(f"latest_report: {latest_report['name']}{detail}")
+    report_current = status.get("latest_report_current", {})
+    if report_current:
+        current_head = str(report_current.get("current_head") or "")[:8]
+        latest_head = str(report_current.get("latest_report_head") or "")[:8]
+        if report_current.get("ok"):
+            lines.append(f"latest_report_current: ok (head={current_head})")
+        else:
+            detail = f"current={current_head or 'unknown'} report={latest_head or 'missing'}"
+            lines.append(f"latest_report_current: stale ({detail})")
     if status.get("recommended_next_action"):
         lines.append(f"recommended_next_action: {status['recommended_next_action']}")
     commands = status.get("next_commands", [])

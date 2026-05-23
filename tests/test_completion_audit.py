@@ -60,6 +60,7 @@ def _audit_payload() -> dict:
 
 def test_completion_audit_maps_requirements_and_blockers(monkeypatch, tmp_path, capsys) -> None:
     db_path = tmp_path / "nino.db"
+    (tmp_path / "REVISION").write_text("abc12345", encoding="utf-8")
     report_dir = tmp_path / "data" / "reports"
     report_dir.mkdir(parents=True)
     report_path = report_dir / "nino-closing-20260523-192346.json"
@@ -94,12 +95,16 @@ def test_completion_audit_maps_requirements_and_blockers(monkeypatch, tmp_path, 
     assert any(item["id"] == "closing_evidence" and item["ok"] for item in result["requirements"])
     assert result["latest_report"]["name"] == report_path.name
     assert result["latest_report"]["git_head"] == "abc12345"
+    assert result["latest_report_current"]["ok"] is True
+    assert result["latest_report_current"]["current_head"] == "abc12345"
+    assert result["latest_report_current"]["latest_report_head"] == "abc12345"
     assert result["living_agent"]["episode_count"] == 1
     assert "scripts/ninoctl finish --key-stdin" in result["next_commands"]
     assert result["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
     assert "blocked: claude_live" in format_completion_audit(result)
     assert "latest_report: nino-closing-20260523-192346.json" in format_completion_audit(result)
     assert "head=abc12345" in format_completion_audit(result)
+    assert "latest_report_current: ok (head=abc12345)" in format_completion_audit(result)
     assert "recommended_next_action: scripts/ninoctl finish --key-stdin" in format_completion_audit(result)
 
     assert main(["--root", str(tmp_path)]) == 1
@@ -133,4 +138,6 @@ def test_completion_audit_json_output(monkeypatch, tmp_path, capsys) -> None:
     assert payload["ok"] is True
     assert all(item["ok"] for item in payload["requirements"])
     assert payload["latest_report"]["ok"] is False
+    assert payload["latest_report_current"]["ok"] is False
+    assert payload["latest_report_current"]["reason"] == "report_not_found"
     assert payload["recommended_next_action"] == "scripts/ninoctl final-audit"

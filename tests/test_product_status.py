@@ -9,6 +9,7 @@ from nino.product_status import build_product_status, format_product_status, mai
 
 def test_product_status_summarizes_claude_blocker(monkeypatch, tmp_path, capsys) -> None:
     root = tmp_path
+    (root / "REVISION").write_text("abc123", encoding="utf-8")
     report_dir = root / "data" / "reports"
     report_dir.mkdir(parents=True)
     report_path = report_dir / "nino-closing-20260523-191359.json"
@@ -54,9 +55,13 @@ def test_product_status_summarizes_claude_blocker(monkeypatch, tmp_path, capsys)
     assert status["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
     assert status["latest_report"]["name"] == report_path.name
     assert status["latest_report"]["git_head"] == "abc123"
+    assert status["latest_report_current"]["ok"] is True
+    assert status["latest_report_current"]["current_head"] == "abc123"
+    assert status["latest_report_current"]["latest_report_head"] == "abc123"
     assert "claude_configured missing=NINO_LLM_PROVIDER" in format_product_status(status)
     assert f"latest_report: {report_path.name}" in format_product_status(status)
     assert "head=abc123" in format_product_status(status)
+    assert "latest_report_current: ok (head=abc123)" in format_product_status(status)
     assert "blockers=claude_configured" in format_product_status(status)
     assert "recommended_next_action: scripts/ninoctl finish --key-stdin" in format_product_status(status)
 
@@ -75,4 +80,6 @@ def test_product_status_json_output(monkeypatch, tmp_path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is True
     assert payload["eval_case_count"] == 2
+    assert payload["latest_report_current"]["ok"] is False
+    assert payload["latest_report_current"]["reason"] == "report_not_found"
     assert payload["recommended_next_action"] == "scripts/ninoctl final-audit"
