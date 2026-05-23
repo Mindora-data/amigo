@@ -89,6 +89,20 @@ def _same_database_path(expected: Path, actual: str | None) -> dict[str, Any]:
     )
 
 
+def _audit_profile(*, require_launchd: bool, require_claude_live: bool, http_checks: bool) -> dict[str, Any]:
+    strict_final = require_launchd and require_claude_live and http_checks
+    requirements = ["sqlite_database_exists", "backup_directory_available", "claude_live"]
+    if require_launchd:
+        requirements.append("launchd_service")
+    if http_checks:
+        requirements.extend(["runtime_health", "local_first_mode", "runtime_database_matches", "claude_config_endpoint"])
+    return {
+        "name": "final" if strict_final else "local",
+        "strict_final": strict_final,
+        "required_checks": requirements,
+    }
+
+
 def audit_product(
     *,
     db_path: str | Path,
@@ -164,6 +178,11 @@ def audit_product(
         "db_path": str(db),
         "require_claude_live": require_claude_live,
         "require_launchd": require_launchd,
+        "audit_profile": _audit_profile(
+            require_launchd=require_launchd,
+            require_claude_live=require_claude_live,
+            http_checks=http_checks,
+        ),
     }
 
 
