@@ -45,6 +45,7 @@ scripts/ninoctl final-preflight
 scripts/ninoctl final-audit
 scripts/ninoctl finish
 scripts/ninoctl completion-audit
+scripts/ninoctl closing-report
 scripts/ninoctl logs
 scripts/ninoctl backup
 scripts/ninoctl backups
@@ -179,6 +180,9 @@ has been configured. It also verifies that the live `nino` agent has persisted
 state plus episodes or cold memory.
 The same matrix is available in the UI with `Terminación`, backed by
 `GET /operations/completion-audit`.
+`scripts/ninoctl closing-report` writes a timestamped JSON evidence report under
+`data/reports/` with git state, product status, completion audit and the live
+`nino` profile.
 The same panel includes `Desactivar Claude`, backed by
 `POST /operations/claude/disable`, to remove Claude settings from `.env.local`,
 disable the runtime client immediately, and optionally delete the configured

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HOST="${NINO_HOST:-127.0.0.1}"
+PORT="${NINO_PORT:-8000}"
+PATH_INFO="${1:-/health}"
+
+curl -fsS "http://$HOST:$PORT$PATH_INFO"

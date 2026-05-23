@@ -53,6 +53,7 @@ Commands:
   finish      Configure Claude, restart launchd and run the final audit.
   product-status Summarize final readiness, evaluation and blockers.
   completion-audit Audit every completion requirement and remaining blockers.
+  closing-report Write a JSON evidence report for the current product state.
   eval        Run deterministic local regression evaluations.
   logs        Show recent logs. Use: scripts/ninoctl logs -f
   backup      Create a timestamped SQLite backup.
@@ -359,6 +360,10 @@ completion_audit() {
   "$ROOT_DIR/scripts/nino-completion-audit" "$@"
 }
 
+closing_report() {
+  "$ROOT_DIR/scripts/nino-closing-report" "$@"
+}
+
 eval_local() {
   "$ROOT_DIR/scripts/nino-eval" "$@"
 }
@@ -390,6 +395,7 @@ case "$command" in
   finish) finish "$@" ;;
   product-status) product_status "$@" ;;
   completion-audit) completion_audit "$@" ;;
+  closing-report) closing_report "$@" ;;
   eval) eval_local "$@" ;;
   logs) logs "${1:-}" ;;
   backup) backup ;;

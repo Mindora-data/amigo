@@ -22,6 +22,7 @@ nino-product-audit = "nino.product_audit:main"
 nino-eval = "nino.eval_runner:main"
 nino-status = "nino.product_status:main"
 nino-completion-audit = "nino.completion_audit:main"
+nino-closing-report = "nino.closing_report:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

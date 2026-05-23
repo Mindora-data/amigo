@@ -48,6 +48,10 @@ install_runtime() {
   cp "$ROOT_DIR/PRODUCT_READINESS.md" "$INSTALL_DIR/PRODUCT_READINESS.md"
   cp "$ROOT_DIR/SPRINTS.md" "$INSTALL_DIR/SPRINTS.md"
   cp "$ROOT_DIR/.env.example" "$INSTALL_DIR/.env.example"
+  if command -v git >/dev/null 2>&1; then
+    git -C "$ROOT_DIR" rev-parse HEAD > "$INSTALL_DIR/REVISION" 2>/dev/null || true
+    git -C "$ROOT_DIR" branch --show-current > "$INSTALL_DIR/BRANCH" 2>/dev/null || true
+  fi
 
   if [[ -f "$ROOT_DIR/.env.local" && ! -f "$INSTALL_DIR/.env.local" ]]; then
     cp "$ROOT_DIR/.env.local" "$INSTALL_DIR/.env.local"
