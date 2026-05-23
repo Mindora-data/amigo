@@ -322,6 +322,7 @@ Auditoria final de producto 100% local:
 43. Hecho inicial: `completion-audit` exige `local_smoke.next_action` dentro de `closing_evidence`.
 44. Hecho inicial: `scripts/ninoctl status` y `logs` detectan el servicio launchd persistente aunque no exista PID manual de `ninoctl start`.
 45. Hecho inicial: `scripts/ninoctl wait-health` espera `/health` y `finish` lo usa tras reiniciar launchd antes de auditar.
-46. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
+46. Hecho inicial: `scripts/ninoctl status` y `wait-health` muestran el ultimo error de `curl` para distinguir permisos/red de servicio caido.
+47. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

@@ -375,6 +375,51 @@ def test_ninoctl_wait_health_waits_for_server_response(tmp_path) -> None:
     assert calls.read_text(encoding="utf-8").strip() == "2"
 
 
+def test_ninoctl_status_and_wait_health_report_curl_error_detail(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    curl = tmp_path / "curl"
+    curl.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo 'curl: (7) Operation not permitted' >&2\n"
+        "exit 7\n",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+    pgrep = tmp_path / "pgrep"
+    pgrep.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+    pgrep.chmod(0o755)
+    launchctl = tmp_path / "launchctl"
+    launchctl.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+    launchctl.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_DATA_DIR": str(data_dir),
+        "NINO_PORT": "65529",
+    }
+
+    status = subprocess.run(
+        ["scripts/ninoctl", "status"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    waited = subprocess.run(
+        ["scripts/ninoctl", "wait-health", "1"],
+        check=False,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "health: not responding at http://127.0.0.1:65529 (curl: (7) Operation not permitted)" in status.stdout
+    assert waited.returncode == 1
+    assert "health: not responding at http://127.0.0.1:65529 after 1s (curl: (7) Operation not permitted)" in waited.stderr
+
+
 def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     root = tmp_path / "repo"
     scripts_dir = root / "scripts"

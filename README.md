@@ -68,6 +68,9 @@ the launchd PID/state and `scripts/ninoctl logs` reads the launchd log if there
 is no manual `ninoctl start` log.
 `scripts/ninoctl wait-health [seconds]` waits up to 120 seconds by default until `/health` responds; the
 final `finish` flow uses it after restarting launchd.
+When health cannot be reached, `status` and `wait-health` include the last
+`curl` error so permission or networking failures are distinguishable from a
+stopped service.
 
 Run the final setup as one flow, keeping the key in macOS Keychain by default:
 

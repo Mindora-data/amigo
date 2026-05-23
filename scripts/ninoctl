@@ -28,6 +28,7 @@ else
   PYTHON_BIN="${NINO_PYTHON:-$(command -v python3)}"
 fi
 BASE_URL="http://$HOST:$PORT"
+HEALTH_ERROR=""
 
 usage() {
   cat <<EOF
@@ -115,7 +116,14 @@ adopt_running_pid() {
 }
 
 server_responds() {
-  curl -fsS "$BASE_URL/health" >/dev/null 2>&1
+  local output rc
+  output="$(curl -fsS "$BASE_URL/health" 2>&1 >/dev/null)" || {
+    rc=$?
+    HEALTH_ERROR="$(printf '%s' "$output" | tail -n 1)"
+    return "$rc"
+  }
+  HEALTH_ERROR=""
+  return 0
 }
 
 wait_health() {
@@ -137,8 +145,14 @@ wait_health() {
     echo "health: ok at $BASE_URL"
     return 0
   fi
-  echo "health: not responding at $BASE_URL after ${timeout}s" >&2
+  echo "health: not responding at $BASE_URL after ${timeout}s$(health_error_suffix)" >&2
   return 1
+}
+
+health_error_suffix() {
+  if [[ -n "${HEALTH_ERROR:-}" ]]; then
+    printf ' (%s)' "$HEALTH_ERROR"
+  fi
 }
 
 launchd_print() {
@@ -270,7 +284,7 @@ status() {
   if server_responds; then
     echo "health: ok at $BASE_URL"
   else
-    echo "health: not responding at $BASE_URL"
+    echo "health: not responding at $BASE_URL$(health_error_suffix)"
   fi
 
   echo "db: $DB_PATH"
