@@ -331,7 +331,10 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert closing_report["report"]["summary"]["completion_audit_ok"] is False
     assert closing_report["report"]["summary"]["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
     assert closing_report["report"]["product_status"]["eval_ok"] is True
-    assert closing_report["report"]["product_status"]["latest_report"]["error"] == "report_not_found"
+    assert closing_report["report"]["product_status"]["latest_report"]["name"] == Path(closing_report["path"]).name
+    assert closing_report["report"]["product_status"]["latest_report_current"]["ok"] is True
+    assert closing_report["report"]["completion_audit"]["latest_report"]["name"] == Path(closing_report["path"]).name
+    assert closing_report["report"]["completion_audit"]["latest_report_current"]["ok"] is True
     assert closing_report["report"]["nino_profile"]["profile"]["agent_id"] == "nino"
     assert reports["ok"] is True
     assert reports["report_dir"] == str(tmp_path / "reports")

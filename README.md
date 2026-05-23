@@ -194,7 +194,8 @@ The same matrix is available in the UI with `Terminación`, backed by
 `scripts/ninoctl closing-report` writes a timestamped JSON evidence report under
 `data/reports/` with git state, product status, completion audit and the live
 `nino` profile. Each report also includes its own `report_file` name and path,
-plus the recommended next action.
+plus the recommended next action. The embedded product-status and
+completion-audit sections point back to that same report.
 `scripts/ninoctl reports` lists those reports and `scripts/ninoctl report
 <name>` prints a single timestamped report after validating the local filename.
 Use `scripts/ninoctl report latest` to print the newest report.

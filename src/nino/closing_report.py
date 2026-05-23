@@ -39,6 +39,43 @@ def _run_json(command: list[str], root: Path) -> dict[str, Any]:
     return payload
 
 
+def _current_report_summary(report: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    report_file = report.get("report_file", {})
+    path = report_file.get("path")
+    name = report_file.get("name")
+    if not path or not name:
+        return None
+    git_head = report.get("git", {}).get("head")
+    latest_report = {
+        "ok": True,
+        "path": path,
+        "name": name,
+        "generated_at": report.get("generated_at"),
+        "git_head": git_head,
+        "blockers": report.get("summary", {}).get("blockers", []),
+    }
+    latest_report_current = {
+        "ok": bool(git_head),
+        "current_head": git_head,
+        "latest_report_head": git_head,
+        "report_name": name,
+        "reason": None if git_head else "revision_unknown",
+    }
+    return latest_report, latest_report_current
+
+
+def _attach_current_report(report: dict[str, Any]) -> None:
+    current = _current_report_summary(report)
+    if current is None:
+        return
+    latest_report, latest_report_current = current
+    for section_name in ("product_status", "completion_audit"):
+        section = report.get(section_name)
+        if isinstance(section, dict):
+            section["latest_report"] = latest_report
+            section["latest_report_current"] = latest_report_current
+
+
 def build_closing_report(root: str | Path = ".", report_path: str | Path | None = None) -> dict[str, Any]:
     root_path = Path(root).resolve()
     resolved_report_path = Path(report_path).resolve() if report_path is not None else None
@@ -71,6 +108,7 @@ def build_closing_report(root: str | Path = ".", report_path: str | Path | None 
     }
     if resolved_report_path is not None:
         report["report_file"] = {"path": str(resolved_report_path), "name": resolved_report_path.name}
+        _attach_current_report(report)
     return report
 
 

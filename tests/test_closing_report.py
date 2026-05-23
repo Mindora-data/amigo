@@ -29,6 +29,10 @@ def test_closing_report_writes_summary(monkeypatch, tmp_path, capsys) -> None:
     assert payload["summary"]["ok"] is False
     assert payload["summary"]["blockers"] == ["claude_live"]
     assert payload["summary"]["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
+    assert payload["product_status"]["latest_report"]["name"] == "report.json"
+    assert payload["product_status"]["latest_report_current"]["ok"] is True
+    assert payload["completion_audit"]["latest_report"]["name"] == "report.json"
+    assert payload["completion_audit"]["latest_report_current"]["ok"] is True
     assert payload["nino_profile"]["profile"]["agent_id"] == "nino"
     assert payload["report_file"]["path"] == str(path)
     assert payload["report_file"]["name"] == "report.json"

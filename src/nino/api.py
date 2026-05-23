@@ -1239,6 +1239,35 @@ def _to_jsonable(value: Any) -> Any:
     return json.loads(json.dumps(value, default=_json_default))
 
 
+def _attach_current_report_summary(report: dict[str, Any]) -> None:
+    report_file = report.get("report_file", {})
+    path = report_file.get("path")
+    name = report_file.get("name")
+    if not path or not name:
+        return
+    git_head = report.get("git", {}).get("head")
+    latest_report = {
+        "ok": True,
+        "path": path,
+        "name": name,
+        "generated_at": report.get("generated_at"),
+        "git_head": git_head,
+        "blockers": report.get("summary", {}).get("blockers", []),
+    }
+    latest_report_current = {
+        "ok": bool(git_head),
+        "current_head": git_head,
+        "latest_report_head": git_head,
+        "report_name": name,
+        "reason": None if git_head else "revision_unknown",
+    }
+    for section_name in ("product_status", "completion_audit"):
+        section = report.get(section_name)
+        if isinstance(section, dict):
+            section["latest_report"] = latest_report
+            section["latest_report_current"] = latest_report_current
+
+
 def _redact_log_line(line: str) -> str:
     line = re.sub(r"(ANTHROPIC_API_KEY=)[^\s]+", r"\1[REDACTED]", line)
     line = re.sub(r"(sk-ant-[A-Za-z0-9_-]{8})[A-Za-z0-9_-]+", r"\1[REDACTED]", line)
@@ -1966,6 +1995,7 @@ class NinoService:
             "product_status": product_status,
             "completion_audit": completion_audit,
         }
+        _attach_current_report_summary(report)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(report, indent=2, default=_json_default), encoding="utf-8")
         return {"ok": True, "path": str(output_path), "report": _to_jsonable(report)}
