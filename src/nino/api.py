@@ -235,6 +235,10 @@ APP_HTML = """<!doctype html>
           <input id="memoryQuery" value="sprints" aria-label="buscar memoria">
           <button id="memorySearch" class="secondary">Buscar</button>
         </div>
+        <div class="row">
+          <input id="decayFactor" type="number" min="0" max="1" step="0.01" value="0.98" aria-label="factor decay">
+          <button id="decayMemory" class="danger">Aplicar decay</button>
+        </div>
         <div id="memoryList" class="list"></div>
         <div class="row">
           <button id="relation" class="secondary">Relación</button>
@@ -736,6 +740,15 @@ APP_HTML = """<!doctype html>
     $("episodes").onclick = loadEpisodes;
     $("facts").onclick = loadFacts;
     $("memorySearch").onclick = loadMemorySearch;
+    $("decayMemory").onclick = async () => {
+      const factor = Number($("decayFactor").value);
+      if (!Number.isFinite(factor) || factor < 0 || factor > 1) return status("Factor decay debe estar entre 0 y 1.");
+      if (!confirm(`Aplicar decay ${factor} a la memoria del agente?`)) return;
+      const out = await api(agentPath("/memory/decay"), {method: "POST", body: JSON.stringify({factor})});
+      print($("memory"), out);
+      await refreshState();
+      await loadFacts();
+    };
     $("relation").onclick = async () => print($("memory"), await api(agentPath("/relation")));
     $("selfModel").onclick = async () => print($("memory"), await api(agentPath("/self-model")));
     $("worldModel").onclick = async () => print($("memory"), await api(agentPath("/world-model")));

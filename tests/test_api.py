@@ -87,6 +87,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"Descargar completo" in body
     assert b"Eliminar episodio" in body
     assert b"Eliminar hecho" in body
+    assert b"decayFactor" in body
+    assert b"Aplicar decay" in body
+    assert b"/memory/decay" in body
     assert b"Importar" in body
     assert b"/agents/import" in body
     assert b"/agents/prune" in body
