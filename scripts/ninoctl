@@ -17,6 +17,7 @@ SCHEDULER_INTERVAL="${NINO_SCHEDULER_INTERVAL:-60}"
 PID_FILE="${NINO_PID_FILE:-$DATA_DIR/nino.pid}"
 LOG_FILE="${NINO_LOG_FILE:-$DATA_DIR/nino-server.log}"
 BACKUP_DIR="${NINO_BACKUP_DIR:-$DATA_DIR/backups}"
+REPORT_DIR="${NINO_REPORT_DIR:-$DATA_DIR/reports}"
 DEFAULT_PYTHON="$ROOT_DIR/.venv/bin/python"
 if [[ -x "$DEFAULT_PYTHON" ]]; then
   PYTHON_BIN="${NINO_PYTHON:-$DEFAULT_PYTHON}"
@@ -54,6 +55,8 @@ Commands:
   product-status Summarize final readiness, evaluation and blockers.
   completion-audit Audit every completion requirement and remaining blockers.
   closing-report Write a JSON evidence report for the current product state.
+  reports     List local closing evidence reports.
+  report      Print one closing evidence report. Use: scripts/ninoctl report <nino-closing-*.json>
   eval        Run deterministic local regression evaluations.
   logs        Show recent logs. Use: scripts/ninoctl logs -f
   backup      Create a timestamped SQLite backup.
@@ -237,6 +240,31 @@ backups() {
   find "$BACKUP_DIR" -maxdepth 1 -type f -name '*.db' -print | sort
 }
 
+reports() {
+  mkdir -p "$REPORT_DIR"
+  find "$REPORT_DIR" -maxdepth 1 -type f -name 'nino-closing-*.json' -print | sort
+}
+
+report() {
+  local report_name="${1:-}"
+  if [[ -z "$report_name" ]]; then
+    echo "Usage: scripts/ninoctl report <nino-closing-*.json>" >&2
+    return 2
+  fi
+  if [[ "$report_name" == */* || ! "$report_name" =~ ^nino-closing-[0-9]{8}-[0-9]{6}[.]json$ ]]; then
+    echo "Invalid report name: $report_name" >&2
+    return 2
+  fi
+
+  local report_path="$REPORT_DIR/$report_name"
+  if [[ ! -f "$report_path" ]]; then
+    echo "Report not found: $report_path" >&2
+    return 1
+  fi
+  cat "$report_path"
+  echo
+}
+
 restore() {
   local source_path="${1:-}"
   if [[ -z "$source_path" ]]; then
@@ -396,6 +424,8 @@ case "$command" in
   product-status) product_status "$@" ;;
   completion-audit) completion_audit "$@" ;;
   closing-report) closing_report "$@" ;;
+  reports) reports ;;
+  report) report "${1:-}" ;;
   eval) eval_local "$@" ;;
   logs) logs "${1:-}" ;;
   backup) backup ;;

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 from pathlib import Path
 
@@ -146,6 +147,46 @@ def test_ninoctl_can_list_and_restore_backups(tmp_path) -> None:
     assert "Database restored from" in restored.stdout
     assert db_path.read_text(encoding="utf-8") == "restored"
     assert list(backup_dir.glob("pre-restore-*.db"))
+
+
+def test_ninoctl_can_list_and_read_closing_reports(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    report_dir = data_dir / "reports"
+    report_dir.mkdir(parents=True)
+    report_path = report_dir / "nino-closing-20260523-120000.json"
+    report_path.write_text('{"ok": true}\n', encoding="utf-8")
+    env = {
+        **os.environ,
+        "NINO_DATA_DIR": str(data_dir),
+        "NINO_REPORT_DIR": str(report_dir),
+    }
+
+    listed = subprocess.run(
+        ["scripts/ninoctl", "reports"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    read = subprocess.run(
+        ["scripts/ninoctl", "report", report_path.name],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    invalid = subprocess.run(
+        ["scripts/ninoctl", "report", "../nino.db"],
+        check=False,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert str(report_path) in listed.stdout
+    assert json.loads(read.stdout) == {"ok": True}
+    assert invalid.returncode == 2
+    assert "Invalid report name" in invalid.stderr
 
 
 def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:

@@ -46,6 +46,8 @@ scripts/ninoctl final-audit
 scripts/ninoctl finish
 scripts/ninoctl completion-audit
 scripts/ninoctl closing-report
+scripts/ninoctl reports
+scripts/ninoctl report nino-closing-YYYYMMDD-HHMMSS.json
 scripts/ninoctl logs
 scripts/ninoctl backup
 scripts/ninoctl backups
@@ -92,7 +94,7 @@ scripts/nino-smoke --json
 
 The smoke test uses a temporary SQLite database and validates the local-first
 flow: `/app`, memory, conversation history, Claude diagnostics, permissions,
-task queue, proactive inbox, safe export and backup.
+task queue, proactive inbox, safe export, backup and closing-report evidence.
 
 Run the full local readiness gate:
 
@@ -183,6 +185,8 @@ The same matrix is available in the UI with `Terminación`, backed by
 `scripts/ninoctl closing-report` writes a timestamped JSON evidence report under
 `data/reports/` with git state, product status, completion audit and the live
 `nino` profile.
+`scripts/ninoctl reports` lists those reports and `scripts/ninoctl report
+<name>` prints a single timestamped report after validating the local filename.
 The same evidence can be generated from `/app` with `Informe cierre`, backed by
 `POST /operations/closing-report`.
 Existing reports can be listed with `Ver informes`, backed by
