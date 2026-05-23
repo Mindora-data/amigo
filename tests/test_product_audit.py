@@ -27,7 +27,12 @@ def test_product_audit_reports_local_evidence_without_requiring_live_claude(tmp_
     monkeypatch.setattr("nino.product_audit._http_json", fake_http_json)
     monkeypatch.setattr(
         "nino.product_audit.run_live_claude_probe",
-        lambda require_key=False: {"ok": True, "skipped": True, "reason": "claude_not_configured"},
+        lambda require_key=False: {
+            "ok": True,
+            "skipped": True,
+            "reason": "claude_not_configured",
+            "setup_commands": ["scripts/ninoctl final-audit"],
+        },
     )
     result = audit_product(db_path=db_path, base_url=app_url, run_local_smoke=False)
 
@@ -43,6 +48,8 @@ def test_product_audit_reports_local_evidence_without_requiring_live_claude(tmp_
         "claude_config_endpoint",
         "claude_live",
     }
+    claude_live = [check for check in result["checks"] if check["name"] == "claude_live"][0]
+    assert "scripts/ninoctl final-audit" in claude_live["evidence"]["setup_commands"]
 
 
 def test_product_audit_blocks_when_live_claude_is_required(tmp_path, monkeypatch) -> None:

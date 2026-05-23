@@ -15,6 +15,8 @@ def test_live_claude_probe_skips_without_config(monkeypatch) -> None:
     assert result["ok"] is True
     assert result["skipped"] is True
     assert result["reason"] == "claude_not_configured"
+    assert "scripts/ninoctl configure-claude --keychain-service nino-anthropic" in result["setup_commands"]
+    assert "scripts/ninoctl final-audit" in result["setup_commands"]
 
 
 def test_live_claude_probe_can_require_key(monkeypatch) -> None:
@@ -26,6 +28,7 @@ def test_live_claude_probe_can_require_key(monkeypatch) -> None:
     assert result["ok"] is False
     assert result["skipped"] is True
     assert result["missing"] == ["ANTHROPIC_API_KEY"]
+    assert "scripts/ninoctl final-audit" in result["setup_commands"]
 
 
 def test_live_claude_probe_script_outputs_skip_json() -> None:
@@ -40,3 +43,4 @@ def test_live_claude_probe_script_outputs_skip_json() -> None:
 
     assert payload["ok"] is True
     assert payload["skipped"] is True
+    assert "scripts/ninoctl final-audit" in payload["setup_commands"]

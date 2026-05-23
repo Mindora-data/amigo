@@ -70,6 +70,8 @@ la misma que usa el servidor y Claude responde con una key real.
 En JSON, esa ejecucion queda marcada como `audit_profile.strict_final: true` y
 `audit_profile.required_checks` lista los checks exigidos, incluido `local_smoke`
 cuando se ejecuta.
+Si falta Claude, la evidencia `claude_live` incluye comandos seguros de
+configuracion y vuelve a apuntar a `scripts/ninoctl final-audit`.
 
 ## Bloque externo
 

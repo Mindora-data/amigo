@@ -7,6 +7,14 @@ from typing import Any
 from .llm import build_configured_llm, llm_config_status
 
 
+CLAUDE_SETUP_COMMANDS = [
+    "scripts/ninoctl configure-claude --keychain-service nino-anthropic",
+    "scripts/nino-launchd stop",
+    "scripts/nino-launchd start",
+    "scripts/ninoctl final-audit",
+]
+
+
 def run_live_claude_probe(*, require_key: bool = False) -> dict[str, Any]:
     config = llm_config_status()
     if not config["enabled"]:
@@ -16,6 +24,7 @@ def run_live_claude_probe(*, require_key: bool = False) -> dict[str, Any]:
             "reason": "claude_not_configured",
             "missing": config["missing"],
             "configured": False,
+            "setup_commands": CLAUDE_SETUP_COMMANDS,
         }
 
     client = build_configured_llm()
@@ -26,6 +35,7 @@ def run_live_claude_probe(*, require_key: bool = False) -> dict[str, Any]:
             "reason": "client_not_available",
             "missing": config["missing"],
             "configured": config["enabled"],
+            "setup_commands": CLAUDE_SETUP_COMMANDS,
         }
 
     prompt = {

@@ -205,6 +205,8 @@ is the same database served over HTTP.
 The JSON result is marked with `audit_profile.strict_final: true` only for this
 strict final profile, and `audit_profile.required_checks` lists every check
 required for the selected profile.
+If Claude is not configured, the `claude_live` evidence includes safe setup
+commands and points back to `scripts/ninoctl final-audit`.
 The `/operations/audit` endpoint and the `/app` audit button also return this
 strict final command and the required checks.
 
