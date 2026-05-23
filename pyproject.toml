@@ -21,6 +21,7 @@ nino-claude-live = "nino.claude_live:main"
 nino-product-audit = "nino.product_audit:main"
 nino-eval = "nino.eval_runner:main"
 nino-status = "nino.product_status:main"
+nino-completion-audit = "nino.completion_audit:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

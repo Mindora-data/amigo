@@ -44,6 +44,7 @@ scripts/ninoctl persistent-audit
 scripts/ninoctl final-preflight
 scripts/ninoctl final-audit
 scripts/ninoctl finish
+scripts/ninoctl completion-audit
 scripts/ninoctl logs
 scripts/ninoctl backup
 scripts/ninoctl backups
@@ -172,6 +173,9 @@ process.
 service, wait for `/health` and run the final audit.
 `Estado final` calls `GET /operations/product-status` and shows the same
 preflight/eval/blocker summary as the CLI status command.
+`scripts/ninoctl completion-audit` prints the requirement-by-requirement
+completion matrix, including the remaining Claude live blocker when no real key
+has been configured.
 The same panel includes `Desactivar Claude`, backed by
 `POST /operations/claude/disable`, to remove Claude settings from `.env.local`,
 disable the runtime client immediately, and optionally delete the configured

@@ -163,6 +163,7 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-disable-claude",
         "nino-eval",
         "nino-status",
+        "nino-completion-audit",
         "nino-launchd",
     ):
         path = scripts_dir / name
@@ -215,6 +216,13 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         text=True,
     )
     subprocess.run(
+        [str(scripts_dir / "ninoctl"), "completion-audit", "--json"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
         [str(scripts_dir / "ninoctl"), "finish", "--key-stdin", "--model", "claude-test", "--preflight-only"],
         check=True,
         env=env,
@@ -235,6 +243,7 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-disable-claude --remove-keychain",
         "nino-eval --json",
         "nino-status --json",
+        "nino-completion-audit --json",
         "nino-configure-claude --key-stdin --model claude-test --keychain-service nino-anthropic",
         "nino-launchd stop",
         "nino-launchd start",
@@ -424,7 +433,7 @@ def test_disable_claude_can_remove_keychain_service(tmp_path) -> None:
 
 
 def test_runtime_scripts_fall_back_to_system_python() -> None:
-    for script in ("scripts/nino-smoke", "scripts/nino-eval", "scripts/nino-status"):
+    for script in ("scripts/nino-smoke", "scripts/nino-eval", "scripts/nino-status", "scripts/nino-completion-audit"):
         content = Path(script).read_text(encoding="utf-8")
         assert 'DEFAULT_PYTHON="$ROOT_DIR/.venv/bin/python"' in content
         assert "command -v python3" in content

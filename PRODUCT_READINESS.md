@@ -25,6 +25,7 @@ scripts/ninoctl live-audit
 scripts/ninoctl final-preflight
 scripts/ninoctl final-audit
 scripts/ninoctl product-status
+scripts/ninoctl completion-audit
 printf '%s' "$ANTHROPIC_API_KEY" | scripts/ninoctl finish --key-stdin
 ```
 
@@ -61,6 +62,7 @@ scripts/ninoctl persistent-audit
 | Contrato API | `GET /openapi.json`, `openapi/README.md`, tests de alineacion con `GET /` | Cumplido |
 | Regresion objetiva | `eval/memory_regression.json`, `nino.eval_runner`, `scripts/ninoctl eval`, `nino-eval`, `GET /operations/eval`, boton `Eval local` en `/app`, pytest | Cumplido |
 | Auditoria final repetible | `GET /operations/audit`, `GET /operations/product-status`, `GET /operations/final-preflight`, `POST /operations/final-audit`, `scripts/nino-product-audit --json`, `scripts/ninoctl product-status`; `--require-launchd` para exigir servicio persistente; `--require-claude-config` para preflight sin llamada viva; `--require-claude-live` para cerrar Claude real | Cumplido local; Claude vivo requiere key real |
+| Auditoria de terminacion | `scripts/ninoctl completion-audit`, `nino-completion-audit` | Cumplido local; marca Claude vivo como bloqueo hasta tener key real |
 
 La auditoria estricta de cierre es:
 
@@ -77,6 +79,9 @@ real.
 bloqueos restantes en formato legible, o en JSON con `--json`.
 `GET /operations/product-status` expone el mismo resumen a la UI con el boton
 `Estado final`.
+`scripts/ninoctl completion-audit` muestra una matriz requisito por requisito:
+runtime persistente, UI, memoria, seguridad, backups, eval, Claude configurado
+y Claude vivo.
 `scripts/ninoctl finish --key-stdin` ejecuta el cierre guiado completo:
 configura Claude en Keychain por defecto, reinicia launchd y lanza el cierre
 final. Con `--preflight-only` valida la configuracion sin gastar llamada viva.

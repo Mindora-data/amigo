@@ -52,6 +52,7 @@ Commands:
   final-audit Run product audit requiring launchd and live Claude.
   finish      Configure Claude, restart launchd and run the final audit.
   product-status Summarize final readiness, evaluation and blockers.
+  completion-audit Audit every completion requirement and remaining blockers.
   eval        Run deterministic local regression evaluations.
   logs        Show recent logs. Use: scripts/ninoctl logs -f
   backup      Create a timestamped SQLite backup.
@@ -354,6 +355,10 @@ product_status() {
   "$ROOT_DIR/scripts/nino-status" "$@"
 }
 
+completion_audit() {
+  "$ROOT_DIR/scripts/nino-completion-audit" "$@"
+}
+
 eval_local() {
   "$ROOT_DIR/scripts/nino-eval" "$@"
 }
@@ -384,6 +389,7 @@ case "$command" in
   final-audit) final_audit ;;
   finish) finish "$@" ;;
   product-status) product_status "$@" ;;
+  completion-audit) completion_audit "$@" ;;
   eval) eval_local "$@" ;;
   logs) logs "${1:-}" ;;
   backup) backup ;;
