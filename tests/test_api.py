@@ -70,6 +70,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"describeClaudeConfig" in body
     assert b"config_errors" in body
     assert b"Corrige los valores indicados" in body
+    assert b"finalReadiness" in body
+    assert b"renderFinalReadiness" in body
+    assert b"Preflight final" in body
     assert b"Marcar entregado" in body
     assert b"clear-delivered" in body
     assert b"/operations/backup" in body
@@ -171,6 +174,11 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
         "claude_configured",
         "claude_live",
     ]
+    assert product_audit["final_readiness"]["claude_configured"] is False
+    assert product_audit["final_readiness"]["ready_for_final_preflight"] is False
+    assert product_audit["final_readiness"]["ready_for_final_audit"] is False
+    assert "NINO_LLM_PROVIDER" in product_audit["final_readiness"]["blockers"]
+    assert "scripts/ninoctl final-audit" in product_audit["final_readiness"]["next_commands"]
     assert {check["name"] for check in product_audit["checks"]} >= {
         "sqlite_database_exists",
         "backup_directory_available",

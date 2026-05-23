@@ -77,6 +77,9 @@ cuando se ejecuta.
 Si falta Claude, la evidencia `claude_configured` y `claude_live` incluye
 comandos seguros de configuracion y vuelve a apuntar a
 `scripts/ninoctl final-audit`.
+`GET /operations/audit` y la UI en `/app` exponen tambien `final_readiness`,
+con bloqueos actuales y comandos siguientes para no interpretar el JSON completo
+de la auditoria.
 
 ## Bloque externo
 

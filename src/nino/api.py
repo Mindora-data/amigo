@@ -117,6 +117,30 @@ APP_HTML = """<!doctype html>
     }
     .listItem:last-child { border-bottom: 0; padding-bottom: 0; }
     .muted { color: #667781; font-size: 12px; }
+    .readiness {
+      display: grid;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: #33424a;
+    }
+    .readinessRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border-bottom: 1px solid #edf1f3;
+      padding-bottom: 6px;
+    }
+    .readinessRow:last-child { border-bottom: 0; padding-bottom: 0; }
+    .pill {
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: #e8f3ed;
+      color: #24523a;
+      white-space: nowrap;
+    }
+    .pill.blocked { background: #f8e8e8; color: #8c1d1d; }
     .status { font-size: 12px; color: #667781; min-height: 18px; }
     pre {
       margin: 0;
@@ -306,6 +330,7 @@ APP_HTML = """<!doctype html>
           <button id="backups" class="secondary">Ver backups</button>
           <button id="auditProduct" class="secondary">Auditoría</button>
         </div>
+        <div id="finalReadiness" class="readiness"></div>
         <div class="row">
           <button id="mode" class="secondary">Modo</button>
           <button id="reset" class="danger">Reset agente</button>
@@ -438,6 +463,41 @@ APP_HTML = """<!doctype html>
       const missing = out.missing?.length ? ` · falta: ${out.missing.join(", ")}` : "";
       return `Claude no configurado${missing}`;
     }
+    function renderFinalReadiness(out) {
+      const box = $("finalReadiness");
+      box.textContent = "";
+      const readiness = out.final_readiness;
+      if (!readiness) return;
+      const rows = [
+        ["Claude configurado", readiness.claude_configured],
+        ["Preflight final", readiness.ready_for_final_preflight],
+        ["Cierre con Claude vivo", readiness.ready_for_final_audit]
+      ];
+      rows.forEach(([label, ok]) => {
+        const row = document.createElement("div");
+        row.className = "readinessRow";
+        const name = document.createElement("span");
+        name.textContent = label;
+        const pill = document.createElement("span");
+        pill.className = ok ? "pill" : "pill blocked";
+        pill.textContent = ok ? "listo" : "bloqueado";
+        row.appendChild(name);
+        row.appendChild(pill);
+        box.appendChild(row);
+      });
+      if (readiness.blockers?.length) {
+        const blocked = document.createElement("div");
+        blocked.className = "muted";
+        blocked.textContent = `Falta: ${readiness.blockers.join(", ")}`;
+        box.appendChild(blocked);
+      }
+      if (readiness.next_commands?.length) {
+        const next = document.createElement("div");
+        next.className = "muted";
+        next.textContent = `Siguiente: ${readiness.next_commands.join(" && ")}`;
+        box.appendChild(next);
+      }
+    }
     $("send").onclick = async () => {
       const payload = {intent: $("intent").value || "chat", text: $("text").value, salience: 0.7, confidence: 0.9};
       if (!payload.text.trim()) return;
@@ -542,6 +602,7 @@ APP_HTML = """<!doctype html>
     $("auditProduct").onclick = async () => {
       const out = await api("/operations/audit");
       print($("backupsOut"), out);
+      renderFinalReadiness(out);
       const preflight = out.final_preflight_command ? ` · preflight: ${out.final_preflight_command}` : "";
       const final = out.final_audit_command ? ` · cierre: ${out.final_audit_command}` : "";
       status(out.ok ? `Auditoría local OK${preflight}${final}` : `Auditoría con bloqueos${preflight}${final}`);
@@ -701,6 +762,7 @@ APP_HTML = """<!doctype html>
       .then(loadConversation)
       .then(loadLLMStatus)
       .then(loadBackups)
+      .then(() => $("auditProduct").click())
       .then(() => $("permissions").click())
       .then(() => $("tasks").click())
       .catch((err) => status(err.message));
@@ -970,6 +1032,17 @@ class NinoService:
     def product_audit(self) -> dict[str, Any]:
         from .product_audit import audit_product
 
+        claude = self.claude_config()
+        claude_configured = claude["configured"] is True and not claude["config_errors"]
+        claude_blockers = []
+        if not claude_configured:
+            claude_blockers.extend(claude["missing"])
+            claude_blockers.extend(error["name"] for error in claude["config_errors"])
+        next_commands = (
+            ["scripts/ninoctl final-preflight", "scripts/ninoctl final-audit"]
+            if claude_configured
+            else claude["setup_commands"]
+        )
         final_audit = {
             "final_preflight_command": "scripts/ninoctl final-preflight",
             "final_audit_command": "scripts/ninoctl final-audit",
@@ -979,6 +1052,17 @@ class NinoService:
                 "claude_configured",
                 "claude_live",
             ],
+            "final_readiness": {
+                "claude_configured": claude_configured,
+                "ready_for_final_preflight": claude_configured,
+                "ready_for_final_audit": False,
+                "blockers": claude_blockers,
+                "next_commands": next_commands,
+                "notes": [
+                    "final-preflight verifica launchd, DB runtime y configuracion Claude sin llamada viva.",
+                    "final-audit solo queda listo tras una respuesta real de Claude.",
+                ],
+            },
         }
 
         if self.db_path is None:
