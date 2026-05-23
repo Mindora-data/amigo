@@ -22,6 +22,7 @@ La prueba viva de Claude queda separada porque requiere red y una key real:
 scripts/nino-claude-live --require-key --json
 scripts/nino-product-audit --require-claude-live --json
 scripts/ninoctl live-audit
+scripts/ninoctl final-preflight
 scripts/ninoctl final-audit
 ```
 
@@ -57,21 +58,25 @@ scripts/ninoctl persistent-audit
 | Empaquetado local | `pyproject.toml`, console scripts `nino-server` y `nino-smoke` | Cumplido |
 | Contrato API | `GET /openapi.json`, `openapi/README.md`, tests de alineacion con `GET /` | Cumplido |
 | Regresion objetiva | `eval/memory_regression.json`, `nino.eval_runner`, pytest | Cumplido |
-| Auditoria final repetible | `GET /operations/audit`, `scripts/nino-product-audit --json`; `--require-launchd` para exigir servicio persistente; `--require-claude-live` para cerrar Claude real | Cumplido local; Claude vivo requiere key real |
+| Auditoria final repetible | `GET /operations/audit`, `scripts/nino-product-audit --json`; `--require-launchd` para exigir servicio persistente; `--require-claude-config` para preflight sin llamada viva; `--require-claude-live` para cerrar Claude real | Cumplido local; Claude vivo requiere key real |
 
 La auditoria estricta de cierre es:
 
 ```bash
+scripts/ninoctl final-preflight
 scripts/ninoctl final-audit
 ```
 
-Debe pasar solo cuando el servicio persistente esta cargado, la DB auditada es
-la misma que usa el servidor y Claude responde con una key real.
+`final-preflight` debe pasar cuando el servicio persistente esta cargado, la DB
+auditada es la misma que usa el servidor y Claude esta configurado, sin gastar
+una llamada viva. `final-audit` anade la respuesta real de Claude con una key
+real.
 En JSON, esa ejecucion queda marcada como `audit_profile.strict_final: true` y
 `audit_profile.required_checks` lista los checks exigidos, incluido `local_smoke`
 cuando se ejecuta.
-Si falta Claude, la evidencia `claude_live` incluye comandos seguros de
-configuracion y vuelve a apuntar a `scripts/ninoctl final-audit`.
+Si falta Claude, la evidencia `claude_configured` y `claude_live` incluye
+comandos seguros de configuracion y vuelve a apuntar a
+`scripts/ninoctl final-audit`.
 
 ## Bloque externo
 

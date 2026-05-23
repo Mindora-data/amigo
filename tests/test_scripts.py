@@ -175,6 +175,7 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     subprocess.run([str(scripts_dir / "ninoctl"), "server-audit"], check=True, env=env, capture_output=True, text=True)
     subprocess.run([str(scripts_dir / "ninoctl"), "persistent-audit"], check=True, env=env, capture_output=True, text=True)
     subprocess.run([str(scripts_dir / "ninoctl"), "live-audit"], check=True, env=env, capture_output=True, text=True)
+    subprocess.run([str(scripts_dir / "ninoctl"), "final-preflight"], check=True, env=env, capture_output=True, text=True)
     subprocess.run([str(scripts_dir / "ninoctl"), "final-audit"], check=True, env=env, capture_output=True, text=True)
     subprocess.run(
         [str(scripts_dir / "ninoctl"), "configure-claude", "--key-stdin", "--model", "claude-test"],
@@ -191,7 +192,8 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-product-audit --json",
         "nino-product-audit --require-launchd --json",
         "nino-product-audit --require-claude-live --json",
-        "nino-product-audit --require-launchd --require-claude-live --json",
+        "nino-product-audit --require-launchd --require-claude-config --json",
+        "nino-product-audit --require-launchd --require-claude-config --require-claude-live --json",
         "nino-configure-claude --key-stdin --model claude-test",
     ]
 

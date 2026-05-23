@@ -92,6 +92,7 @@ def _same_database_path(expected: Path, actual: str | None) -> dict[str, Any]:
 def _audit_profile(
     *,
     require_launchd: bool,
+    require_claude_config: bool,
     require_claude_live: bool,
     http_checks: bool,
     run_local_smoke: bool,
@@ -104,6 +105,8 @@ def _audit_profile(
         requirements.append("local_smoke")
     if http_checks:
         requirements.extend(["runtime_health", "local_first_mode", "runtime_database_matches", "claude_config_endpoint"])
+    if require_claude_config or require_claude_live:
+        requirements.append("claude_configured")
     return {
         "name": "final" if strict_final else "local",
         "strict_final": strict_final,
@@ -111,10 +114,29 @@ def _audit_profile(
     }
 
 
+def _claude_configured_check(claude: dict[str, Any], *, required: bool) -> dict[str, Any]:
+    configured = claude.get("configured") is True and not claude.get("config_errors")
+    evidence = {
+        "configured": claude.get("configured"),
+        "runtime_enabled": claude.get("runtime_enabled"),
+        "provider": claude.get("provider"),
+        "model": claude.get("model"),
+        "api_key_present": claude.get("api_key_present"),
+        "api_key_source": claude.get("api_key_source"),
+        "keychain_service": claude.get("keychain_service"),
+        "missing": claude.get("missing", []),
+        "config_errors": claude.get("config_errors", []),
+        "setup_commands": claude.get("setup_commands", []),
+        "required": required,
+    }
+    return _check("claude_configured", configured if required else True, evidence)
+
+
 def audit_product(
     *,
     db_path: str | Path,
     base_url: str = "http://127.0.0.1:8000",
+    require_claude_config: bool = False,
     require_claude_live: bool = False,
     require_launchd: bool = False,
     launchd_label: str = "local.nino.server",
@@ -127,6 +149,7 @@ def audit_product(
     checks.append(_check("sqlite_database_exists", db.exists(), {"path": str(db)}))
 
     backup_dir = db.parent / "backups"
+    claude_config_required = require_claude_config or require_claude_live
     checks.append(
         _check(
             "backup_directory_available",
@@ -167,8 +190,14 @@ def audit_product(
         try:
             claude = _http_json(base_url, "/operations/claude")
             checks.append(_check("claude_config_endpoint", "api_key_present" in claude and "missing" in claude, claude))
+            if claude_config_required:
+                checks.append(_claude_configured_check(claude, required=True))
         except (OSError, error.URLError, TimeoutError) as exc:
             checks.append(_check("claude_config_endpoint", False, {"error": exc.__class__.__name__}))
+            if claude_config_required:
+                checks.append(_check("claude_configured", False, {"error": exc.__class__.__name__, "required": True}))
+    elif claude_config_required:
+        checks.append(_check("claude_configured", False, {"reason": "http_checks_disabled", "required": True}))
 
     live = run_live_claude_probe(require_key=require_claude_live)
     checks.append(
@@ -184,10 +213,12 @@ def audit_product(
         "checks": checks,
         "base_url": base_url,
         "db_path": str(db),
+        "require_claude_config": require_claude_config,
         "require_claude_live": require_claude_live,
         "require_launchd": require_launchd,
         "audit_profile": _audit_profile(
             require_launchd=require_launchd,
+            require_claude_config=require_claude_config,
             require_claude_live=require_claude_live,
             http_checks=http_checks,
             run_local_smoke=run_local_smoke,
@@ -199,6 +230,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Audit NIÑO local product readiness with concrete evidence.")
     parser.add_argument("--db", default=os.environ.get("NINO_DB_PATH", "data/nino.db"))
     parser.add_argument("--base-url", default=os.environ.get("NINO_BASE_URL", "http://127.0.0.1:8000"))
+    parser.add_argument("--require-claude-config", action="store_true")
     parser.add_argument("--require-claude-live", action="store_true")
     parser.add_argument("--require-launchd", action="store_true")
     parser.add_argument("--launchd-label", default=os.environ.get("NINO_LAUNCHD_LABEL", "local.nino.server"))
@@ -213,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
     result = audit_product(
         db_path=args.db,
         base_url=args.base_url,
+        require_claude_config=args.require_claude_config,
         require_claude_live=args.require_claude_live,
         require_launchd=args.require_launchd,
         launchd_label=args.launchd_label,

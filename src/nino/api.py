@@ -542,8 +542,9 @@ APP_HTML = """<!doctype html>
     $("auditProduct").onclick = async () => {
       const out = await api("/operations/audit");
       print($("backupsOut"), out);
+      const preflight = out.final_preflight_command ? ` · preflight: ${out.final_preflight_command}` : "";
       const final = out.final_audit_command ? ` · cierre: ${out.final_audit_command}` : "";
-      status(out.ok ? `Auditoría local OK${final}` : `Auditoría con bloqueos${final}`);
+      status(out.ok ? `Auditoría local OK${preflight}${final}` : `Auditoría con bloqueos${preflight}${final}`);
     };
     $("mode").onclick = async () => print($("state"), await api("/operations/mode"));
     $("saveProactivity").onclick = async () => {
@@ -970,10 +971,12 @@ class NinoService:
         from .product_audit import audit_product
 
         final_audit = {
+            "final_preflight_command": "scripts/ninoctl final-preflight",
             "final_audit_command": "scripts/ninoctl final-audit",
             "final_audit_requirements": [
                 "launchd_service",
                 "runtime_database_matches",
+                "claude_configured",
                 "claude_live",
             ],
         }

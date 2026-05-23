@@ -41,6 +41,7 @@ scripts/ninoctl readiness
 scripts/ninoctl audit
 scripts/ninoctl server-audit
 scripts/ninoctl persistent-audit
+scripts/ninoctl final-preflight
 scripts/ninoctl final-audit
 scripts/ninoctl logs
 scripts/ninoctl backup
@@ -192,6 +193,7 @@ Run a live probe only after the key is configured:
 scripts/nino-claude-live --require-key --json
 scripts/nino-product-audit --require-claude-live --json
 scripts/ninoctl live-audit
+scripts/ninoctl final-preflight
 scripts/ninoctl final-audit
 
 curl -X POST http://127.0.0.1:8000/agents/nino/llm/probe \
@@ -199,14 +201,16 @@ curl -X POST http://127.0.0.1:8000/agents/nino/llm/probe \
   -d '{}'
 ```
 
+Run `scripts/ninoctl final-preflight` before spending a live Claude call. It
+requires launchd, the same audited SQLite database served over HTTP, and a valid
+Claude configuration, but it does not send a prompt.
 Run `scripts/ninoctl final-audit` from the installed runtime folder used by
-launchd, normally `~/Developer/bebe`; it checks that the audited SQLite database
-is the same database served over HTTP.
+launchd, normally `~/Developer/bebe`; it adds the live Claude response check.
 The JSON result is marked with `audit_profile.strict_final: true` only for this
 strict final profile, and `audit_profile.required_checks` lists every check
 required for the selected profile.
-If Claude is not configured, the `claude_live` evidence includes safe setup
-commands and points back to `scripts/ninoctl final-audit`.
+If Claude is not configured, the `claude_configured` and `claude_live` evidence
+include safe setup commands and point back to `scripts/ninoctl final-audit`.
 The `/operations/audit` endpoint and the `/app` audit button also return this
 strict final command and the required checks.
 

@@ -47,6 +47,7 @@ Commands:
   server-audit Run product audit against the configured local server.
   persistent-audit Run product audit requiring the macOS launchd service.
   live-audit  Run product audit requiring a live Claude key.
+  final-preflight Run final local preflight without a live Claude call.
   final-audit Run product audit requiring launchd and live Claude.
   logs        Show recent logs. Use: scripts/ninoctl logs -f
   backup      Create a timestamped SQLite backup.
@@ -291,8 +292,12 @@ live_audit() {
   "$ROOT_DIR/scripts/nino-product-audit" --require-claude-live --json
 }
 
+final_preflight() {
+  "$ROOT_DIR/scripts/nino-product-audit" --require-launchd --require-claude-config --json
+}
+
 final_audit() {
-  "$ROOT_DIR/scripts/nino-product-audit" --require-launchd --require-claude-live --json
+  "$ROOT_DIR/scripts/nino-product-audit" --require-launchd --require-claude-config --require-claude-live --json
 }
 
 command="${1:-}"
@@ -316,6 +321,7 @@ case "$command" in
   server-audit) server_audit ;;
   persistent-audit) persistent_audit ;;
   live-audit) live_audit ;;
+  final-preflight) final_preflight ;;
   final-audit) final_audit ;;
   logs) logs "${1:-}" ;;
   backup) backup ;;
