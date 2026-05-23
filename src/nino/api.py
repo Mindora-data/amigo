@@ -848,9 +848,10 @@ APP_HTML = """<!doctype html>
     async function writeClosingReportAfterAudit(auditLabel) {
       const report = await api("/operations/closing-report", {method: "POST", body: "{}"});
       print($("backupsOut"), report);
+      renderCompletionAudit(report.report?.completion_audit || report);
       if (report.ok) {
         await loadReports();
-        status(`${auditLabel} · informe: ${report.path}`);
+        status(`${auditLabel} · informe: ${report.path} · terminación actualizada`);
       } else {
         status(`${auditLabel} · informe fallido`);
       }
