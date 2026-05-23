@@ -469,6 +469,8 @@ APP_HTML = """<!doctype html>
       const readiness = out.final_readiness;
       if (!readiness) return;
       const rows = [
+        ["Auditoría local", readiness.local_audit_ok],
+        ["Servicio persistente", readiness.launchd_observed],
         ["Claude configurado", readiness.claude_configured],
         ["Preflight final", readiness.ready_for_final_preflight],
         ["Cierre con Claude vivo", readiness.ready_for_final_audit]
@@ -1032,18 +1034,57 @@ class NinoService:
     def product_audit(self) -> dict[str, Any]:
         from .product_audit import audit_product
 
-        claude = self.claude_config()
-        claude_configured = claude["configured"] is True and not claude["config_errors"]
-        claude_blockers = []
-        if not claude_configured:
-            claude_blockers.extend(claude["missing"])
-            claude_blockers.extend(error["name"] for error in claude["config_errors"])
-        next_commands = (
-            ["scripts/ninoctl final-preflight", "scripts/ninoctl final-audit"]
-            if claude_configured
-            else claude["setup_commands"]
-        )
-        final_audit = {
+        def final_metadata(result: dict[str, Any]) -> dict[str, Any]:
+            claude = self.claude_config()
+            claude_configured = claude["configured"] is True and not claude["config_errors"]
+            checks = {check["name"]: check for check in result.get("checks", [])}
+            launchd = checks.get("launchd_service", {})
+            launchd_evidence = launchd.get("evidence", {})
+            launchd_observed = launchd.get("ok") is True and not launchd_evidence.get("skipped", False)
+            local_audit_ok = result.get("ok") is True
+            blockers = []
+            if not local_audit_ok:
+                blockers.extend(check["name"] for check in result.get("checks", []) if not check.get("ok"))
+            if not launchd_observed:
+                blockers.append("launchd_service")
+            if not claude_configured:
+                blockers.extend(claude["missing"])
+                blockers.extend(error["name"] for error in claude["config_errors"])
+            blockers = list(dict.fromkeys(blockers))
+            ready_for_final_preflight = local_audit_ok and launchd_observed and claude_configured
+            if ready_for_final_preflight:
+                next_commands = ["scripts/ninoctl final-preflight", "scripts/ninoctl final-audit"]
+            elif not claude_configured:
+                next_commands = claude["setup_commands"]
+            elif not launchd_observed:
+                next_commands = ["scripts/nino-launchd start", "scripts/ninoctl final-preflight"]
+            else:
+                next_commands = ["scripts/ninoctl persistent-audit"]
+            return {
+                "final_preflight_command": "scripts/ninoctl final-preflight",
+                "final_audit_command": "scripts/ninoctl final-audit",
+                "final_audit_requirements": [
+                    "launchd_service",
+                    "runtime_database_matches",
+                    "claude_configured",
+                    "claude_live",
+                ],
+                "final_readiness": {
+                    "local_audit_ok": local_audit_ok,
+                    "launchd_observed": launchd_observed,
+                    "claude_configured": claude_configured,
+                    "ready_for_final_preflight": ready_for_final_preflight,
+                    "ready_for_final_audit": False,
+                    "blockers": blockers,
+                    "next_commands": next_commands,
+                    "notes": [
+                        "final-preflight verifica launchd, DB runtime y configuracion Claude sin llamada viva.",
+                        "final-audit solo queda listo tras una respuesta real de Claude.",
+                    ],
+                },
+            }
+
+        base_final_audit = {
             "final_preflight_command": "scripts/ninoctl final-preflight",
             "final_audit_command": "scripts/ninoctl final-audit",
             "final_audit_requirements": [
@@ -1052,17 +1093,6 @@ class NinoService:
                 "claude_configured",
                 "claude_live",
             ],
-            "final_readiness": {
-                "claude_configured": claude_configured,
-                "ready_for_final_preflight": claude_configured,
-                "ready_for_final_audit": False,
-                "blockers": claude_blockers,
-                "next_commands": next_commands,
-                "notes": [
-                    "final-preflight verifica launchd, DB runtime y configuracion Claude sin llamada viva.",
-                    "final-audit solo queda listo tras una respuesta real de Claude.",
-                ],
-            },
         }
 
         if self.db_path is None:
@@ -1075,7 +1105,7 @@ class NinoService:
                         "evidence": {"error": "db_path_unavailable"},
                     }
                 ],
-                **final_audit,
+                **base_final_audit,
             }
         result = audit_product(
             db_path=self.db_path,
@@ -1084,7 +1114,7 @@ class NinoService:
             run_local_smoke=False,
             http_checks=False,
         )
-        return {**result, **final_audit}
+        return {**result, **final_metadata(result)}
 
     def tick(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.tick(agent_id, payload))

@@ -213,7 +213,8 @@ If Claude is not configured, the `claude_configured` and `claude_live` evidence
 include safe setup commands and point back to `scripts/ninoctl final-audit`.
 The `/operations/audit` endpoint and the `/app` audit button also return this
 strict final command, the required checks, and `final_readiness` with current
-blockers plus the next safe commands.
+local audit state, observed launchd state, Claude configuration blockers, and
+the next safe commands.
 
 Do not commit API keys. Keep `ANTHROPIC_API_KEY` in your shell environment or a
 local untracked secret manager.
