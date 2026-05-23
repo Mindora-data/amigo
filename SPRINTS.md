@@ -205,6 +205,7 @@ Hecho:
 - Estado final desde API/UI. Hecho inicial: `GET /operations/product-status` y boton `Estado final` muestran el mismo resumen de preflight, eval y bloqueos.
 - Auditoria de terminacion. Hecho inicial: `scripts/ninoctl completion-audit` y `nino-completion-audit` listan requisitos, evidencias y bloqueos restantes, incluyendo agente vivo `nino`.
 - Auditoria de terminacion desde API/UI. Hecho inicial: `GET /operations/completion-audit` y boton `Terminación`.
+- Requisito explicito de evidencia de cierre. Hecho inicial: `completion-audit` incluye `closing_evidence` cubierto por smoke y API.
 - Informe de cierre local. Hecho inicial: `scripts/ninoctl closing-report` y `nino-closing-report` escriben JSON de evidencias en `data/reports/`.
 - Informe de cierre desde API/UI. Hecho inicial: `POST /operations/closing-report` y boton `Informe cierre`.
 - Listado de informes desde API/UI. Hecho inicial: `GET /operations/reports` y boton `Ver informes`.
@@ -261,6 +262,7 @@ Auditoria final de producto 100% local:
 30. Hecho inicial: evaluacion local de regresion tambien disponible por CLI con `scripts/ninoctl eval` y console script `nino-eval`.
 31. Hecho inicial: estado final resumido con `scripts/ninoctl product-status`, console script `nino-status`, `GET /operations/product-status` y boton `Estado final`.
 31b. Hecho inicial: auditoria de terminacion requisito por requisito con `scripts/ninoctl completion-audit`, `nino-completion-audit`, `GET /operations/completion-audit` y boton `Terminación`, incluyendo agente vivo `nino`.
+31b2. Hecho inicial: requisito `closing_evidence` en auditoria de terminacion para comprobar informes de cierre.
 31c. Hecho inicial: informe de cierre local con `scripts/ninoctl closing-report` y `nino-closing-report`.
 31d. Hecho inicial: informe de cierre desde API/UI con `POST /operations/closing-report` y boton `Informe cierre`.
 31e. Hecho inicial: listado de informes desde API/UI con `GET /operations/reports` y boton `Ver informes`.

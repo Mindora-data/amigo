@@ -64,7 +64,7 @@ scripts/ninoctl persistent-audit
 | Contrato API | `GET /openapi.json`, `openapi/README.md`, tests de alineacion con `GET /` | Cumplido |
 | Regresion objetiva | `eval/memory_regression.json`, `nino.eval_runner`, `scripts/ninoctl eval`, `nino-eval`, `GET /operations/eval`, boton `Eval local` en `/app`, pytest | Cumplido |
 | Auditoria final repetible | `GET /operations/audit`, `GET /operations/product-status`, `GET /operations/final-preflight`, `POST /operations/final-audit`, `scripts/nino-product-audit --json`, `scripts/ninoctl product-status`; `--require-launchd` para exigir servicio persistente; `--require-claude-config` para preflight sin llamada viva; `--require-claude-live` para cerrar Claude real | Cumplido local; Claude vivo requiere key real |
-| Auditoria de terminacion | `scripts/ninoctl completion-audit`, `nino-completion-audit`, `GET /operations/completion-audit`, boton `Terminación` | Cumplido local; marca Claude vivo como bloqueo hasta tener key real |
+| Auditoria de terminacion | `scripts/ninoctl completion-audit`, `nino-completion-audit`, `GET /operations/completion-audit`, boton `Terminación`, requisito `closing_evidence` para informes de cierre | Cumplido local; marca Claude vivo como bloqueo hasta tener key real |
 | Informe de cierre | `scripts/ninoctl closing-report`, `nino-closing-report`, `POST /operations/closing-report`, `GET /operations/reports`, `GET /operations/reports/{report_name}`, botones `Informe cierre`, `Ver informes` y `Ver JSON`, smoke `closing_report`, `closing_report_list`, `closing_report_read` y `closing_report_name_guard`, JSON en `data/reports/` | Cumplido local |
 
 La auditoria estricta de cierre es:
@@ -84,7 +84,7 @@ bloqueos restantes en formato legible, o en JSON con `--json`.
 `Estado final`.
 `scripts/ninoctl completion-audit` muestra una matriz requisito por requisito:
 runtime persistente, UI, memoria, agente vivo `nino`, seguridad, backups,
-eval, Claude configurado y Claude vivo.
+eval, evidencia de cierre, Claude configurado y Claude vivo.
 `GET /operations/completion-audit` y el boton `Terminación` exponen esa matriz
 desde el proceso servido.
 `scripts/ninoctl closing-report` guarda una evidencia local versionable fuera de

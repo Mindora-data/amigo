@@ -26,6 +26,10 @@ def _audit_payload() -> dict:
                         "safe_export",
                         "sqlite_backup",
                         "sqlite_backup_list",
+                        "closing_report",
+                        "closing_report_list",
+                        "closing_report_read",
+                        "closing_report_name_guard",
                     ]
                 },
             },
@@ -73,6 +77,7 @@ def test_completion_audit_maps_requirements_and_blockers(monkeypatch, tmp_path, 
     assert result["ok"] is False
     blocked = {item["id"] for item in result["blockers"]}
     assert blocked == {"claude_configured", "claude_live"}
+    assert any(item["id"] == "closing_evidence" and item["ok"] for item in result["requirements"])
     assert result["living_agent"]["episode_count"] == 1
     assert "scripts/ninoctl finish --key-stdin" in result["next_commands"]
     assert "blocked: claude_live" in format_completion_audit(result)

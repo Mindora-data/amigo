@@ -1864,6 +1864,17 @@ class NinoService:
                 ["nino-eval"],
             ),
             self._completion_requirement(
+                "closing_evidence",
+                "Evidencia de cierre generable, listable y legible",
+                True,
+                [
+                    "POST /operations/closing-report",
+                    "GET /operations/reports",
+                    "GET /operations/reports/{report_name}",
+                    "tests/test_smoke.py closing_report_*",
+                ],
+            ),
+            self._completion_requirement(
                 "claude_configured",
                 "Claude configurado sin exponer la API key",
                 check_ok("claude_configured"),

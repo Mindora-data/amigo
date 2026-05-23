@@ -291,6 +291,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
         "backups",
         "living_agent",
         "regression_eval",
+        "closing_evidence",
         "claude_configured",
         "claude_live",
     }
