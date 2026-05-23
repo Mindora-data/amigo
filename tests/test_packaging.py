@@ -18,3 +18,16 @@ def test_package_metadata_exposes_server_console_script() -> None:
     assert pyproject["project"]["scripts"]["nino-completion-audit"] == "nino.completion_audit:main"
     assert pyproject["project"]["scripts"]["nino-closing-report"] == "nino.closing_report:main"
     assert pyproject["tool"]["setuptools"]["package-dir"] == {"": "src"}
+
+
+def test_user_docs_do_not_recommend_inline_anthropic_api_key_assignment() -> None:
+    docs = "\n".join(
+        [
+            Path("README.md").read_text(encoding="utf-8"),
+            Path("PRODUCT_READINESS.md").read_text(encoding="utf-8"),
+            Path("SPRINTS.md").read_text(encoding="utf-8"),
+        ]
+    )
+
+    assert "ANTHROPIC_API_KEY=..." not in docs
+    assert "read -rsp 'ANTHROPIC_API_KEY: '" in docs

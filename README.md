@@ -178,7 +178,9 @@ For a non-interactive setup:
 ```bash
 printf '%s' "$ANTHROPIC_API_KEY" | scripts/ninoctl configure-claude --key-stdin
 printf '%s' "$ANTHROPIC_API_KEY" | scripts/ninoctl configure-claude --key-stdin --keychain-service nino-anthropic
-ANTHROPIC_API_KEY=... scripts/ninoctl finish --key-env
+read -rsp 'ANTHROPIC_API_KEY: ' ANTHROPIC_API_KEY; echo
+export ANTHROPIC_API_KEY
+scripts/ninoctl finish --key-env
 ```
 
 The command writes `.env.local` with file mode `600`, preserves unrelated local

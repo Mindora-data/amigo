@@ -152,7 +152,8 @@ La unica comprobacion que no puede quedar demostrada sin estado externo es una
 llamada viva a Claude. Para validarla:
 
 ```bash
-export ANTHROPIC_API_KEY="..."
+read -rsp 'ANTHROPIC_API_KEY: ' ANTHROPIC_API_KEY; echo
+export ANTHROPIC_API_KEY
 export NINO_LLM_PROVIDER=claude
 scripts/ninoctl start
 scripts/ninoctl claude
