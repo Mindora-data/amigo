@@ -227,6 +227,7 @@ Hecho:
 - Lectura segura de informes desde API/UI. Hecho inicial: `GET /operations/reports/{report_name}` y boton `Ver JSON`, limitado a nombres `nino-closing-*.json`.
 - Smoke de informes de cierre. Hecho inicial: `scripts/nino-smoke` cubre crear, listar, leer, leer el ultimo y rechazar nombres invalidos de informes.
 - Cierre final guiado. Hecho inicial: `scripts/ninoctl finish --key-stdin` configura Claude en Keychain por defecto, reinicia launchd, ejecuta `final-audit`, genera informe de cierre y lanza `completion-audit`; `--preflight-only` evita la llamada viva.
+- Matriz de terminacion tras cierre UI. Hecho inicial: `Cierre final` y `Cierre guiado` refrescan la auditoria de terminacion con la evidencia del informe recien generado.
 - Politicas de herramienta/accion externa. Hecho inicial: permisos por tipo de accion, bloqueo por defecto y auditoria.
 - Cola de tareas autonomas con limites. Hecho inicial: cola persistente por agente con limite de pendientes, bloqueo por permisos, ejecucion manual y panel en `/app`.
 - Agenda proactiva con ventanas horarias. Hecho inicial: `active_hours_start`/`active_hours_end` bloquean envios fuera de ventana y se configuran desde `/app`.
@@ -300,6 +301,7 @@ Auditoria final de producto 100% local:
 31g. Hecho inicial: smoke de informes de cierre con checks `closing_report`, `closing_report_list`, `closing_report_read`, `closing_report_latest` y `closing_report_name_guard`.
 32. Hecho inicial: cierre final guiado con `scripts/ninoctl finish --key-stdin`, Keychain por defecto, modo `--preflight-only`, informe de cierre y `completion-audit` al final del flujo.
 33. Hecho inicial: cierre guiado desde UI con configuracion Claude, reinicio persistente, espera de salud, cierre final e informe de cierre.
-34. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
+34. Hecho inicial: tras `Cierre final` o `Cierre guiado`, la UI refresca la matriz `Terminación` usando el informe recien escrito.
+35. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

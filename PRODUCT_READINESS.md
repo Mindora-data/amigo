@@ -130,7 +130,9 @@ real ya esta configurada.
 Desde el panel LLM, `Cierre guiado` configura Claude con la key pegada,
 reinicia el servicio persistente, lanza `Cierre final` cuando `/health`
 vuelve a responder y escribe un informe de cierre actualizado. El boton
-`Cierre final` tambien genera ese informe despues de auditar.
+`Cierre final` tambien genera ese informe despues de auditar. En ambos casos,
+la UI refresca la matriz `Terminación` con la evidencia del informe recien
+creado.
 
 ## Bloque externo
 

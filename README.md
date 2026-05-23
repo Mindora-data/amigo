@@ -177,7 +177,8 @@ restarting launchd so the persistent service reloads the file from a clean
 process.
 `Cierre guiado` uses the same panel to save Claude, restart the persistent
 service, wait for `/health`, run the final audit and write a fresh closing
-report. The `Cierre final` button also writes that report after the audit.
+report. The `Cierre final` button also writes that report after the audit. Both
+flows refresh the `Terminación` matrix with the evidence from the new report.
 `Estado final` calls `GET /operations/product-status` and shows the same
 preflight/eval/blocker summary as the CLI status command, including the newest
 closing report name, git head and blockers when one exists. It also reports
