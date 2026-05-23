@@ -205,6 +205,8 @@ Claude is configured but the live probe is still missing or failing, the
 recommended action switches to `finish --skip-configure`.
 The same matrix is available in the UI with `Terminación`, backed by
 `GET /operations/completion-audit`.
+`GET /operations/next-action` returns only the recommended command plus the
+current blockers for lightweight callers.
 `scripts/ninoctl closing-report` writes a timestamped JSON evidence report under
 `data/reports/` with git state, product status, completion audit and the live
 `nino` profile. Each report also includes its own `report_file` name and path,
@@ -330,6 +332,7 @@ POST /operations/claude/configure
 POST /operations/claude/disable
 GET  /operations/audit
 GET  /operations/product-status
+GET  /operations/next-action
 GET  /operations/completion-audit
 POST /operations/closing-report
 GET  /operations/reports

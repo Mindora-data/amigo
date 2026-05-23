@@ -170,6 +170,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     )
     product_audit = _request(app, "GET", "/operations/audit")
     product_status = _request(app, "GET", "/operations/product-status")
+    next_action = _request(app, "GET", "/operations/next-action")
     completion_audit = _request(app, "GET", "/operations/completion-audit")
     closing_report = _request(app, "POST", "/operations/closing-report", {})
     reports = _request(app, "GET", "/operations/reports")
@@ -217,6 +218,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "POST /operations/claude/disable" in root["endpoints"]
     assert "GET /operations/audit" in root["endpoints"]
     assert "GET /operations/product-status" in root["endpoints"]
+    assert "GET /operations/next-action" in root["endpoints"]
     assert "GET /operations/completion-audit" in root["endpoints"]
     assert "POST /operations/closing-report" in root["endpoints"]
     assert "GET /operations/reports" in root["endpoints"]
@@ -238,6 +240,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "/operations/claude/disable" in openapi["paths"]
     assert "/operations/audit" in openapi["paths"]
     assert "/operations/product-status" in openapi["paths"]
+    assert "/operations/next-action" in openapi["paths"]
     assert "/operations/completion-audit" in openapi["paths"]
     assert "/operations/closing-report" in openapi["paths"]
     assert "post" in openapi["paths"]["/operations/closing-report"]
@@ -296,6 +299,10 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert any(blocker["name"] == "closing_evidence" for blocker in product_status["blockers"])
     assert "scripts/ninoctl finish --key-stdin" in product_status["next_commands"]
     assert product_status["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
+    assert next_action["ok"] is True
+    assert next_action["recommended_next_action"] == product_status["recommended_next_action"]
+    assert next_action["product_ok"] is False
+    assert any(blocker["name"] == "claude_configured" for blocker in next_action["blockers"])
     assert product_status["audit"]["final_readiness"]["ready_for_final_preflight"] is False
     assert product_status["eval"]["ok"] is True
     assert product_status["latest_report"]["ok"] is False

@@ -1170,6 +1170,7 @@ API_ENDPOINTS = [
     "POST /operations/claude/disable",
     "GET /operations/audit",
     "GET /operations/product-status",
+    "GET /operations/next-action",
     "GET /operations/completion-audit",
     "POST /operations/closing-report",
     "GET /operations/reports",
@@ -1920,6 +1921,15 @@ class NinoService:
             "eval": eval_result,
         }
 
+    def next_action(self) -> dict[str, Any]:
+        status = self.product_status()
+        return {
+            "ok": bool(status.get("recommended_next_action")),
+            "recommended_next_action": status.get("recommended_next_action") or "",
+            "product_ok": bool(status.get("ok")),
+            "blockers": status.get("blockers", []),
+        }
+
     @staticmethod
     def _recommended_next_action(ok: bool, blockers: list[dict[str, Any]], commands: list[str]) -> str:
         if ok:
@@ -2408,6 +2418,8 @@ class NinoHttpApp:
             return "200 OK", self.service.product_audit()
         if method == "GET" and path == "/operations/product-status":
             return "200 OK", self.service.product_status()
+        if method == "GET" and path == "/operations/next-action":
+            return "200 OK", self.service.next_action()
         if method == "GET" and path == "/operations/completion-audit":
             return "200 OK", self.service.completion_audit()
         if method == "POST" and path == "/operations/closing-report":

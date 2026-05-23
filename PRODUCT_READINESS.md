@@ -85,7 +85,8 @@ comando operativo. Tambien marca si ese informe corresponde a la revision actual
 si falta o esta obsoleto, `closing_evidence` queda como bloqueo e incluye
 `recommended_next_action`.
 `GET /operations/product-status` expone el mismo resumen a la UI con el boton
-`Estado final`.
+`Estado final`. `GET /operations/next-action` devuelve solo esa accion y los
+bloqueos actuales para clientes ligeros.
 `scripts/ninoctl completion-audit` muestra una matriz requisito por requisito:
 runtime persistente, UI, memoria, agente vivo `nino`, seguridad, backups,
 eval, evidencia de cierre, Claude configurado, Claude vivo y ultimo informe.
