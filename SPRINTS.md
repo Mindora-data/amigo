@@ -206,6 +206,7 @@ Hecho:
 - Estado final con evidencia de cierre. Hecho inicial: `product-status` y `/operations/product-status` incluyen `latest_report` con el ultimo informe disponible.
 - Estado final legible con head y bloqueos. Hecho inicial: `product-status` y UI muestran head corto y bloqueos del ultimo informe.
 - Estado final con evidencia actual. Hecho inicial: `product-status` y UI incluyen `latest_report_current` para comprobar que el ultimo informe coincide con la revision instalada.
+- Estado final bloquea evidencia obsoleta. Hecho inicial: `product-status` incluye `closing_evidence` como bloqueo si falta informe actual.
 - Siguiente accion de cierre. Hecho inicial: `product-status` y UI exponen `recommended_next_action` con el proximo comando operativo.
 - Auditoria de terminacion. Hecho inicial: `scripts/ninoctl completion-audit` y `nino-completion-audit` listan requisitos, evidencias y bloqueos restantes, incluyendo agente vivo `nino`.
 - Auditoria de terminacion desde API/UI. Hecho inicial: `GET /operations/completion-audit` y boton `Terminación`.
@@ -279,6 +280,7 @@ Auditoria final de producto 100% local:
 31a3. Hecho inicial: salida legible y UI de `Estado final` muestran head corto y bloqueos de `latest_report`.
 31a4. Hecho inicial: `product-status` y UI incluyen `recommended_next_action` para guiar el cierre.
 31a5. Hecho inicial: `product-status` y UI incluyen `latest_report_current` para detectar si el informe mas reciente corresponde al commit/runtime actual.
+31a6. Hecho inicial: `product-status` bloquea con `closing_evidence` cuando `latest_report_current` no esta listo.
 31b. Hecho inicial: auditoria de terminacion requisito por requisito con `scripts/ninoctl completion-audit`, `nino-completion-audit`, `GET /operations/completion-audit` y boton `Terminación`, incluyendo agente vivo `nino`.
 31b1. Hecho inicial: `completion-audit` incluye `latest_report` con nombre, head y bloqueos del ultimo informe.
 31b1a. Hecho inicial: `completion-audit` incluye `recommended_next_action` para guiar el cierre desde la matriz de terminacion.

@@ -292,6 +292,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert product_status["eval_ok"] is True
     assert product_status["eval_case_count"] >= 1
     assert any(blocker["name"] == "claude_configured" for blocker in product_status["blockers"])
+    assert any(blocker["name"] == "closing_evidence" for blocker in product_status["blockers"])
     assert "scripts/ninoctl finish --key-stdin" in product_status["next_commands"]
     assert product_status["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
     assert product_status["audit"]["final_readiness"]["ready_for_final_preflight"] is False

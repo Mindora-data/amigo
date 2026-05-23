@@ -45,6 +45,8 @@ def _recommended_next_action(ok: bool, blockers: list[dict[str, Any]], commands:
     blocker_names = {str(blocker.get("name")) for blocker in blockers}
     if "claude_configured" in blocker_names:
         return "scripts/ninoctl finish --key-stdin"
+    if "closing_evidence" in blocker_names:
+        return "scripts/ninoctl closing-report"
     return commands[0] if commands else ""
 
 
@@ -131,9 +133,19 @@ def build_product_status(root: str | Path = ".") -> dict[str, Any]:
             }
         )
 
-    ok = bool(audit.get("ok")) and bool(eval_result.get("ok"))
     commands = _setup_commands(audit)
     latest_report = _latest_report(root_path)
+    latest_report_current = _latest_report_current(root_path, latest_report)
+    if latest_report_current.get("ok") is not True:
+        blockers.append(
+            {
+                "name": "closing_evidence",
+                "missing": ["latest_report_current"],
+                "reason": latest_report_current.get("reason"),
+                "required": True,
+            }
+        )
+    ok = bool(audit.get("ok")) and bool(eval_result.get("ok")) and latest_report_current.get("ok") is True
     return {
         "ok": ok,
         "final_preflight_ok": bool(audit.get("ok")),
@@ -143,7 +155,7 @@ def build_product_status(root: str | Path = ".") -> dict[str, Any]:
         "next_commands": commands,
         "recommended_next_action": _recommended_next_action(ok, blockers, commands),
         "latest_report": latest_report,
-        "latest_report_current": _latest_report_current(root_path, latest_report),
+        "latest_report_current": latest_report_current,
         "audit": audit,
         "eval": eval_result,
     }

@@ -1892,9 +1892,19 @@ class NinoService:
                     "required": evidence.get("required", False),
                 }
             )
-        ok = bool(audit.get("ok")) and bool(eval_result.get("ok"))
         commands = audit.get("final_readiness", {}).get("next_commands", [])
         latest_report = self._latest_report_summary()
+        latest_report_current = self._latest_report_current_summary(latest_report)
+        if latest_report_current.get("ok") is not True:
+            blockers.append(
+                {
+                    "name": "closing_evidence",
+                    "missing": ["latest_report_current"],
+                    "reason": latest_report_current.get("reason"),
+                    "required": True,
+                }
+            )
+        ok = bool(audit.get("ok")) and bool(eval_result.get("ok")) and latest_report_current.get("ok") is True
         return {
             "ok": ok,
             "final_preflight_ok": bool(audit.get("ok")),
@@ -1904,7 +1914,7 @@ class NinoService:
             "next_commands": commands,
             "recommended_next_action": self._recommended_next_action(ok, blockers, commands),
             "latest_report": latest_report,
-            "latest_report_current": self._latest_report_current_summary(latest_report),
+            "latest_report_current": latest_report_current,
             "audit": audit,
             "eval": eval_result,
         }

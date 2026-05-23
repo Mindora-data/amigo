@@ -180,7 +180,8 @@ report. The `Cierre final` button also writes that report after the audit.
 `Estado final` calls `GET /operations/product-status` and shows the same
 preflight/eval/blocker summary as the CLI status command, including the newest
 closing report name, git head and blockers when one exists. It also reports
-whether that newest report matches the current installed revision.
+whether that newest report matches the current installed revision, and treats a
+missing or stale report as a `closing_evidence` blocker.
 It also exposes `recommended_next_action`, usually `scripts/ninoctl finish
 --key-stdin` until Claude is configured.
 `scripts/ninoctl completion-audit` prints the requirement-by-requirement

@@ -76,10 +76,11 @@ def test_product_status_json_output(monkeypatch, tmp_path, capsys) -> None:
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    assert main(["--root", str(Path(tmp_path)), "--json"]) == 0
+    assert main(["--root", str(Path(tmp_path)), "--json"]) == 1
     payload = json.loads(capsys.readouterr().out)
-    assert payload["ok"] is True
+    assert payload["ok"] is False
     assert payload["eval_case_count"] == 2
+    assert any(blocker["name"] == "closing_evidence" for blocker in payload["blockers"])
     assert payload["latest_report_current"]["ok"] is False
     assert payload["latest_report_current"]["reason"] == "report_not_found"
-    assert payload["recommended_next_action"] == "scripts/ninoctl final-audit"
+    assert payload["recommended_next_action"] == "scripts/ninoctl closing-report"
