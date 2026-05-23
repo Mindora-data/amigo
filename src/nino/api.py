@@ -7,7 +7,8 @@ import os
 from pathlib import Path
 import re
 import sqlite3
-from typing import Any
+import threading
+from typing import Any, Callable
 from urllib.parse import urlparse
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 
@@ -353,6 +354,9 @@ APP_HTML = """<!doctype html>
           <button id="logs" class="secondary">Logs</button>
         </div>
         <div class="row">
+          <button id="restartService" class="danger">Reiniciar servicio</button>
+        </div>
+        <div class="row">
           <button id="reset" class="danger">Reset agente</button>
         </div>
         <div id="backupList" class="list"></div>
@@ -668,6 +672,15 @@ APP_HTML = """<!doctype html>
     };
     $("mode").onclick = async () => print($("state"), await api("/operations/mode"));
     $("logs").onclick = async () => print($("backupsOut"), await api("/operations/logs"));
+    $("restartService").onclick = async () => {
+      if (!confirm("Reiniciar el servicio persistente de NIÑO? La UI puede tardar unos segundos en responder.")) return;
+      const out = await api("/operations/restart", {method: "POST", body: JSON.stringify({confirm: true})});
+      print($("backupsOut"), out);
+      status(out.ok ? "Reinicio programado. Esperando al servicio..." : `Reinicio no programado: ${out.error || "bloqueado"}`);
+      if (out.ok) {
+        setTimeout(() => fetch("/health").then(() => status("Servicio reiniciado."), () => status("Servicio reiniciando...")), 2500);
+      }
+    };
     $("saveProactivity").onclick = async () => {
       const payload = {
         consent: $("consent").value,
@@ -898,6 +911,7 @@ API_ENDPOINTS = [
     "GET /operations/backups",
     "GET /operations/logs",
     "POST /operations/backup",
+    "POST /operations/restart",
     "GET /agents",
     "POST /agents/prune",
     "POST /agents/import",
@@ -1018,12 +1032,14 @@ class NinoService:
         runtime: NinoRuntime,
         autonomy: BackgroundAutonomy | None = None,
         db_path: str | Path | None = None,
+        restart_callback: Callable[[], None] | None = None,
     ) -> None:
         self.runtime = runtime
         self.internal_loop = InternalLoop(runtime)
         self.scheduler = NinoScheduler(runtime)
         self.autonomy = autonomy
         self.db_path = Path(db_path) if db_path is not None else None
+        self.restart_callback = restart_callback
 
     def health(self) -> dict[str, Any]:
         return {"ok": True, "service": "nino"}
@@ -1081,6 +1097,36 @@ class NinoService:
         finally:
             source.close()
         return {"ok": True, "path": str(backup_path)}
+
+    def restart_service(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if payload.get("confirm") is not True:
+            return {"ok": False, "error": "confirmation_required"}
+        if self.restart_callback is not None:
+            self.restart_callback()
+            return {"ok": True, "scheduled": True, "method": "callback"}
+
+        from .product_audit import _launchd_check
+
+        launchd = _launchd_check(require_launchd=True, label=os.environ.get("NINO_LAUNCHD_LABEL", "local.nino.server"))
+        if launchd["ok"] is not True:
+            return {
+                "ok": False,
+                "error": "launchd_not_observed",
+                "launchd": launchd,
+                "command": "scripts/nino-launchd start",
+            }
+
+        def exit_for_launchd() -> None:
+            os._exit(0)
+
+        threading.Timer(0.25, exit_for_launchd).start()
+        return {
+            "ok": True,
+            "scheduled": True,
+            "method": "launchd_keepalive",
+            "delay_seconds": 0.25,
+            "note": "launchd KeepAlive should restart the service after this process exits",
+        }
 
     def list_backups(self) -> dict[str, Any]:
         if self.db_path is None:
@@ -1665,6 +1711,8 @@ class NinoHttpApp:
             return "200 OK", self.service.logs()
         if method == "POST" and path == "/operations/backup":
             return "200 OK", self.service.backup()
+        if method == "POST" and path == "/operations/restart":
+            return "200 OK", self.service.restart_service(payload)
 
         if method == "POST" and path == "/internal/scheduled":
             return "200 OK", self.service.scheduled_all(payload)
@@ -1773,8 +1821,9 @@ def create_app_with_runtime(
     runtime: NinoRuntime,
     autonomy: BackgroundAutonomy | None = None,
     db_path: str | Path | None = None,
+    restart_callback: Callable[[], None] | None = None,
 ) -> NinoHttpApp:
-    return NinoHttpApp(NinoService(runtime, autonomy=autonomy, db_path=db_path))
+    return NinoHttpApp(NinoService(runtime, autonomy=autonomy, db_path=db_path, restart_callback=restart_callback))
 
 
 def run_server(

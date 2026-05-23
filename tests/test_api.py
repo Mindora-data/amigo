@@ -85,6 +85,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"scripts/ninoctl restore" in body
     assert b"/operations/logs" in body
     assert b"Logs" in body
+    assert b"/operations/restart" in body
+    assert b"Reiniciar servicio" in body
     assert b"/operations/eval" in body
     assert b"Eval local" in body
     assert b"/operations/final-preflight" in body
@@ -170,6 +172,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /operations/final-preflight" in root["endpoints"]
     assert "POST /operations/final-audit" in root["endpoints"]
     assert "GET /operations/logs" in root["endpoints"]
+    assert "POST /operations/restart" in root["endpoints"]
     assert "POST /agents/{agent_id}/tasks/run-next" in root["endpoints"]
     assert openapi["openapi"] == "3.1.0"
     assert "/agents/{agent_id}/tick" in openapi["paths"]
@@ -183,6 +186,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "/operations/final-preflight" in openapi["paths"]
     assert "/operations/final-audit" in openapi["paths"]
     assert "/operations/logs" in openapi["paths"]
+    assert "/operations/restart" in openapi["paths"]
     assert health == {"ok": True, "service": "nino"}
     assert mode["local_first"] is True
     assert mode["network_required_for_core"] is False
@@ -336,6 +340,19 @@ def test_http_api_configures_claude_without_returning_key(tmp_path, monkeypatch)
     assert "old-secret" not in content
     assert "sk-ant-test-secret" not in json.dumps(configured)
     assert oct((tmp_path / ".env.local").stat().st_mode & 0o777) == "0o600"
+
+
+def test_http_api_restart_requires_confirmation_and_can_be_injected(tmp_path) -> None:
+    calls: list[str] = []
+    runtime = create_persistent_runtime(tmp_path / "nino.db")
+    app = create_app_with_runtime(runtime, db_path=tmp_path / "nino.db", restart_callback=lambda: calls.append("restart"))
+
+    denied = _request(app, "POST", "/operations/restart", {})
+    scheduled = _request(app, "POST", "/operations/restart", {"confirm": True})
+
+    assert denied == {"ok": False, "error": "confirmation_required"}
+    assert scheduled == {"ok": True, "scheduled": True, "method": "callback"}
+    assert calls == ["restart"]
 
 
 def test_http_api_exposes_autonomy_status_and_run_once(tmp_path) -> None:

@@ -155,6 +155,9 @@ The local UI also includes `Guardar Claude`, backed by
 `POST /operations/claude/configure`, for configuring `.env.local` without a
 terminal. The API never returns the key and the response recommends restarting
 launchd so the persistent service reloads the file from a clean process.
+The `Reiniciar servicio` button calls `POST /operations/restart`; when NIÑO is
+running under launchd, the process exits after responding and launchd `KeepAlive`
+starts it again.
 Then start the server:
 
 ```bash
@@ -257,6 +260,7 @@ POST /operations/final-audit
 GET  /operations/backups
 GET  /operations/logs
 POST /operations/backup
+POST /operations/restart
 GET  /agents
 POST /agents/{agent_id}/tick
 GET  /agents/{agent_id}/state
