@@ -101,7 +101,8 @@ scripts/nino-smoke --json
 
 The smoke test uses a temporary SQLite database and validates the local-first
 flow: `/app`, memory, conversation history, Claude diagnostics, permissions,
-task queue, proactive inbox, safe export, backup and closing-report evidence.
+task queue, proactive inbox, safe export, backup, closing-report evidence and
+the next recommended closeout action.
 
 Run the full local readiness gate:
 

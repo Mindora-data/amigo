@@ -156,6 +156,15 @@ def run_smoke(db_path: str | Path) -> SmokeResult:
         checks,
         "closing_report_name_guard",
     )
+    status, next_action = _request(app, "GET", "/operations/next-action")
+    _require(
+        status.startswith("200")
+        and next_action["ok"] is True
+        and next_action["recommended_next_action"] == "scripts/ninoctl finish --key-stdin"
+        and any(blocker["name"] == "claude_configured" for blocker in next_action["blockers"]),
+        checks,
+        "next_action",
+    )
 
     return SmokeResult(ok=True, checks=checks, db_path=str(db_path))
 

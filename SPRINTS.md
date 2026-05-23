@@ -175,7 +175,7 @@ Hecho:
 - Evaluaciones repetibles de continuidad conversacional. Hecho inicial: `nino.eval_runner`, `scripts/ninoctl eval`, `nino-eval`, `GET /operations/eval` y boton `Eval local` en `/app`.
 - Dataset local de conversaciones de prueba. Hecho inicial: `eval/memory_regression.json`.
 - Pruebas de regresion para memoria realista. Hecho inicial: tests del eval runner.
-- Smoke test local de producto. Hecho inicial: `scripts/nino-smoke` valida UI servida, memoria, permisos, tareas, inbox, export seguro y backup con SQLite temporal.
+- Smoke test local de producto. Hecho inicial: `scripts/nino-smoke` valida UI servida, memoria, permisos, tareas, inbox, export seguro, backup, informes de cierre y accion siguiente con SQLite temporal.
 - Puerta de readiness local. Hecho inicial: `scripts/nino-readiness` ejecuta tests y smoke end-to-end.
 - Contrato API publicable. Hecho inicial: `GET /openapi.json` generado desde el catalogo de endpoints.
 - Metricas de calidad historicas. Hecho inicial: guardar y consultar historial de evaluacion conversacional por agente.
@@ -228,6 +228,7 @@ Hecho:
 - Ultimo informe desde API/UI. Hecho inicial: `GET /operations/reports/latest` y boton `Último informe`.
 - Lectura segura de informes desde API/UI. Hecho inicial: `GET /operations/reports/{report_name}` y boton `Ver JSON`, limitado a nombres `nino-closing-*.json`.
 - Smoke de informes de cierre. Hecho inicial: `scripts/nino-smoke` cubre crear, listar, leer, leer el ultimo y rechazar nombres invalidos de informes.
+- Smoke de accion siguiente. Hecho inicial: `scripts/nino-smoke` cubre `GET /operations/next-action` y confirma que apunta al cierre con Claude cuando falta configurarlo.
 - Cierre final guiado. Hecho inicial: `scripts/ninoctl finish --key-stdin` configura Claude en Keychain por defecto, reinicia launchd, ejecuta `final-audit`, genera informe de cierre y lanza `completion-audit`; `--preflight-only` evita la llamada viva.
 - Cierre final sin reconfigurar secreto. Hecho inicial: `scripts/ninoctl finish --skip-configure` reinicia, audita, genera evidencia y lanza `completion-audit` cuando Claude ya esta configurado.
 - Comandos de cierre con doble camino. Hecho inicial: la evidencia `setup_commands` incluye `finish --key-stdin` y `finish --skip-configure` para cubrir primera configuracion y cierre posterior.
@@ -316,6 +317,7 @@ Auditoria final de producto 100% local:
 39. Hecho inicial: configurador CLI Claude rechaza valores que puedan corromper `.env.local`.
 40. Hecho inicial: `scripts/ninoctl next-action` imprime el siguiente comando operativo sin leer el resumen completo.
 41. Hecho inicial: `GET /operations/next-action` expone la accion recomendada para clientes ligeros.
-42. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
+42. Hecho inicial: `scripts/nino-smoke` cubre `GET /operations/next-action` dentro de la puerta local de producto.
+43. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

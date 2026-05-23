@@ -18,6 +18,7 @@ def test_product_smoke_runs_against_temp_sqlite(tmp_path) -> None:
     assert "closing_report_read" in result.checks
     assert "closing_report_latest" in result.checks
     assert "closing_report_name_guard" in result.checks
+    assert "next_action" in result.checks
 
 
 def test_product_smoke_cli_outputs_json() -> None:
@@ -33,3 +34,4 @@ def test_product_smoke_cli_outputs_json() -> None:
     assert "claude_diagnostic" in payload["checks"]
     assert "closing_report_list" in payload["checks"]
     assert "closing_report_latest" in payload["checks"]
+    assert "next_action" in payload["checks"]
