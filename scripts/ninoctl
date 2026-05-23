@@ -52,6 +52,7 @@ Commands:
   final-preflight Run final local preflight without a live Claude call.
   final-audit Run product audit requiring launchd and live Claude.
   finish      Configure Claude, restart launchd, audit, write evidence and audit completion.
+              Use --skip-configure when Claude is already configured.
   product-status Summarize final readiness, evaluation and blockers.
   completion-audit Audit every completion requirement and remaining blockers.
   closing-report Write a JSON evidence report for the current product state.
@@ -351,10 +352,15 @@ final_audit() {
 finish() {
   local preflight_only=false
   local use_default_keychain=true
+  local skip_configure=false
   local configure_args=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --skip-configure)
+        skip_configure=true
+        shift
+        ;;
       --preflight-only)
         preflight_only=true
         shift
@@ -375,11 +381,18 @@ finish() {
     esac
   done
 
-  if [[ "$use_default_keychain" == true ]]; then
+  if [[ "$skip_configure" == true && ${#configure_args[@]} -gt 0 ]]; then
+    echo "--skip-configure cannot be combined with Claude configuration arguments." >&2
+    return 2
+  fi
+
+  if [[ "$skip_configure" == false && "$use_default_keychain" == true ]]; then
     configure_args+=("--keychain-service" "nino-anthropic")
   fi
 
-  configure_claude "${configure_args[@]}"
+  if [[ "$skip_configure" == false ]]; then
+    configure_claude "${configure_args[@]}"
+  fi
   "$ROOT_DIR/scripts/nino-launchd" stop
   "$ROOT_DIR/scripts/nino-launchd" start
   product_status || true

@@ -287,6 +287,20 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         capture_output=True,
         text=True,
     )
+    subprocess.run(
+        [str(scripts_dir / "ninoctl"), "finish", "--skip-configure", "--preflight-only"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    invalid_finish = subprocess.run(
+        [str(scripts_dir / "ninoctl"), "finish", "--skip-configure", "--model", "claude-test"],
+        check=False,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
 
     assert calls.read_text(encoding="utf-8").splitlines() == [
         "nino-readiness ",
@@ -309,7 +323,15 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-product-audit --require-launchd --require-claude-config --json",
         "nino-closing-report --json",
         "nino-completion-audit --json",
+        "nino-launchd stop",
+        "nino-launchd start",
+        "nino-status ",
+        "nino-product-audit --require-launchd --require-claude-config --json",
+        "nino-closing-report --json",
+        "nino-completion-audit --json",
     ]
+    assert invalid_finish.returncode == 2
+    assert "--skip-configure cannot be combined" in invalid_finish.stderr
 
 
 def test_install_local_copies_runtime_and_keeps_existing_data(tmp_path) -> None:
