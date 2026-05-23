@@ -527,6 +527,14 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         capture_output=True,
         text=True,
     )
+    env_key_exported = {**env, "ANTHROPIC_API_KEY": "configured-secret"}
+    subprocess.run(
+        [str(scripts_dir / "ninoctl"), "finish", "--key-env", "--model", "claude-test", "--preflight-only"],
+        check=True,
+        env=env_key_exported,
+        capture_output=True,
+        text=True,
+    )
     env_skip_configured = {
         **env,
         "NINO_LLM_PROVIDER": "claude",
@@ -541,6 +549,13 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     )
     invalid_finish = subprocess.run(
         [str(scripts_dir / "ninoctl"), "finish", "--skip-configure", "--model", "claude-test"],
+        check=False,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    missing_key_env_finish = subprocess.run(
+        [str(scripts_dir / "ninoctl"), "finish", "--key-env"],
         check=False,
         env=env,
         capture_output=True,
@@ -577,6 +592,14 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-product-audit --require-launchd --require-claude-config --json",
         "nino-closing-report --json",
         "nino-completion-audit --json",
+        "nino-configure-claude --model claude-test --keychain-service nino-anthropic",
+        "nino-launchd stop",
+        "nino-launchd start",
+        "curl -fsS http://127.0.0.1:65531/health",
+        "nino-status ",
+        "nino-product-audit --require-launchd --require-claude-config --json",
+        "nino-closing-report --json",
+        "nino-completion-audit --json",
         "nino-launchd stop",
         "nino-launchd start",
         "curl -fsS http://127.0.0.1:65531/health",
@@ -587,6 +610,8 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     ]
     assert invalid_finish.returncode == 2
     assert "--skip-configure cannot be combined" in invalid_finish.stderr
+    assert missing_key_env_finish.returncode == 2
+    assert "--key-env requires ANTHROPIC_API_KEY" in missing_key_env_finish.stderr
     assert missing_config_finish.returncode == 2
     assert "--skip-configure requires Claude to be configured" in missing_config_finish.stderr
 

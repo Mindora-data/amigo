@@ -57,6 +57,7 @@ Commands:
   final-preflight Run final local preflight without a live Claude call.
   final-audit Run product audit requiring launchd and live Claude.
   finish      Configure Claude, restart launchd, audit, write evidence and audit completion.
+              Use --key-env when ANTHROPIC_API_KEY is already exported.
               Use --skip-configure when Claude is already configured.
   product-status Summarize final readiness, evaluation and blockers.
   next-action Print only the recommended next command.
@@ -457,12 +458,17 @@ finish() {
   local preflight_only=false
   local use_default_keychain=true
   local skip_configure=false
+  local key_env=false
   local configure_args=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --skip-configure)
         skip_configure=true
+        shift
+        ;;
+      --key-env)
+        key_env=true
         shift
         ;;
       --preflight-only)
@@ -487,6 +493,14 @@ finish() {
 
   if [[ "$skip_configure" == true && ${#configure_args[@]} -gt 0 ]]; then
     echo "--skip-configure cannot be combined with Claude configuration arguments." >&2
+    return 2
+  fi
+  if [[ "$skip_configure" == true && "$key_env" == true ]]; then
+    echo "--skip-configure cannot be combined with --key-env." >&2
+    return 2
+  fi
+  if [[ "$key_env" == true && -z "${ANTHROPIC_API_KEY:-}" ]]; then
+    echo "--key-env requires ANTHROPIC_API_KEY in the current environment." >&2
     return 2
   fi
 

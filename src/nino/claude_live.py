@@ -9,6 +9,7 @@ from .llm import build_configured_llm, llm_config_status
 
 CLAUDE_SETUP_COMMANDS = [
     "scripts/ninoctl finish --key-stdin",
+    "scripts/ninoctl finish --key-env",
     "scripts/ninoctl finish --skip-configure",
     "scripts/ninoctl configure-claude --keychain-service nino-anthropic",
     "scripts/nino-launchd stop",

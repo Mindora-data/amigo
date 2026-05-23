@@ -116,7 +116,8 @@ validando que el nombre sea un `nino-closing-*.json` local.
 configura Claude en Keychain por defecto, reinicia launchd y lanza el cierre
 final. Tambien escribe un informe de cierre actualizado para dejar evidencia
 del resultado y ejecuta `completion-audit --json` al final. Con
-`--preflight-only` valida la configuracion sin gastar llamada viva. Si Claude
+`--key-env` puede tomar `ANTHROPIC_API_KEY` del entorno actual sin tuberia
+stdin. Con `--preflight-only` valida la configuracion sin gastar llamada viva. Si Claude
 ya esta configurado desde la UI o el entorno local, `--skip-configure` ejecuta
 el mismo cierre sin volver a pedir la key.
 En JSON, esa ejecucion queda marcada como `audit_profile.strict_final: true` y
@@ -126,6 +127,7 @@ Si falta Claude, la evidencia `claude_configured` y `claude_live` incluye
 comandos seguros de configuracion y vuelve a apuntar a
 `scripts/ninoctl final-audit`. Esos comandos incluyen tanto
 `scripts/ninoctl finish --key-stdin` para primera configuracion como
+`scripts/ninoctl finish --key-env` para entornos con la variable ya exportada y
 `scripts/ninoctl finish --skip-configure` cuando el secreto ya esta guardado.
 Cuando Claude ya esta configurado y solo queda validar la llamada viva, la
 accion recomendada pasa a `finish --skip-configure`. Ese modo falla antes de
