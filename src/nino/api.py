@@ -607,7 +607,16 @@ APP_HTML = """<!doctype html>
       }
       out.reports.forEach((report) => {
         const size = report.size_bytes ? `${report.size_bytes} bytes` : "sin tamaño";
-        addListItem(target, report.name || report.path, `${size} · ${report.modified_at || ""}`);
+        const item = addListItem(target, report.name || report.path, `${size} · ${report.modified_at || ""}`);
+        const read = document.createElement("button");
+        read.className = "secondary";
+        read.textContent = "Ver JSON";
+        read.onclick = async () => {
+          const out = await api(`/operations/reports/${encodeURIComponent(report.name)}`);
+          print($("backupsOut"), out);
+          downloadJson(report.name || "nino-closing.json", out.report);
+        };
+        item.appendChild(read);
       });
     }
     $("send").onclick = async () => {
@@ -1049,6 +1058,7 @@ API_ENDPOINTS = [
     "GET /operations/completion-audit",
     "POST /operations/closing-report",
     "GET /operations/reports",
+    "GET /operations/reports/{report_name}",
     "GET /operations/eval",
     "GET /operations/final-preflight",
     "POST /operations/final-audit",
@@ -1131,7 +1141,7 @@ def _openapi_document() -> dict[str, Any]:
         if path == "/app":
             continue
         parameters = []
-        for name in ("agent_id", "item_id", "episode_id", "fact_id"):
+        for name in ("agent_id", "item_id", "episode_id", "fact_id", "report_name"):
             if "{" + name + "}" in path:
                 parameters.append({
                     "name": name,
@@ -1309,6 +1319,20 @@ class NinoService:
                 }
             )
         return {"ok": True, "report_dir": str(report_dir), "reports": reports}
+
+    def get_report(self, report_name: str) -> dict[str, Any]:
+        if self.db_path is None:
+            return {"ok": False, "error": "db_path_unavailable"}
+        if not re.fullmatch(r"nino-closing-\d{8}-\d{6}[.]json", report_name):
+            return {"ok": False, "error": "invalid_report_name"}
+        report_path = self.db_path.parent / "reports" / report_name
+        if not report_path.exists() or not report_path.is_file():
+            return {"ok": False, "error": "report_not_found", "path": str(report_path)}
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            return {"ok": False, "error": "invalid_report_json", "path": str(report_path), "detail": str(exc)}
+        return {"ok": True, "path": str(report_path), "name": report_name, "report": _to_jsonable(report)}
 
     def logs(self, *, limit: int = 80) -> dict[str, Any]:
         if self.db_path is None:
@@ -2159,6 +2183,8 @@ class NinoHttpApp:
         parts = [part for part in path.split("/") if part]
         if method == "GET" and parts == ["agents"]:
             return "200 OK", self.service.list_agents()
+        if method == "GET" and len(parts) == 3 and parts[:2] == ["operations", "reports"]:
+            return "200 OK", self.service.get_report(parts[2])
         if method == "POST" and parts == ["agents", "prune"]:
             return "200 OK", self.service.prune_agents(payload)
         if method == "POST" and parts == ["agents", "import"]:
