@@ -541,7 +541,8 @@ APP_HTML = """<!doctype html>
     $("auditProduct").onclick = async () => {
       const out = await api("/operations/audit");
       print($("backupsOut"), out);
-      status(out.ok ? "Auditoría local OK" : "Auditoría con bloqueos");
+      const final = out.final_audit_command ? ` · cierre: ${out.final_audit_command}` : "";
+      status(out.ok ? `Auditoría local OK${final}` : `Auditoría con bloqueos${final}`);
     };
     $("mode").onclick = async () => print($("state"), await api("/operations/mode"));
     $("saveProactivity").onclick = async () => {
@@ -973,6 +974,15 @@ class NinoService:
     def product_audit(self) -> dict[str, Any]:
         from .product_audit import audit_product
 
+        final_audit = {
+            "final_audit_command": "scripts/ninoctl final-audit",
+            "final_audit_requirements": [
+                "launchd_service",
+                "runtime_database_matches",
+                "claude_live",
+            ],
+        }
+
         if self.db_path is None:
             return {
                 "ok": False,
@@ -983,14 +993,16 @@ class NinoService:
                         "evidence": {"error": "db_path_unavailable"},
                     }
                 ],
+                **final_audit,
             }
-        return audit_product(
+        result = audit_product(
             db_path=self.db_path,
             base_url="http://127.0.0.1:0",
             require_claude_live=False,
             run_local_smoke=False,
             http_checks=False,
         )
+        return {**result, **final_audit}
 
     def tick(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.tick(agent_id, payload))

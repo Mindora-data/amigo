@@ -163,6 +163,12 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "scripts/ninoctl live-audit" not in claude["setup_commands"]
     assert "ANTHROPIC_API_KEY" not in json.dumps(claude["setup_commands"])
     assert product_audit["ok"] is True
+    assert product_audit["final_audit_command"] == "scripts/ninoctl final-audit"
+    assert product_audit["final_audit_requirements"] == [
+        "launchd_service",
+        "runtime_database_matches",
+        "claude_live",
+    ]
     assert {check["name"] for check in product_audit["checks"]} >= {
         "sqlite_database_exists",
         "backup_directory_available",

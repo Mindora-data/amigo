@@ -202,6 +202,8 @@ curl -X POST http://127.0.0.1:8000/agents/nino/llm/probe \
 Run `scripts/ninoctl final-audit` from the installed runtime folder used by
 launchd, normally `~/Developer/bebe`; it checks that the audited SQLite database
 is the same database served over HTTP.
+The `/operations/audit` endpoint and the `/app` audit button also return this
+strict final command and the required checks.
 
 Do not commit API keys. Keep `ANTHROPIC_API_KEY` in your shell environment or a
 local untracked secret manager.
