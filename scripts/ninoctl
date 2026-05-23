@@ -54,6 +54,7 @@ Commands:
   finish      Configure Claude, restart launchd, audit, write evidence and audit completion.
               Use --skip-configure when Claude is already configured.
   product-status Summarize final readiness, evaluation and blockers.
+  next-action Print only the recommended next command.
   completion-audit Audit every completion requirement and remaining blockers.
   closing-report Write a JSON evidence report for the current product state.
   reports     List local closing evidence reports.
@@ -461,6 +462,7 @@ case "$command" in
   final-audit) final_audit ;;
   finish) finish "$@" ;;
   product-status) product_status "$@" ;;
+  next-action) product_status --next-action ;;
   completion-audit) completion_audit "$@" ;;
   closing-report) closing_report "$@" ;;
   reports) reports ;;

@@ -266,6 +266,13 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         text=True,
     )
     subprocess.run(
+        [str(scripts_dir / "ninoctl"), "next-action"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
         [str(scripts_dir / "ninoctl"), "completion-audit", "--json"],
         check=True,
         env=env,
@@ -326,6 +333,7 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-disable-claude --remove-keychain",
         "nino-eval --json",
         "nino-status --json",
+        "nino-status --next-action",
         "nino-completion-audit --json",
         "nino-closing-report --json",
         "nino-configure-claude --key-stdin --model claude-test --keychain-service nino-anthropic",

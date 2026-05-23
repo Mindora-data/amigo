@@ -44,6 +44,7 @@ scripts/ninoctl persistent-audit
 scripts/ninoctl final-preflight
 scripts/ninoctl final-audit
 scripts/ninoctl finish
+scripts/ninoctl next-action
 scripts/ninoctl completion-audit
 scripts/ninoctl closing-report
 scripts/ninoctl reports
@@ -189,6 +190,8 @@ whether that newest report matches the current installed revision, and treats a
 missing or stale report as a `closing_evidence` blocker.
 It also exposes `recommended_next_action`, usually `scripts/ninoctl finish
 --key-stdin` until Claude is configured.
+`scripts/ninoctl next-action` prints just that command for a terse operational
+prompt.
 `scripts/ninoctl completion-audit` prints the requirement-by-requirement
 completion matrix, including the remaining Claude live blocker when no real key
 has been configured. It also verifies that the live `nino` agent has persisted

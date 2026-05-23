@@ -93,6 +93,9 @@ def test_product_status_json_output(monkeypatch, tmp_path, capsys) -> None:
     assert payload["latest_report_current"]["reason"] == "report_not_found"
     assert payload["recommended_next_action"] == "scripts/ninoctl closing-report"
 
+    assert main(["--root", str(Path(tmp_path)), "--next-action"]) == 0
+    assert capsys.readouterr().out.strip() == "scripts/ninoctl closing-report"
+
 
 def test_product_status_recommends_skip_configure_when_only_claude_live_is_blocked(monkeypatch, tmp_path) -> None:
     root = tmp_path

@@ -202,6 +202,7 @@ Hecho:
 - Adaptador Claude via Anthropic Messages API. Hecho inicial en Sprint 6 por necesidad de conversacion real; diagnostico local con `GET /operations/claude`, panel LLM, `scripts/ninoctl claude`, errores de configuracion numerica y configuracion persistente segura con `scripts/ninoctl configure-claude`, `scripts/nino-configure-claude`, `.env.local` o macOS Keychain.
 - Prueba viva opcional de Claude. Hecho inicial: `scripts/nino-claude-live --require-key --json`.
 - Estado final resumido. Hecho inicial: `scripts/ninoctl product-status` y `nino-status` muestran preflight, eval local y bloqueos restantes.
+- Accion siguiente directa. Hecho inicial: `scripts/ninoctl next-action` imprime solo `recommended_next_action`.
 - Estado final desde API/UI. Hecho inicial: `GET /operations/product-status` y boton `Estado final` muestran el mismo resumen de preflight, eval y bloqueos.
 - Estado final con evidencia de cierre. Hecho inicial: `product-status` y `/operations/product-status` incluyen `latest_report` con el ultimo informe disponible.
 - Estado final legible con head y bloqueos. Hecho inicial: `product-status` y UI muestran head corto y bloqueos del ultimo informe.
@@ -312,6 +313,7 @@ Auditoria final de producto 100% local:
 37. Hecho inicial: `recommended_next_action` recomienda `finish --skip-configure` cuando Claude ya esta configurado y falta solo la prueba viva.
 38. Hecho inicial: `finish --skip-configure` valida configuracion Claude antes de reiniciar launchd.
 39. Hecho inicial: configurador CLI Claude rechaza valores que puedan corromper `.env.local`.
-40. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
+40. Hecho inicial: `scripts/ninoctl next-action` imprime el siguiente comando operativo sin leer el resumen completo.
+41. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

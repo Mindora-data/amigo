@@ -205,13 +205,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Summarize NIÑO product readiness.")
     parser.add_argument("--root", default=".", help="Project root. Defaults to the current directory.")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    parser.add_argument("--next-action", action="store_true", help="Print only the recommended next command.")
     args = parser.parse_args(argv)
 
     status = build_product_status(args.root)
-    if args.json:
+    if args.next_action:
+        print(status.get("recommended_next_action") or "")
+    elif args.json:
         print(json.dumps(status, indent=2))
     else:
         print(format_product_status(status))
+    if args.next_action:
+        return 0 if status.get("recommended_next_action") else 1
     return 0 if status["ok"] else 1
 
 
