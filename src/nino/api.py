@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 import json
+import os
 from pathlib import Path
 import re
 import sqlite3
@@ -14,7 +15,7 @@ from .autonomy import BackgroundAutonomy
 from .claude_live import claude_setup_commands
 from .contracts import ConsolidationRequest, ProactivitySettings, RetrieveRequest
 from .internal_loop import InternalLoop
-from .llm import llm_config_status
+from .llm import build_configured_llm, llm_config_status
 from .memory import Episode
 from .persistence import create_persistent_runtime
 from .runtime import NinoRuntime
@@ -300,8 +301,11 @@ APP_HTML = """<!doctype html>
         </div>
         <div id="llmSummary" class="muted">Sin comprobar.</div>
         <div id="llmSetup" class="muted"></div>
-        <div class="row">
+        <input id="claudeModel" value="claude-sonnet-4-5" aria-label="modelo Claude">
+        <input id="claudeKey" type="password" placeholder="ANTHROPIC_API_KEY" aria-label="api key Claude">
+        <div class="row three">
           <button id="claudeConfig" class="secondary">Config</button>
+          <button id="saveClaude" class="secondary">Guardar Claude</button>
           <button id="llmProbe" class="secondary">Probar Claude</button>
         </div>
         <div class="output"><pre id="llm">{}</pre></div>
@@ -819,6 +823,18 @@ APP_HTML = """<!doctype html>
       }
       print($("llm"), out);
     };
+    $("saveClaude").onclick = async () => {
+      const apiKey = $("claudeKey").value.trim();
+      const model = $("claudeModel").value.trim() || "claude-sonnet-4-5";
+      if (!apiKey) return status("Pega una ANTHROPIC_API_KEY para configurar Claude.");
+      if (!confirm("Guardar Claude en .env.local con permisos locales 600?")) return;
+      const out = await api("/operations/claude/configure", {method: "POST", body: JSON.stringify({api_key: apiKey, model})});
+      $("claudeKey").value = "";
+      $("llmSummary").textContent = describeClaudeConfig(out.claude || out);
+      print($("llm"), out);
+      status(out.ok ? "Claude configurado. Reinicia launchd para persistencia completa." : `Claude no configurado: ${out.error || "error"}`);
+      await loadLLMStatus();
+    };
     $("llmStatus").onclick = loadLLMStatus;
     $("llmProbe").onclick = probeLLM;
     $("permissions").onclick = async () => print($("permissionsOut"), await api(agentPath("/permissions")));
@@ -874,6 +890,7 @@ API_ENDPOINTS = [
     "GET /development/snapshot",
     "GET /operations/mode",
     "GET /operations/claude",
+    "POST /operations/claude/configure",
     "GET /operations/audit",
     "GET /operations/eval",
     "GET /operations/final-preflight",
@@ -1144,6 +1161,48 @@ class NinoService:
                 "Con --keychain-service, .env.local guarda solo NINO_KEYCHAIN_SERVICE.",
                 "Sin Keychain, la API key se guarda solo en .env.local con permisos 600.",
                 "El plist de launchd no incrusta ANTHROPIC_API_KEY.",
+            ],
+        }
+
+    def configure_claude(self, payload: dict[str, Any]) -> dict[str, Any]:
+        api_key = str(payload.get("api_key", "")).strip()
+        model = str(payload.get("model", "claude-sonnet-4-5")).strip() or "claude-sonnet-4-5"
+        if not api_key:
+            return {"ok": False, "error": "missing_api_key", "claude": self.claude_config()}
+        if any(char in model for char in "\r\n="):
+            return {"ok": False, "error": "invalid_model", "claude": self.claude_config()}
+
+        env_file = Path(".env.local")
+        preserved: list[str] = []
+        if env_file.exists():
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                if not line.startswith(
+                    ("NINO_LLM_PROVIDER=", "NINO_CLAUDE_MODEL=", "ANTHROPIC_API_KEY=", "NINO_KEYCHAIN_SERVICE=")
+                ):
+                    preserved.append(line)
+        lines = [
+            *preserved,
+            "NINO_LLM_PROVIDER=claude",
+            f"NINO_CLAUDE_MODEL={model}",
+            f"ANTHROPIC_API_KEY={api_key}",
+        ]
+        env_file.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+        env_file.chmod(0o600)
+
+        os.environ["NINO_LLM_PROVIDER"] = "claude"
+        os.environ["NINO_CLAUDE_MODEL"] = model
+        os.environ["ANTHROPIC_API_KEY"] = api_key
+        os.environ.pop("NINO_KEYCHAIN_SERVICE", None)
+        self.runtime.llm_client = build_configured_llm()
+        return {
+            "ok": True,
+            "env_file": str(env_file),
+            "mode": "env_file",
+            "restart_recommended": True,
+            "claude": self.claude_config(),
+            "notes": [
+                "La API key no se devuelve en esta respuesta.",
+                "Reinicia launchd para que el servicio persistente cargue .env.local desde cero.",
             ],
         }
 
@@ -1590,6 +1649,8 @@ class NinoHttpApp:
             return "200 OK", self.service.operating_mode()
         if method == "GET" and path == "/operations/claude":
             return "200 OK", self.service.claude_config()
+        if method == "POST" and path == "/operations/claude/configure":
+            return "200 OK", self.service.configure_claude(payload)
         if method == "GET" and path == "/operations/audit":
             return "200 OK", self.service.product_audit()
         if method == "GET" and path == "/operations/eval":

@@ -65,6 +65,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/openapi.json" in body
     assert b"/llm/status" in body
     assert b"/llm/probe" in body
+    assert b"/operations/claude/configure" in body
+    assert b"Guardar Claude" in body
     assert b"llmSetup" in body
     assert b"ninoctl configure-claude" in body
     assert b"describeClaudeConfig" in body
@@ -162,6 +164,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /openapi.json" in root["endpoints"]
     assert "GET /operations/mode" in root["endpoints"]
     assert "GET /operations/claude" in root["endpoints"]
+    assert "POST /operations/claude/configure" in root["endpoints"]
     assert "GET /operations/audit" in root["endpoints"]
     assert "GET /operations/eval" in root["endpoints"]
     assert "GET /operations/final-preflight" in root["endpoints"]
@@ -174,6 +177,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "delete" in openapi["paths"]["/agents/{agent_id}/episodes/{episode_id}"]
     assert "delete" in openapi["paths"]["/agents/{agent_id}/memory/facts/{fact_id}"]
     assert "/operations/claude" in openapi["paths"]
+    assert "/operations/claude/configure" in openapi["paths"]
     assert "/operations/audit" in openapi["paths"]
     assert "/operations/eval" in openapi["paths"]
     assert "/operations/final-preflight" in openapi["paths"]
@@ -295,6 +299,43 @@ def test_http_api_reads_redacted_server_logs(tmp_path) -> None:
     assert "secret-value" not in rendered
     assert "sk-ant-12345678SECRET" not in rendered
     assert "[REDACTED]" in rendered
+
+
+def test_http_api_configures_claude_without_returning_key(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("NINO_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("NINO_CLAUDE_MODEL", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("NINO_KEYCHAIN_SERVICE", raising=False)
+    monkeypatch.setenv("NINO_LLM_PROVIDER", "")
+    monkeypatch.setenv("NINO_CLAUDE_MODEL", "")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("NINO_KEYCHAIN_SERVICE", "")
+    (tmp_path / ".env.local").write_text("NINO_PORT=8000\nANTHROPIC_API_KEY=old-secret\n", encoding="utf-8")
+    app = create_app(tmp_path / "nino.db")
+
+    configured = _request(
+        app,
+        "POST",
+        "/operations/claude/configure",
+        {"api_key": "sk-ant-test-secret", "model": "claude-test"},
+    )
+    status = _request(app, "GET", "/operations/claude")
+
+    content = (tmp_path / ".env.local").read_text(encoding="utf-8")
+    assert configured["ok"] is True
+    assert configured["claude"]["configured"] is True
+    assert configured["claude"]["api_key_present"] is True
+    assert configured["claude"]["api_key_source"] == "env"
+    assert configured["claude"]["model"] == "claude-test"
+    assert status["configured"] is True
+    assert "NINO_PORT=8000" in content
+    assert "NINO_LLM_PROVIDER=claude" in content
+    assert "NINO_CLAUDE_MODEL=claude-test" in content
+    assert "ANTHROPIC_API_KEY=sk-ant-test-secret" in content
+    assert "old-secret" not in content
+    assert "sk-ant-test-secret" not in json.dumps(configured)
+    assert oct((tmp_path / ".env.local").stat().st_mode & 0o777) == "0o600"
 
 
 def test_http_api_exposes_autonomy_status_and_run_once(tmp_path) -> None:

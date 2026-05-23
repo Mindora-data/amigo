@@ -151,6 +151,10 @@ printf '%s' "$ANTHROPIC_API_KEY" | scripts/ninoctl configure-claude --key-stdin 
 The command writes `.env.local` with file mode `600`, preserves unrelated local
 overrides, and never prints the key. With `--keychain-service`, the secret is
 stored in macOS Keychain and `.env.local` stores only `NINO_KEYCHAIN_SERVICE`.
+The local UI also includes `Guardar Claude`, backed by
+`POST /operations/claude/configure`, for configuring `.env.local` without a
+terminal. The API never returns the key and the response recommends restarting
+launchd so the persistent service reloads the file from a clean process.
 Then start the server:
 
 ```bash
@@ -245,6 +249,7 @@ POST /autonomy/run-once
 GET  /development/snapshot
 GET  /operations/mode
 GET  /operations/claude
+POST /operations/claude/configure
 GET  /operations/audit
 GET  /operations/eval
 GET  /operations/final-preflight

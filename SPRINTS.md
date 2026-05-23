@@ -245,6 +245,7 @@ Auditoria final de producto 100% local:
 25. Hecho inicial: resumen accionable de cierre en `/operations/audit` y `/app` con `final_readiness`, auditoria local, servicio persistente observado, bloqueos y siguientes comandos.
 26. Hecho inicial: evaluacion local de regresion accesible desde `/operations/eval` y boton `Eval local` en `/app`.
 27. Hecho inicial: preflight y cierre final accesibles desde API/UI con `GET /operations/final-preflight`, `POST /operations/final-audit`, botones `Preflight final` y `Cierre final`.
-28. Siguiente: ejecutar `scripts/ninoctl final-audit` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
+28. Hecho inicial: configuracion de Claude desde API/UI con `POST /operations/claude/configure` y boton `Guardar Claude`, sin devolver la key y escribiendo `.env.local` con modo `600`.
+29. Siguiente: ejecutar `scripts/ninoctl final-audit` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
