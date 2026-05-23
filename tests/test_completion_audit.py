@@ -60,6 +60,19 @@ def _audit_payload() -> dict:
 
 def test_completion_audit_maps_requirements_and_blockers(monkeypatch, tmp_path, capsys) -> None:
     db_path = tmp_path / "nino.db"
+    report_dir = tmp_path / "data" / "reports"
+    report_dir.mkdir(parents=True)
+    report_path = report_dir / "nino-closing-20260523-192346.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-05-23T19:23:46+00:00",
+                "git": {"head": "abc12345"},
+                "summary": {"blockers": ["claude_configured", "claude_live"]},
+            }
+        ),
+        encoding="utf-8",
+    )
     with sqlite3.connect(db_path) as conn:
         conn.execute("CREATE TABLE agent_states (agent_id TEXT PRIMARY KEY)")
         conn.execute("CREATE TABLE episodes (agent_id TEXT)")
@@ -79,9 +92,13 @@ def test_completion_audit_maps_requirements_and_blockers(monkeypatch, tmp_path, 
     blocked = {item["id"] for item in result["blockers"]}
     assert blocked == {"claude_configured", "claude_live"}
     assert any(item["id"] == "closing_evidence" and item["ok"] for item in result["requirements"])
+    assert result["latest_report"]["name"] == report_path.name
+    assert result["latest_report"]["git_head"] == "abc12345"
     assert result["living_agent"]["episode_count"] == 1
     assert "scripts/ninoctl finish --key-stdin" in result["next_commands"]
     assert "blocked: claude_live" in format_completion_audit(result)
+    assert "latest_report: nino-closing-20260523-192346.json" in format_completion_audit(result)
+    assert "head=abc12345" in format_completion_audit(result)
 
     assert main(["--root", str(tmp_path)]) == 1
     assert "NIÑO completion audit: incomplete" in capsys.readouterr().out
@@ -113,3 +130,4 @@ def test_completion_audit_json_output(monkeypatch, tmp_path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is True
     assert all(item["ok"] for item in payload["requirements"])
+    assert payload["latest_report"]["ok"] is False

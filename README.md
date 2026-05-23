@@ -181,7 +181,7 @@ closing report name, git head and blockers when one exists.
 `scripts/ninoctl completion-audit` prints the requirement-by-requirement
 completion matrix, including the remaining Claude live blocker when no real key
 has been configured. It also verifies that the live `nino` agent has persisted
-state plus episodes or cold memory.
+state plus episodes or cold memory and names the newest closing report.
 The same matrix is available in the UI with `Terminación`, backed by
 `GET /operations/completion-audit`.
 `scripts/ninoctl closing-report` writes a timestamped JSON evidence report under

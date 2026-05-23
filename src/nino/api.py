@@ -578,6 +578,25 @@ APP_HTML = """<!doctype html>
         row.appendChild(pill);
         box.appendChild(row);
       });
+      const latest = out.latest_report;
+      if (latest) {
+        const row = document.createElement("div");
+        row.className = "readinessRow";
+        const name = document.createElement("span");
+        name.textContent = "Último informe";
+        const pill = document.createElement("span");
+        pill.className = latest.ok ? "pill" : "pill blocked";
+        if (latest.ok) {
+          const head = latest.git_head ? ` · ${latest.git_head.slice(0, 8)}` : "";
+          const blockers = latest.blockers?.length ? ` · ${latest.blockers.join(", ")}` : "";
+          pill.textContent = `${latest.name}${head}${blockers}`;
+        } else {
+          pill.textContent = "sin informe";
+        }
+        row.appendChild(name);
+        row.appendChild(pill);
+        box.appendChild(row);
+      }
       if (out.next_commands?.length) {
         const next = document.createElement("div");
         next.className = "muted";
@@ -1947,6 +1966,7 @@ class NinoService:
             "requirements": requirements,
             "blockers": blockers,
             "next_commands": audit.get("final_readiness", {}).get("next_commands", []),
+            "latest_report": self._latest_report_summary(),
             "audit": audit,
             "eval": eval_result,
             "notes": [

@@ -48,6 +48,26 @@ def _requirement(requirement_id: str, label: str, ok: bool, evidence: list[str])
     }
 
 
+def _latest_report(root: Path) -> dict[str, Any]:
+    report_dir = root / "data" / "reports"
+    reports = sorted(report_dir.glob("nino-closing-*.json"))
+    if not reports:
+        return {"ok": False, "error": "report_not_found", "report_dir": str(report_dir)}
+    path = reports[-1]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {"ok": False, "error": "invalid_report_json", "path": str(path), "detail": str(exc)}
+    return {
+        "ok": True,
+        "path": str(path),
+        "name": path.name,
+        "generated_at": payload.get("generated_at"),
+        "git_head": payload.get("git", {}).get("head"),
+        "blockers": payload.get("summary", {}).get("blockers", []),
+    }
+
+
 def _living_agent_evidence(audit: dict[str, Any]) -> dict[str, Any]:
     db_path = audit.get("db_path")
     if not db_path:
@@ -178,6 +198,7 @@ def build_completion_audit(root: str | Path = ".") -> dict[str, Any]:
         "requirements": requirements,
         "blockers": blockers,
         "next_commands": _next_commands(final_audit),
+        "latest_report": _latest_report(root_path),
         "living_agent": living_agent,
         "final_audit": final_audit,
         "eval": eval_result,
@@ -198,6 +219,13 @@ def format_completion_audit(result: dict[str, Any]) -> str:
     for requirement in result["requirements"]:
         marker = "ok" if requirement["ok"] else "blocked"
         lines.append(f"{marker}: {requirement['id']} - {requirement['label']}")
+    latest_report = result.get("latest_report", {})
+    if latest_report.get("ok"):
+        head = str(latest_report.get("git_head") or "")[:8]
+        blockers = ", ".join(latest_report.get("blockers") or [])
+        detail_parts = [part for part in [f"head={head}" if head else "", f"blockers={blockers}" if blockers else ""] if part]
+        detail = f" ({'; '.join(detail_parts)})" if detail_parts else ""
+        lines.append(f"latest_report: {latest_report['name']}{detail}")
     if result["next_commands"]:
         lines.append("next:")
         lines.extend(f"- {command}" for command in result["next_commands"])
