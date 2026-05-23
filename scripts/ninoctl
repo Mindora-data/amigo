@@ -16,6 +16,9 @@ PORT="${NINO_PORT:-8000}"
 SCHEDULER_INTERVAL="${NINO_SCHEDULER_INTERVAL:-60}"
 PID_FILE="${NINO_PID_FILE:-$DATA_DIR/nino.pid}"
 LOG_FILE="${NINO_LOG_FILE:-$DATA_DIR/nino-server.log}"
+LAUNCHD_LABEL="${NINO_LAUNCHD_LABEL:-local.nino.server}"
+LAUNCHD_LOG_FILE="${NINO_LAUNCHD_LOG_FILE:-$DATA_DIR/nino-launchd.log}"
+LAUNCHD_ERR_FILE="${NINO_LAUNCHD_ERR_FILE:-$DATA_DIR/nino-launchd.err.log}"
 BACKUP_DIR="${NINO_BACKUP_DIR:-$DATA_DIR/backups}"
 REPORT_DIR="${NINO_REPORT_DIR:-$DATA_DIR/reports}"
 DEFAULT_PYTHON="$ROOT_DIR/.venv/bin/python"
@@ -84,10 +87,20 @@ pid_is_running() {
   pid="$(cat "$PID_FILE")"
   [[ -n "$pid" ]] || return 1
   kill -0 "$pid" 2>/dev/null
+  pid_matches_current_server "$pid"
+}
+
+pid_matches_current_server() {
+  local pid="$1"
+  local command_line
+  command_line="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  [[ "$command_line" == *"-m nino.server"* && "$command_line" == *"--db $DB_PATH"* && "$command_line" == *"--port $PORT"* ]]
 }
 
 discover_pid() {
-  pgrep -f "python.*-m nino.server.*--port $PORT" 2>/dev/null | head -n 1 || true
+  local matches
+  matches="$(pgrep -f "[Pp]ython.*-m nino.server.*--db $DB_PATH.*--port $PORT" 2>/dev/null || true)"
+  printf '%s\n' "$matches" | awk 'NF {print; exit}'
 }
 
 adopt_running_pid() {
@@ -102,6 +115,39 @@ adopt_running_pid() {
 
 server_responds() {
   curl -fsS "$BASE_URL/health" >/dev/null 2>&1
+}
+
+launchd_print() {
+  command -v launchctl >/dev/null 2>&1 || return 1
+  launchctl print "gui/$(id -u)/$LAUNCHD_LABEL" 2>/dev/null
+}
+
+launchd_pid() {
+  launchd_print | awk -F '= ' '/^[[:space:]]*pid = / {print $2; exit}'
+}
+
+launchd_state() {
+  launchd_print | awk -F '= ' '/^[[:space:]]*state = / {print $2; exit}'
+}
+
+launchd_root() {
+  launchd_print | awk -F '= ' '/^[[:space:]]*working directory = / {print $2; exit}'
+}
+
+launchd_matches_root() {
+  local service_root
+  service_root="$(launchd_root || true)"
+  [[ "$service_root" == "$ROOT_DIR" ]]
+}
+
+status_log_file() {
+  if [[ -s "$LOG_FILE" || ! -e "$LAUNCHD_LOG_FILE" ]]; then
+    echo "$LOG_FILE"
+  elif ! launchd_matches_root; then
+    echo "$LOG_FILE"
+  else
+    echo "$LAUNCHD_LOG_FILE"
+  fi
 }
 
 start() {
@@ -177,10 +223,24 @@ status() {
     adopt_running_pid || true
   fi
 
+  local service_pid service_state
+  if launchd_matches_root; then
+    service_pid="$(launchd_pid || true)"
+    service_state="$(launchd_state || true)"
+  else
+    service_pid=""
+    service_state=""
+  fi
+
   if pid_is_running; then
     echo "process: running, pid $(cat "$PID_FILE")"
+  elif [[ -n "$service_pid" ]]; then
+    echo "process: running via launchd, pid $service_pid"
   else
     echo "process: not running under ninoctl"
+  fi
+  if [[ -n "$service_state" ]]; then
+    echo "launchd: $service_state ($LAUNCHD_LABEL)"
   fi
 
   if server_responds; then
@@ -190,7 +250,10 @@ status() {
   fi
 
   echo "db: $DB_PATH"
-  echo "log: $LOG_FILE"
+  echo "log: $(status_log_file)"
+  if [[ -e "$LAUNCHD_ERR_FILE" ]]; then
+    echo "launchd_err: $LAUNCHD_ERR_FILE"
+  fi
 }
 
 request() {
@@ -209,11 +272,13 @@ disable_claude() {
 
 logs() {
   ensure_dirs
-  touch "$LOG_FILE"
+  local target_log
+  target_log="$(status_log_file)"
+  touch "$target_log"
   if [[ "${1:-}" == "-f" ]]; then
-    tail -f "$LOG_FILE"
+    tail -f "$target_log"
   else
-    tail -80 "$LOG_FILE"
+    tail -80 "$target_log"
   fi
 }
 

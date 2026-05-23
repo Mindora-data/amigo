@@ -197,6 +197,150 @@ def test_ninoctl_can_list_and_read_closing_reports(tmp_path) -> None:
     assert "Invalid report name" in invalid.stderr
 
 
+def test_ninoctl_status_reports_launchd_service_when_pid_file_is_absent(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    launchd_log = data_dir / "nino-launchd.log"
+    launchd_log.write_text("served by launchd\n", encoding="utf-8")
+    launchctl = tmp_path / "launchctl"
+    launchctl.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"print\" ]]; then\n"
+        "  echo 'state = running'\n"
+        "  echo 'pid = 4242'\n"
+        f"  echo 'working directory = {Path.cwd()}'\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    launchctl.chmod(0o755)
+    curl = tmp_path / "curl"
+    curl.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    curl.chmod(0o755)
+    pgrep = tmp_path / "pgrep"
+    pgrep.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+    pgrep.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_DATA_DIR": str(data_dir),
+        "NINO_PID_FILE": str(data_dir / "missing.pid"),
+        "NINO_LOG_FILE": str(data_dir / "nino-server.log"),
+        "NINO_LAUNCHD_LOG_FILE": str(launchd_log),
+        "NINO_LAUNCHD_LABEL": "local.nino.test",
+        "NINO_PORT": "65532",
+    }
+
+    result = subprocess.run(
+        ["scripts/ninoctl", "status"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    logs = subprocess.run(
+        ["scripts/ninoctl", "logs"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "process: running via launchd, pid 4242" in result.stdout
+    assert "launchd: running (local.nino.test)" in result.stdout
+    assert f"log: {launchd_log}" in result.stdout
+    assert "served by launchd" in logs.stdout
+
+
+def test_ninoctl_status_ignores_launchd_service_for_another_root(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    other_root = tmp_path / "other-runtime"
+    launchctl = tmp_path / "launchctl"
+    launchctl.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"print\" ]]; then\n"
+        "  echo 'state = running'\n"
+        "  echo 'pid = 4242'\n"
+        f"  echo 'working directory = {other_root}'\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    launchctl.chmod(0o755)
+    curl = tmp_path / "curl"
+    curl.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    curl.chmod(0o755)
+    pgrep = tmp_path / "pgrep"
+    pgrep.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+    pgrep.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_DATA_DIR": str(data_dir),
+        "NINO_PID_FILE": str(data_dir / "missing.pid"),
+        "NINO_LOG_FILE": str(data_dir / "nino-server.log"),
+        "NINO_LAUNCHD_LOG_FILE": str(data_dir / "nino-launchd.log"),
+        "NINO_LAUNCHD_LABEL": "local.nino.test",
+        "NINO_PORT": "65533",
+    }
+
+    result = subprocess.run(
+        ["scripts/ninoctl", "status"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "process: not running under ninoctl" in result.stdout
+    assert "launchd: running" not in result.stdout
+    assert f"log: {data_dir / 'nino-server.log'}" in result.stdout
+
+
+def test_ninoctl_status_ignores_stale_pid_for_another_database(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    pid_file = data_dir / "nino.pid"
+    pid_file.write_text("4242\n", encoding="utf-8")
+    kill = tmp_path / "kill"
+    kill.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    kill.chmod(0o755)
+    ps = tmp_path / "ps"
+    ps.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo '/usr/bin/python3 -m nino.server --db /tmp/other.db --host 127.0.0.1 --port 65534'\n",
+        encoding="utf-8",
+    )
+    ps.chmod(0o755)
+    curl = tmp_path / "curl"
+    curl.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+    curl.chmod(0o755)
+    pgrep = tmp_path / "pgrep"
+    pgrep.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+    pgrep.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_DATA_DIR": str(data_dir),
+        "NINO_PID_FILE": str(pid_file),
+        "NINO_DB_PATH": str(data_dir / "nino.db"),
+        "NINO_PORT": "65534",
+    }
+
+    result = subprocess.run(
+        ["scripts/ninoctl", "status"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "process: not running under ninoctl" in result.stdout
+    assert "pid 4242" not in result.stdout
+
+
 def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     root = tmp_path / "repo"
     scripts_dir = root / "scripts"

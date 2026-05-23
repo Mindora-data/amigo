@@ -62,6 +62,10 @@ Follow logs:
 scripts/ninoctl logs -f
 ```
 
+When NIÑO is running as the launchd service, `scripts/ninoctl status` reports
+the launchd PID/state and `scripts/ninoctl logs` reads the launchd log if there
+is no manual `ninoctl start` log.
+
 Run the final setup as one flow, keeping the key in macOS Keychain by default:
 
 ```bash
