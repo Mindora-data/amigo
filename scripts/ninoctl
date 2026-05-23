@@ -119,7 +119,7 @@ server_responds() {
 }
 
 wait_health() {
-  local timeout="${1:-30}"
+  local timeout="${1:-60}"
   local elapsed=0
   if [[ ! "$timeout" =~ ^[0-9]+$ || "$timeout" -lt 1 ]]; then
     echo "Usage: scripts/ninoctl wait-health [timeout_seconds]" >&2
@@ -133,6 +133,10 @@ wait_health() {
     sleep 1
     elapsed=$((elapsed + 1))
   done
+  if server_responds; then
+    echo "health: ok at $BASE_URL"
+    return 0
+  fi
   echo "health: not responding at $BASE_URL after ${timeout}s" >&2
   return 1
 }
@@ -489,7 +493,7 @@ finish() {
   fi
   "$ROOT_DIR/scripts/nino-launchd" stop
   "$ROOT_DIR/scripts/nino-launchd" start
-  wait_health 30
+  wait_health 60
   product_status || true
   local audit_rc=0
   set +e
@@ -531,7 +535,7 @@ case "$command" in
   restart) stop && start ;;
   status) status ;;
   health) request "/health" ;;
-  wait-health) wait_health "${1:-30}" ;;
+  wait-health) wait_health "${1:-60}" ;;
   deep-health) request "/health/deep" ;;
   mode) request "/operations/mode" ;;
   claude) request "/operations/claude" ;;
