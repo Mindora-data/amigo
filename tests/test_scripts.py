@@ -308,6 +308,7 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-status ",
         "nino-product-audit --require-launchd --require-claude-config --json",
         "nino-closing-report --json",
+        "nino-completion-audit --json",
     ]
 
 

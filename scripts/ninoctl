@@ -51,7 +51,7 @@ Commands:
   live-audit  Run product audit requiring a live Claude key.
   final-preflight Run final local preflight without a live Claude call.
   final-audit Run product audit requiring launchd and live Claude.
-  finish      Configure Claude, restart launchd, audit and write a closing report.
+  finish      Configure Claude, restart launchd, audit, write evidence and audit completion.
   product-status Summarize final readiness, evaluation and blockers.
   completion-audit Audit every completion requirement and remaining blockers.
   closing-report Write a JSON evidence report for the current product state.
@@ -394,6 +394,7 @@ finish() {
   fi
   set -e
   closing_report --json || true
+  completion_audit --json || true
   return "$audit_rc"
 }
 
