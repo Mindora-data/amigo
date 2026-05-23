@@ -170,6 +170,8 @@ restarting launchd so the persistent service reloads the file from a clean
 process.
 `Cierre guiado` uses the same panel to save Claude, restart the persistent
 service, wait for `/health` and run the final audit.
+`Estado final` calls `GET /operations/product-status` and shows the same
+preflight/eval/blocker summary as the CLI status command.
 The same panel includes `Desactivar Claude`, backed by
 `POST /operations/claude/disable`, to remove Claude settings from `.env.local`,
 disable the runtime client immediately, and optionally delete the configured
@@ -276,6 +278,7 @@ GET  /operations/claude
 POST /operations/claude/configure
 POST /operations/claude/disable
 GET  /operations/audit
+GET  /operations/product-status
 GET  /operations/eval
 GET  /operations/final-preflight
 POST /operations/final-audit

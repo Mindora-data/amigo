@@ -356,10 +356,11 @@ APP_HTML = """<!doctype html>
           <button id="auditProduct" class="secondary">Auditoría</button>
         </div>
         <div class="row">
+          <button id="productStatus" class="secondary">Estado final</button>
           <button id="evalProduct" class="secondary">Eval local</button>
-          <button id="finalPreflight" class="secondary">Preflight final</button>
         </div>
         <div class="row">
+          <button id="finalPreflight" class="secondary">Preflight final</button>
           <button id="finalAudit" class="danger">Cierre final</button>
         </div>
         <div id="finalReadiness" class="readiness"></div>
@@ -677,6 +678,12 @@ APP_HTML = """<!doctype html>
       const final = out.final_audit_command ? ` · cierre: ${out.final_audit_command}` : "";
       status(out.ok ? `Auditoría local OK${preflight}${final}` : `Auditoría con bloqueos${preflight}${final}`);
     };
+    $("productStatus").onclick = async () => {
+      const out = await api("/operations/product-status");
+      print($("backupsOut"), out);
+      renderFinalReadiness(out.audit || out);
+      status(out.ok ? `Estado final OK · eval ${out.eval_case_count} casos` : `Estado final con bloqueos · eval ${out.eval_case_count} casos`);
+    };
     $("evalProduct").onclick = async () => {
       const out = await api("/operations/eval");
       print($("backupsOut"), out);
@@ -953,7 +960,7 @@ APP_HTML = """<!doctype html>
       .then(loadConversation)
       .then(loadLLMStatus)
       .then(loadBackups)
-      .then(() => $("auditProduct").click())
+      .then(() => $("productStatus").click())
       .then(() => $("permissions").click())
       .then(() => $("tasks").click())
       .catch((err) => status(err.message));
@@ -976,6 +983,7 @@ API_ENDPOINTS = [
     "POST /operations/claude/configure",
     "POST /operations/claude/disable",
     "GET /operations/audit",
+    "GET /operations/product-status",
     "GET /operations/eval",
     "GET /operations/final-preflight",
     "POST /operations/final-audit",
@@ -1595,6 +1603,33 @@ class NinoService:
         result = run_eval_dir(eval_dir)
         return {"path": str(eval_dir), **_to_jsonable(result)}
 
+    def product_status(self) -> dict[str, Any]:
+        audit = self.final_preflight()
+        eval_result = self.product_eval()
+        blockers = []
+        for check in audit.get("checks", []):
+            if check.get("ok"):
+                continue
+            evidence = check.get("evidence", {})
+            blockers.append(
+                {
+                    "name": check.get("name"),
+                    "missing": evidence.get("missing", []),
+                    "reason": evidence.get("reason"),
+                    "required": evidence.get("required", False),
+                }
+            )
+        return {
+            "ok": bool(audit.get("ok")) and bool(eval_result.get("ok")),
+            "final_preflight_ok": bool(audit.get("ok")),
+            "eval_ok": bool(eval_result.get("ok")),
+            "eval_case_count": eval_result.get("case_count", 0),
+            "blockers": blockers,
+            "next_commands": audit.get("final_readiness", {}).get("next_commands", []),
+            "audit": audit,
+            "eval": eval_result,
+        }
+
     def tick(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.tick(agent_id, payload))
 
@@ -1859,6 +1894,8 @@ class NinoHttpApp:
             return "200 OK", self.service.disable_claude(payload)
         if method == "GET" and path == "/operations/audit":
             return "200 OK", self.service.product_audit()
+        if method == "GET" and path == "/operations/product-status":
+            return "200 OK", self.service.product_status()
         if method == "GET" and path == "/operations/eval":
             return "200 OK", self.service.product_eval()
         if method == "GET" and path == "/operations/final-preflight":

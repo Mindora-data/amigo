@@ -60,7 +60,7 @@ scripts/ninoctl persistent-audit
 | Empaquetado local | `pyproject.toml`, console scripts `nino-server`, `nino-smoke`, `nino-eval`, `nino-status` | Cumplido |
 | Contrato API | `GET /openapi.json`, `openapi/README.md`, tests de alineacion con `GET /` | Cumplido |
 | Regresion objetiva | `eval/memory_regression.json`, `nino.eval_runner`, `scripts/ninoctl eval`, `nino-eval`, `GET /operations/eval`, boton `Eval local` en `/app`, pytest | Cumplido |
-| Auditoria final repetible | `GET /operations/audit`, `GET /operations/final-preflight`, `POST /operations/final-audit`, `scripts/nino-product-audit --json`, `scripts/ninoctl product-status`; `--require-launchd` para exigir servicio persistente; `--require-claude-config` para preflight sin llamada viva; `--require-claude-live` para cerrar Claude real | Cumplido local; Claude vivo requiere key real |
+| Auditoria final repetible | `GET /operations/audit`, `GET /operations/product-status`, `GET /operations/final-preflight`, `POST /operations/final-audit`, `scripts/nino-product-audit --json`, `scripts/ninoctl product-status`; `--require-launchd` para exigir servicio persistente; `--require-claude-config` para preflight sin llamada viva; `--require-claude-live` para cerrar Claude real | Cumplido local; Claude vivo requiere key real |
 
 La auditoria estricta de cierre es:
 
@@ -75,6 +75,8 @@ una llamada viva. `final-audit` anade la respuesta real de Claude con una key
 real.
 `scripts/ninoctl product-status` resume ese preflight, la eval local y los
 bloqueos restantes en formato legible, o en JSON con `--json`.
+`GET /operations/product-status` expone el mismo resumen a la UI con el boton
+`Estado final`.
 `scripts/ninoctl finish --key-stdin` ejecuta el cierre guiado completo:
 configura Claude en Keychain por defecto, reinicia launchd y lanza el cierre
 final. Con `--preflight-only` valida la configuracion sin gastar llamada viva.

@@ -124,6 +124,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/operations/mode" in body
     assert b"/operations/claude" in body
     assert b"/operations/audit" in body
+    assert b"/operations/product-status" in body
+    assert b"Estado final" in body
+    assert b"productStatus" in body
     assert b"Auditor" in body
 
 
@@ -137,6 +140,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     claude = _request(app, "GET", "/operations/claude")
     _request(app, "POST", "/operations/backup", {})
     product_audit = _request(app, "GET", "/operations/audit")
+    product_status = _request(app, "GET", "/operations/product-status")
     product_eval = _request(app, "GET", "/operations/eval")
     final_preflight = _request(app, "GET", "/operations/final-preflight")
     final_audit = _request(app, "POST", "/operations/final-audit", {})
@@ -177,6 +181,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "POST /operations/claude/configure" in root["endpoints"]
     assert "POST /operations/claude/disable" in root["endpoints"]
     assert "GET /operations/audit" in root["endpoints"]
+    assert "GET /operations/product-status" in root["endpoints"]
     assert "GET /operations/eval" in root["endpoints"]
     assert "GET /operations/final-preflight" in root["endpoints"]
     assert "POST /operations/final-audit" in root["endpoints"]
@@ -192,6 +197,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "/operations/claude/configure" in openapi["paths"]
     assert "/operations/claude/disable" in openapi["paths"]
     assert "/operations/audit" in openapi["paths"]
+    assert "/operations/product-status" in openapi["paths"]
     assert "/operations/eval" in openapi["paths"]
     assert "/operations/final-preflight" in openapi["paths"]
     assert "/operations/final-audit" in openapi["paths"]
@@ -235,6 +241,14 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
         "backup_directory_available",
         "claude_live",
     }
+    assert product_status["ok"] is False
+    assert product_status["final_preflight_ok"] is False
+    assert product_status["eval_ok"] is True
+    assert product_status["eval_case_count"] >= 1
+    assert any(blocker["name"] == "claude_configured" for blocker in product_status["blockers"])
+    assert "scripts/ninoctl finish --key-stdin" in product_status["next_commands"]
+    assert product_status["audit"]["final_readiness"]["ready_for_final_preflight"] is False
+    assert product_status["eval"]["ok"] is True
     assert product_eval["ok"] is True
     assert product_eval["path"] == "eval"
     assert product_eval["case_count"] >= 1
