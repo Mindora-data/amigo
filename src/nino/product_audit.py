@@ -203,8 +203,8 @@ def audit_product(
     checks.append(
         _check(
             "claude_live",
-            live["ok"],
-            {key: value for key, value in live.items() if key != "text"},
+            live["ok"] if require_claude_live else True,
+            {**{key: value for key, value in live.items() if key != "text"}, "required": require_claude_live},
         )
     )
 

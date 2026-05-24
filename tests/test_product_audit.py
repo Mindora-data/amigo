@@ -92,6 +92,52 @@ def test_product_audit_blocks_when_live_claude_is_required(tmp_path, monkeypatch
     assert [check for check in result["checks"] if check["name"] == "claude_live"][0]["ok"] is False
 
 
+def test_product_audit_records_optional_live_claude_failure_without_blocking_preflight(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "nino.db"
+    (tmp_path / "backups").mkdir()
+    db_path.write_text("db", encoding="utf-8")
+
+    def fake_http_json(_base_url: str, path: str, timeout: float = 2.0) -> dict:
+        if path == "/health":
+            return {"ok": True}
+        if path == "/operations/mode":
+            return {"local_first": True, "storage": {"type": "sqlite", "path": str(db_path)}}
+        if path == "/operations/claude":
+            return {
+                "configured": True,
+                "runtime_enabled": True,
+                "api_key_present": True,
+                "missing": [],
+                "config_errors": [],
+            }
+        raise AssertionError(path)
+
+    monkeypatch.setattr("nino.product_audit._http_json", fake_http_json)
+    monkeypatch.setattr(
+        "nino.product_audit.run_live_claude_probe",
+        lambda require_key=False: {
+            "ok": False,
+            "skipped": False,
+            "configured": True,
+            "provider": "claude",
+            "error": "URLError",
+        },
+    )
+
+    result = audit_product(
+        db_path=db_path,
+        require_claude_config=True,
+        require_claude_live=False,
+        run_local_smoke=False,
+    )
+
+    assert result["ok"] is True
+    claude_live = [check for check in result["checks"] if check["name"] == "claude_live"][0]
+    assert claude_live["ok"] is True
+    assert claude_live["evidence"]["ok"] is False
+    assert claude_live["evidence"]["required"] is False
+
+
 def test_product_audit_blocks_when_claude_config_is_required(tmp_path, monkeypatch) -> None:
     db_path = tmp_path / "nino.db"
     db_path.write_text("db", encoding="utf-8")
