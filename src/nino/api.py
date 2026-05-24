@@ -722,13 +722,18 @@ APP_HTML = """<!doctype html>
       $("send").disabled = true;
       try {
         addEntry("usuario", payload.text);
+        status("NIÑO está pensando...");
         const out = await api(agentPath("/tick"), {method: "POST", body: JSON.stringify(payload)});
         $("text").value = "";
         print($("state"), out);
+        if (out.action?.payload?.text) addEntry(`niño · ${out.llm_provider || out.action.type}`, out.action.payload.text);
+        status(out.llm_error ? `NIÑO respondió con reglas locales: ${out.llm_error}` : "NIÑO respondió.");
+        await loadConversation();
         await refreshState();
         await loadMemorySearch();
-        await loadConversation();
         await loadLLMStatus();
+      } catch (err) {
+        status(`Error al enviar: ${err.message}`);
       } finally {
         $("send").disabled = false;
       }
