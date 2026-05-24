@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from urllib.error import URLError
 
 from nino.claude_live import claude_setup_commands, run_live_claude_probe
 
@@ -43,6 +44,29 @@ def test_live_claude_probe_can_require_key(monkeypatch) -> None:
     assert result["skipped"] is True
     assert result["missing"] == ["ANTHROPIC_API_KEY"]
     assert "scripts/ninoctl final-audit" in result["setup_commands"]
+
+
+def test_live_claude_probe_reports_safe_url_error_detail(monkeypatch) -> None:
+    class FailingClient:
+        def complete(self, _prompt):
+            raise URLError("network unreachable")
+
+    monkeypatch.setattr(
+        "nino.claude_live.llm_config_status",
+        lambda: {
+            "enabled": True,
+            "missing": [],
+            "model": "claude-test",
+        },
+    )
+    monkeypatch.setattr("nino.claude_live.build_configured_llm", lambda: FailingClient())
+
+    result = run_live_claude_probe(require_key=True)
+
+    assert result["ok"] is False
+    assert result["error"] == "URLError"
+    assert result["detail"] == "network unreachable"
+    assert "setup_commands" not in result
 
 
 def test_live_claude_probe_script_outputs_skip_json() -> None:

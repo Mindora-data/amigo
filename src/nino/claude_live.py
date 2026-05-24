@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from typing import Any
+from urllib import error
 
 from .llm import build_configured_llm, llm_config_status
 
@@ -23,6 +24,27 @@ def claude_setup_commands(*, include_cd: bool = False) -> list[str]:
     if include_cd:
         return ["cd ~/Developer/bebe", *commands]
     return commands
+
+
+def _safe_error_evidence(exc: Exception) -> dict[str, Any]:
+    evidence: dict[str, Any] = {"error": exc.__class__.__name__}
+    if isinstance(exc, error.HTTPError):
+        evidence["http_status"] = exc.code
+        try:
+            body = exc.read(500).decode("utf-8", errors="replace")
+        except Exception:
+            body = ""
+        if body:
+            evidence["detail"] = body.replace("\n", " ")[:500]
+    elif isinstance(exc, error.URLError):
+        reason = getattr(exc, "reason", None)
+        if reason:
+            evidence["detail"] = str(reason)[:500]
+    else:
+        detail = str(exc)
+        if detail:
+            evidence["detail"] = detail[:500]
+    return evidence
 
 
 def run_live_claude_probe(*, require_key: bool = False) -> dict[str, Any]:
@@ -61,7 +83,7 @@ def run_live_claude_probe(*, require_key: bool = False) -> dict[str, Any]:
             "configured": True,
             "provider": "claude",
             "model": config["model"],
-            "error": exc.__class__.__name__,
+            **_safe_error_evidence(exc),
         }
 
     return {
