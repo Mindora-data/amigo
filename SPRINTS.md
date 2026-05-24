@@ -327,6 +327,9 @@ Auditoria final de producto 100% local:
 48. Hecho inicial: `product-status` y `completion-audit` ordenan los siguientes comandos de cierre para mostrar juntos `finish --key-stdin`, `finish --key-env` y `finish --skip-configure` antes del reinicio/auditoria.
 49. Hecho inicial: `scripts/nino-readiness` funciona en la copia runtime instalada aunque no incluya `tests/`, saltando solo la suite de desarrollo y manteniendo smoke/audit de producto.
 50. Hecho inicial: la documentacion evita asignaciones inline de `ANTHROPIC_API_KEY` y guia hacia lectura silenciosa/export para no dejar secretos en comandos copiados.
-51. Siguiente: ejecutar `scripts/ninoctl finish --key-stdin`, `scripts/ninoctl finish --key-env`, `scripts/ninoctl finish --skip-configure`, `scripts/ninoctl final-audit`, `Cierre guiado` o `Cierre final` con una `ANTHROPIC_API_KEY` real.
+51. Hecho inicial: llamada viva de Claude validada con Keychain, launchd y certificado TLS del sistema.
+52. Hecho inicial: la UI muestra la respuesta del chat inmediatamente al volver `/tick`, antes de refrescar paneles secundarios.
+53. Hecho inicial: cada respuesta `/tick` incluye `nino_context` con fuente, madurez, objetivos activos y memoria usada; la UI lo muestra como `contexto NIÑO` para diferenciar agente local de Claude directo.
+54. Siguiente: mejorar la voz propia de NIÑO para que use explicitamente su memoria/contexto cuando el usuario pregunte por continuidad, sin convertir todas las respuestas en explicaciones internas.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

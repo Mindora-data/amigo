@@ -449,6 +449,19 @@ APP_HTML = """<!doctype html>
       log.appendChild(item);
       log.scrollTop = log.scrollHeight;
     };
+    const addContextEntry = (context) => {
+      if (!context) return;
+      const memories = (context.memory_candidates || []).slice(0, 2).map((item) => item.statement).filter(Boolean);
+      const goals = (context.active_goals || []).slice(0, 2);
+      const parts = [
+        `fuente: ${context.response_source || "policy"}`,
+        `madurez: ${fmt(context.maturity)}`,
+        `memoria usada: ${context.llm_context_memory_count ?? context.retrieved_memory_count ?? 0}`,
+      ];
+      if (goals.length) parts.push(`objetivos: ${goals.join(", ")}`);
+      if (memories.length) parts.push(`recuerdo: ${memories.join(" · ")}`);
+      addEntry("contexto NIÑO", parts.join("\n"));
+    };
     const addEmptyConversation = () => {
       const item = document.createElement("div");
       item.className = "entry";
@@ -727,6 +740,7 @@ APP_HTML = """<!doctype html>
         $("text").value = "";
         print($("state"), out);
         if (out.action?.payload?.text) addEntry(`niño · ${out.llm_provider || out.action.type}`, out.action.payload.text);
+        addContextEntry(out.nino_context);
         status(out.llm_error ? `NIÑO respondió con reglas locales: ${out.llm_error}` : "NIÑO respondió.");
         await loadConversation();
         await refreshState();

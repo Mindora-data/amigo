@@ -34,6 +34,11 @@ def test_tick_uses_configured_llm_response() -> None:
     assert out["llm_error"] is None
     assert "llm_provider_claude" in out["reason_trace"]
     assert "Preferencias conocidas: sprints" in llm.prompts[-1]["user"]
+    assert out["nino_context"]["response_source"] == "llm_claude"
+    assert out["nino_context"]["llm_provider"] == "claude"
+    assert out["nino_context"]["llm_error"] is None
+    assert "llm_context_memory_count" in out["nino_context"]
+    assert isinstance(out["nino_context"]["memory_candidates"], list)
 
 
 def test_conversation_persists_user_and_assistant_turns_without_extra_episodes() -> None:
@@ -65,6 +70,8 @@ def test_tick_falls_back_to_policy_when_llm_fails() -> None:
     assert out["llm_provider"] == "claude"
     assert out["llm_error"] == "RuntimeError"
     assert "llm_provider_claude" not in out["reason_trace"]
+    assert out["nino_context"]["response_source"] == "policy"
+    assert out["nino_context"]["llm_error"] == "RuntimeError"
 
 
 def test_llm_probe_does_not_create_episode() -> None:

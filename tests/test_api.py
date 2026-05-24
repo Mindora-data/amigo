@@ -389,6 +389,10 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert final_audit["audit_profile"]["strict_final"] is True
     assert final_audit["final_readiness"]["ready_for_final_audit"] is False
     assert tick["tick"] == 1
+    assert tick["nino_context"]["agent_id"] == "api-agent"
+    assert tick["nino_context"]["response_source"] == "policy"
+    assert tick["nino_context"]["llm_provider"] is None
+    assert isinstance(tick["nino_context"]["memory_candidates"], list)
     assert state["tick"] == 1
     assert len(episodes["episodes"]) == 1
     assert episodes["episodes"][0]["text"] == "me gusta piano"

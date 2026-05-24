@@ -28,6 +28,38 @@ from .proactivity import (
     record_proactive_send,
 )
 
+
+def _nino_context_summary(
+    *,
+    state: AgentState,
+    source: str,
+    llm_provider: str | None,
+    llm_error: str | None,
+    retrieved: RetrieveResponse,
+    llm_retrieved: RetrieveResponse,
+) -> dict[str, Any]:
+    memory_candidates = [
+        {
+            "statement": candidate.statement,
+            "score": round(candidate.score, 4),
+            "confidence": round(candidate.confidence, 4),
+        }
+        for candidate in llm_retrieved.memory_candidates[:5]
+    ]
+    return {
+        "agent_id": state.agent_id,
+        "response_source": source,
+        "llm_provider": llm_provider,
+        "llm_error": llm_error,
+        "maturity": state.cognitive_time.get("maturity", 0.0),
+        "age_ticks": state.cognitive_time.get("age_ticks", 0.0),
+        "active_goals": list(state.active_goals),
+        "retrieved_memory_count": len(retrieved.memory_candidates),
+        "llm_context_memory_count": len(llm_retrieved.memory_candidates),
+        "memory_candidates": memory_candidates,
+    }
+
+
 class InMemoryStateStore:
     def __init__(self) -> None:
         self._states: dict[str, AgentState] = {}
@@ -1375,8 +1407,8 @@ class NinoRuntime:
         state.updated_at = now
         state.relation_state = _update_relation_from_percept(state.relation_state, percept_frame, now)
         response_text = str(decision.chosen_action.get("payload", {}).get("text", "")).strip()
+        source = "llm_claude" if "llm_provider_claude" in decision.reason_trace else "policy"
         if response_text:
-            source = "llm_claude" if "llm_provider_claude" in decision.reason_trace else "policy"
             state.relation_state = _append_response_history(
                 state.relation_state,
                 text=response_text,
@@ -1422,4 +1454,12 @@ class NinoRuntime:
             "active_goals": list(state.active_goals),
             "llm_provider": "claude" if self.llm_client is not None else None,
             "llm_error": llm_error,
+            "nino_context": _nino_context_summary(
+                state=state,
+                source=source,
+                llm_provider="claude" if self.llm_client is not None else None,
+                llm_error=llm_error,
+                retrieved=retrieved,
+                llm_retrieved=llm_retrieved,
+            ),
         }
