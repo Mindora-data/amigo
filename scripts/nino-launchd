@@ -10,6 +10,9 @@ if [[ -f "$ENV_FILE" ]]; then
   source "$ENV_FILE"
   set +a
 fi
+if [[ -z "${SSL_CERT_FILE:-}" && -f /etc/ssl/cert.pem ]]; then
+  export SSL_CERT_FILE=/etc/ssl/cert.pem
+fi
 LABEL="${NINO_LAUNCHD_LABEL:-local.nino.server}"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 DEFAULT_PYTHON="$ROOT_DIR/.venv/bin/python"

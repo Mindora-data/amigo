@@ -44,6 +44,14 @@ def test_launchd_plist_does_not_embed_anthropic_key(tmp_path) -> None:
     assert "secret-launchd-test" not in content
 
 
+def test_scripts_default_to_macos_system_cert_bundle() -> None:
+    ninoctl = Path("scripts/ninoctl").read_text(encoding="utf-8")
+    launchd = Path("scripts/nino-launchd").read_text(encoding="utf-8")
+
+    assert "SSL_CERT_FILE=/etc/ssl/cert.pem" in ninoctl
+    assert "SSL_CERT_FILE=/etc/ssl/cert.pem" in launchd
+
+
 def test_launchd_doctor_reports_protected_desktop_path_and_recent_error(tmp_path) -> None:
     home = tmp_path / "home"
     repo = home / "Desktop" / "bebe"

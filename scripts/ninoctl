@@ -9,6 +9,9 @@ if [[ -f "$ENV_FILE" ]]; then
   source "$ENV_FILE"
   set +a
 fi
+if [[ -z "${SSL_CERT_FILE:-}" && -f /etc/ssl/cert.pem ]]; then
+  export SSL_CERT_FILE=/etc/ssl/cert.pem
+fi
 DATA_DIR="${NINO_DATA_DIR:-$ROOT_DIR/data}"
 DB_PATH="${NINO_DB_PATH:-$DATA_DIR/nino.db}"
 HOST="${NINO_HOST:-127.0.0.1}"
