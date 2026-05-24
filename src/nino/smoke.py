@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from dataclasses import dataclass
 from io import BytesIO
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Callable, Iterable
@@ -48,7 +50,28 @@ def _require(condition: bool, checks: list[str], name: str) -> None:
     checks.append(name)
 
 
+@contextmanager
+def _local_first_llm_env() -> Iterable[None]:
+    names = ("NINO_LLM_PROVIDER", "NINO_CLAUDE_MODEL", "ANTHROPIC_API_KEY", "NINO_KEYCHAIN_SERVICE")
+    original = {name: os.environ.get(name) for name in names}
+    for name in names:
+        os.environ.pop(name, None)
+    try:
+        yield
+    finally:
+        for name, value in original.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
 def run_smoke(db_path: str | Path) -> SmokeResult:
+    with _local_first_llm_env():
+        return _run_smoke(db_path)
+
+
+def _run_smoke(db_path: str | Path) -> SmokeResult:
     db_path = Path(db_path)
     app = create_app(db_path)
     checks: list[str] = []
