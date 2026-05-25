@@ -1314,8 +1314,255 @@ APP_HTML = """<!doctype html>
 </html>
 """
 
+USER_HTML = """<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NIÑO</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #182126;
+      background: #f4f6f2;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #f4f6f2; }
+    main {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 18px;
+      gap: 14px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 44px;
+    }
+    h1 { margin: 0; font-size: 22px; letter-spacing: 0; font-weight: 650; }
+    input, textarea, button {
+      font: inherit;
+      border: 1px solid #bac6c0;
+      border-radius: 6px;
+      background: #fff;
+      color: #182126;
+    }
+    input, textarea { width: 100%; padding: 11px 12px; }
+    textarea { resize: none; min-height: 48px; max-height: 150px; }
+    button {
+      min-height: 42px;
+      padding: 10px 14px;
+      cursor: pointer;
+      background: #225f5b;
+      border-color: #225f5b;
+      color: #fff;
+      white-space: nowrap;
+    }
+    button.secondary { background: #fff; border-color: #bac6c0; color: #182126; }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .login {
+      align-self: center;
+      display: grid;
+      gap: 10px;
+      width: min(100%, 380px);
+      margin: 0 auto;
+    }
+    .chat {
+      display: none;
+      min-height: 0;
+      grid-template-rows: 1fr auto;
+      gap: 12px;
+    }
+    .messages {
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 6px 0;
+    }
+    .message {
+      max-width: 78%;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      padding: 10px 12px;
+      border: 1px solid #d2dbd6;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .message.user {
+      align-self: flex-end;
+      background: #225f5b;
+      border-color: #225f5b;
+      color: #fff;
+    }
+    .message.nino { align-self: flex-start; }
+    .composer {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) 86px;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .voiceActive { border-color: #9b4a1b; color: #9b4a1b; }
+    .status { min-height: 20px; font-size: 12px; color: #68766f; }
+    @media (max-width: 560px) {
+      main { padding: 12px; }
+      .composer { grid-template-columns: 44px minmax(0, 1fr) 72px; }
+      .message { max-width: 92%; }
+      button { padding-left: 10px; padding-right: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <main id="minimalUserApp">
+    <header>
+      <h1>NIÑO</h1>
+      <button id="logoutButton" class="secondary" hidden>Salir</button>
+    </header>
+    <form id="loginView" class="login">
+      <input id="userId" autocomplete="username" placeholder="Usuario" aria-label="Usuario">
+      <button id="loginButton" type="submit">Entrar</button>
+    </form>
+    <section id="chatView" class="chat" aria-live="polite">
+      <div id="messages" class="messages"></div>
+      <form id="composer" class="composer">
+        <button id="voiceButton" class="secondary" type="button" title="Voz" aria-label="Voz">Voz</button>
+        <textarea id="text" rows="1" placeholder="Mensaje" aria-label="Mensaje"></textarea>
+        <button id="sendButton" type="submit">Enviar</button>
+      </form>
+    </section>
+    <div id="status" class="status"></div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const STORAGE_USER = "nino_user_id";
+    const AGENT_ID = "nino";
+    let recognition = null;
+    let listening = false;
+
+    function currentUserId() {
+      return ($("userId").value || localStorage.getItem(STORAGE_USER) || "usuario").trim();
+    }
+    function agentPath(path) {
+      return `/users/${encodeURIComponent(currentUserId())}/agents/${encodeURIComponent(AGENT_ID)}${path}`;
+    }
+    async function api(path, options = {}) {
+      const headers = {"content-type": "application/json", ...(options.headers || {})};
+      const res = await fetch(path, {...options, headers});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      return data;
+    }
+    function setStatus(text) {
+      $("status").textContent = text || "";
+    }
+    function addMessage(role, text) {
+      const row = document.createElement("div");
+      row.className = `message ${role}`;
+      row.textContent = text;
+      $("messages").appendChild(row);
+      $("messages").scrollTop = $("messages").scrollHeight;
+    }
+    async function loginUser(event) {
+      if (event) event.preventDefault();
+      const userId = currentUserId();
+      localStorage.setItem(STORAGE_USER, userId);
+      await api("/session/login", {method: "POST", body: JSON.stringify({user_id: userId, agent_id: AGENT_ID})});
+      $("loginView").style.display = "none";
+      $("chatView").style.display = "grid";
+      $("logoutButton").hidden = false;
+      await loadConversation();
+      $("text").focus();
+    }
+    async function loadConversation() {
+      const out = await api(agentPath("/conversation"));
+      $("messages").replaceChildren();
+      (out.conversation || []).forEach((entry) => {
+        const role = entry.role === "user" ? "user" : "nino";
+        addMessage(role, entry.text || entry.content || "");
+      });
+    }
+    async function sendText(event) {
+      event.preventDefault();
+      const text = $("text").value.trim();
+      if (!text) return;
+      $("text").value = "";
+      addMessage("user", text);
+      $("sendButton").disabled = true;
+      setStatus("NIÑO está pensando");
+      try {
+        const out = await api(agentPath("/tick"), {
+          method: "POST",
+          body: JSON.stringify({intent: "chat", text, salience: 0.7, confidence: 0.8}),
+        });
+        const reply = out.action && out.action.payload ? out.action.payload.text : "";
+        if (reply) addMessage("nino", reply);
+        setStatus("");
+      } catch (err) {
+        setStatus(err.message);
+      } finally {
+        $("sendButton").disabled = false;
+        $("text").focus();
+      }
+    }
+    function setupVoice() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        $("voiceButton").disabled = true;
+        return;
+      }
+      recognition = new SpeechRecognition();
+      recognition.lang = "es-ES";
+      recognition.interimResults = false;
+      recognition.onstart = () => {
+        listening = true;
+        $("voiceButton").classList.add("voiceActive");
+      };
+      recognition.onend = () => {
+        listening = false;
+        $("voiceButton").classList.remove("voiceActive");
+      };
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results).map((result) => result[0].transcript).join(" ");
+        $("text").value = transcript;
+        $("composer").requestSubmit();
+      };
+    }
+    $("loginView").addEventListener("submit", loginUser);
+    $("composer").addEventListener("submit", sendText);
+    $("logoutButton").onclick = () => {
+      localStorage.removeItem(STORAGE_USER);
+      $("chatView").style.display = "none";
+      $("loginView").style.display = "grid";
+      $("logoutButton").hidden = true;
+      $("messages").replaceChildren();
+      $("userId").focus();
+    };
+    $("voiceButton").onclick = () => {
+      if (!recognition) return;
+      if (listening) recognition.stop();
+      else recognition.start();
+    };
+    const storedUser = localStorage.getItem(STORAGE_USER);
+    if (storedUser) {
+      $("userId").value = storedUser;
+      loginUser();
+    }
+    setupVoice();
+  </script>
+</body>
+</html>
+"""
+
 
 API_ENDPOINTS = [
+    "GET /user",
+    "GET /chat",
     "GET /health",
     "GET /health/deep",
     "GET /app",
@@ -2667,6 +2914,16 @@ class NinoHttpApp:
         method = environ["REQUEST_METHOD"].upper()
         path = urlparse(environ.get("PATH_INFO", "")).path
         try:
+            if method == "GET" and path in {"/user", "/chat"}:
+                encoded = USER_HTML.encode("utf-8")
+                start_response(
+                    "200 OK",
+                    [
+                        ("Content-Type", "text/html; charset=utf-8"),
+                        ("Content-Length", str(len(encoded))),
+                    ],
+                )
+                return [encoded]
             if method == "GET" and path == "/app":
                 encoded = APP_HTML.encode("utf-8")
                 start_response(

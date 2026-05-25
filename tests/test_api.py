@@ -191,6 +191,30 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b'parts.join("\n")' not in body
 
 
+def test_http_api_serves_minimal_user_app(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    content_type, body = _raw_request(app, "GET", "/user")
+    chat_content_type, chat_body = _raw_request(app, "GET", "/chat")
+
+    assert content_type.startswith("text/html")
+    assert chat_content_type.startswith("text/html")
+    assert chat_body == body
+    assert b"minimalUserApp" in body
+    assert b"loginView" in body
+    assert b"chatView" in body
+    assert b"voiceButton" in body
+    assert b"/session/login" in body
+    assert b"/users/${encodeURIComponent(currentUserId())}/agents/${encodeURIComponent(AGENT_ID)}" in body
+    assert b"/conversation" in body
+    assert b"/tick" in body
+    assert b"SpeechRecognition" in body
+    assert b"webkitSpeechRecognition" in body
+    assert b"/operations/" not in body
+    assert b"/memory/facts" not in body
+    assert b"Cierre final" not in body
+
+
 def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 
@@ -250,6 +274,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     tasks_after_run = _request(app, "GET", "/agents/api-agent/tasks")
 
     assert root["service"] == "nino"
+    assert "GET /user" in root["endpoints"]
+    assert "GET /chat" in root["endpoints"]
     assert "GET /health" in root["endpoints"]
     assert "GET /openapi.json" in root["endpoints"]
     assert "GET /operations/mode" in root["endpoints"]

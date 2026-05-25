@@ -387,6 +387,9 @@ Auditoria final de producto 100% local:
 108. Requisito de producto final: mantener `/app` como consola operativa/desarrollo, separada de la UI final de usuario para no exponer controles internos.
 109. Decisión técnica pendiente: cambiar el proveedor LLM principal a DeepSeek por coste, manteniendo el diseño multi-proveedor para no acoplar NIÑO a un único modelo.
 110. Validación pendiente: hacer una prueba en Vercel para confirmar que la UI final minimalista y la integración con el backend/API funcionan correctamente en despliegue externo.
-111. Siguiente: crear la UI final minimalista de usuario (`login -> chat/voz`) sobre las APIs ya existentes.
+111. Hecho inicial: `GET /user` y `GET /chat` sirven la UI final minimalista de usuario, separada de `/app`.
+112. Hecho inicial: la UI final muestra primero login y, tras entrar, solo chat con NIÑO y control de voz si el navegador soporta Web Speech.
+113. Hecho inicial: la UI final usa rutas privadas `/users/{user_id}/agents/nino/...`, conservando aislamiento de memoria por usuario.
+114. Siguiente: preparar cambio de proveedor LLM a DeepSeek manteniendo Claude como fallback configurable.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
