@@ -371,6 +371,8 @@ Auditoria final de producto 100% local:
 92. Hecho inicial: la memoria caliente interpreta consultas temporales como `semana pasada`, `ayer` y `hoy`, recuperando episodios por ventana temporal aunque haya poco solape semántico.
 93. Hecho inicial: NIÑO extrae eventos temporales simples (`mañana tengo cita`, `luego tengo reunión`, `hoy tengo examen`) a `relation_state.temporal_events`.
 94. Hecho inicial: la proactividad prioriza recordatorios de eventos temporales próximos y los marca como `reminded` para evitar avisos repetidos.
-95. Siguiente: separar aprendizaje general anonimo de memoria privada, permitiendo aprender patrones de conversaciones sin exponer datos personales entre usuarios.
+95. Hecho inicial: el parser temporal entiende días de la semana y horas exactas (`el jueves a las 17:30 tengo reunión`) conservando la zona horaria del turno.
+96. Hecho inicial: los eventos temporales guardan `lead_time_hours` y la proactividad avisa dentro de la ventana previa sin repetir tras marcar `reminded`.
+97. Siguiente: separar aprendizaje general anonimo de memoria privada, permitiendo aprender patrones de conversaciones sin exponer datos personales entre usuarios.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

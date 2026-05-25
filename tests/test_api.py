@@ -502,6 +502,28 @@ def test_http_api_tick_accepts_time_context_and_records_temporal_event(tmp_path)
     assert relation["relation_state"]["temporal_events"][0]["due_at"] == "2026-05-22T09:00:00+00:00"
 
 
+def test_http_api_temporal_event_accepts_weekday_and_exact_time(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {
+            "intent": "chat",
+            "text": "el jueves a las 17:30 tengo reunión",
+            "salience": 0.9,
+            "confidence": 0.95,
+            "now": "2026-05-25T10:00:00+00:00",
+        },
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+
+    assert relation["relation_state"]["temporal_events"][0]["kind"] == "reunion"
+    assert relation["relation_state"]["temporal_events"][0]["due_at"] == "2026-05-28T17:30:00+00:00"
+    assert relation["relation_state"]["temporal_events"][0]["lead_time_hours"] == 24
+
+
 def test_http_api_openapi_matches_root_endpoint_catalog(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

@@ -140,17 +140,69 @@ def _semantic_tags(text: str) -> list[str]:
         tags.append("question")
     return sorted(set(tags))
 
+WEEKDAY_OFFSETS = {
+    "lunes": 0,
+    "martes": 1,
+    "miercoles": 2,
+    "miércoles": 2,
+    "jueves": 3,
+    "viernes": 4,
+    "sabado": 5,
+    "sábado": 5,
+    "domingo": 6,
+}
+
+TIME_RE = re.compile(r"\b(?:a\s+las|a\s+la|las|la)\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\b", re.IGNORECASE)
+
+def _time_from_text(text: str) -> tuple[int, int] | None:
+    match = TIME_RE.search(text)
+    if not match:
+        return None
+    hour = int(match.group("hour"))
+    minute = int(match.group("minute") or 0)
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        return None
+    return hour, minute
+
+def _next_weekday(now: datetime, weekday: int) -> datetime:
+    days = (weekday - now.weekday()) % 7
+    if days == 0:
+        days = 7
+    return now + timedelta(days=days)
+
+def _due_at_from_text(text: str, now: datetime) -> datetime | None:
+    plain = _without_accents(text)
+    explicit_time = _time_from_text(text)
+    default_hour, default_minute = explicit_time or (9, 0)
+    base: datetime | None = None
+    if "mañana" in plain or "manana" in plain:
+        base = now + timedelta(days=1)
+    elif "hoy" in plain:
+        if explicit_time is None:
+            base = now.replace(hour=max(now.hour, 9), minute=0, second=0, microsecond=0)
+        else:
+            base = now
+    elif "luego" in plain or "esta tarde" in plain:
+        if explicit_time is None:
+            return now + timedelta(hours=2)
+        base = now
+    else:
+        for day, weekday in WEEKDAY_OFFSETS.items():
+            if day in plain:
+                base = _next_weekday(now, weekday)
+                break
+    if base is None:
+        return None
+    due_at = base.replace(hour=default_hour, minute=default_minute, second=0, microsecond=0)
+    if due_at <= now and explicit_time is not None:
+        due_at += timedelta(days=1)
+    return due_at
+
 def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
     plain = _without_accents(text)
     if not any(word in plain for word in ("cita", "examen", "reunion", "reunión", "llamada", "quedada")):
         return []
-    due_at: datetime | None = None
-    if "mañana" in plain or "manana" in plain:
-        due_at = (now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
-    elif "hoy" in plain:
-        due_at = now.replace(hour=max(now.hour, 9), minute=0, second=0, microsecond=0)
-    elif "luego" in plain or "esta tarde" in plain:
-        due_at = now + timedelta(hours=2)
+    due_at = _due_at_from_text(text, now)
     if due_at is None:
         return []
     kind = "event"
@@ -167,6 +219,7 @@ def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
             "status": "pending",
             "source": "user_statement",
             "created_at": now.isoformat(),
+            "lead_time_hours": 24,
         }
     ]
 
