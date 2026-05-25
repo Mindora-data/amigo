@@ -751,6 +751,13 @@ APP_HTML = """<!doctype html>
         $("text").value = "";
         print($("state"), out);
         if (out.action?.payload?.text) addEntry(`niño · ${out.llm_provider || out.action.type}`, out.action.payload.text);
+        if ((out.auto_consolidated_count || 0) > 0) {
+          const labels = (out.auto_consolidation?.cold_memory_updates || [])
+            .slice(0, 3)
+            .map((fact) => `${fact.key}: ${fact.value}`)
+            .filter(Boolean);
+          addEntry("memoria NIÑO", labels.length ? `consolidada: ${labels.join(" · ")}` : `consolidados ${out.auto_consolidated_count} hechos`);
+        }
         addContextEntry(out.nino_context);
         status(out.llm_error ? `NIÑO respondió con reglas locales: ${out.llm_error}` : "NIÑO respondió.");
         await loadConversation();

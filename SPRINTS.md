@@ -341,6 +341,7 @@ Auditoria final de producto 100% local:
 62. Hecho inicial: `/app` agrupa el contexto de NIÑO en `memoria fría` y `memoria reciente`, usando `memory_type` para separar hechos persistidos de episodios calientes.
 63. Hecho inicial: la busqueda de memoria en `/app` muestra `memoria fria`/`memoria reciente`, score, confidence y origen corto para rastrear cada candidato recuperado.
 64. Hecho inicial: la vista de memoria fria en `/app` muestra estado `activa`/`inactiva`, confidence y origen corto del episodio fuente para auditar recuerdos persistidos.
-65. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y añadir una señal visible cuando una respuesta consolida memoria automáticamente.
+65. Hecho inicial: `/app` añade una entrada `memoria NIÑO` cuando una respuesta autoconsolida hechos, mostrando las claves/valores guardados en ese turno.
+66. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y añadir controles de filtro para memoria fria/reciente en la busqueda.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
