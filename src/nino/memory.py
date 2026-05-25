@@ -187,6 +187,11 @@ def _temporal_window(query: str, now: datetime) -> tuple[datetime, datetime] | N
         return _day_window(now)
     return None
 
+def _temporal_window_payload(window: tuple[datetime, datetime] | None) -> dict[str, str] | None:
+    if window is None:
+        return None
+    return {"start": window[0].isoformat(), "end": window[1].isoformat()}
+
 class MemoryRetriever:
     def __init__(self, episode_store: InMemoryEpisodeStore, cold_store: ColdStoreProtocol | None = None) -> None:
         self.episode_store = episode_store
@@ -195,6 +200,7 @@ class MemoryRetriever:
     def retrieve(self, agent_id: str, request: RetrieveRequest, top_k: int = 5) -> RetrieveResponse:
         now = datetime.now(timezone.utc)
         temporal_window = _temporal_window(request.query_intent, now)
+        temporal_hit = False
         scored: list[MemoryCandidate] = []
 
         # HOT
@@ -202,6 +208,7 @@ class MemoryRetriever:
             sem = _semantic_overlap(request.query_intent, f"{ep.intent} {ep.text}")
             if temporal_window is not None and temporal_window[0] <= ep.timestamp <= temporal_window[1]:
                 sem = max(sem, 0.35)
+                temporal_hit = True
             if sem <= 0:
                 continue
             rec = _recency_score(ep.timestamp, now, request.time_scope)
@@ -245,4 +252,9 @@ class MemoryRetriever:
                     )
 
         scored.sort(key=lambda c: c.score, reverse=True)
-        return RetrieveResponse(memory_candidates=scored[:top_k])
+        return RetrieveResponse(
+            memory_candidates=scored[:top_k],
+            temporal_query=temporal_window is not None,
+            temporal_window=_temporal_window_payload(temporal_window),
+            temporal_miss=temporal_window is not None and not temporal_hit,
+        )

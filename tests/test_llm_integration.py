@@ -96,6 +96,18 @@ def test_llm_prompt_activates_continuity_for_temporal_memory_question() -> None:
     assert "Usa al menos un recuerdo" in llm.prompts[-1]["system"]
 
 
+def test_llm_prompt_marks_temporal_memory_miss() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    out = runtime.tick("agent-llm", {"intent": "question", "text": "que hablamos hace dos semanas?"})
+
+    assert out["nino_context"]["temporal_query"] is True
+    assert out["nino_context"]["temporal_miss"] is True
+    assert "Consulta temporal: sin resultados" in llm.prompts[-1]["user"]
+    assert "no hay recuerdos recuperados" in llm.prompts[-1]["system"]
+
+
 def test_conversation_persists_user_and_assistant_turns_without_extra_episodes() -> None:
     llm = FakeLLM("Te respondo usando memoria persistente.")
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

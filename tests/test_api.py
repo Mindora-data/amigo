@@ -1117,6 +1117,7 @@ def test_http_api_inbox_delivery_memory_search_and_snapshot(tmp_path) -> None:
     cleared = _request(app, "POST", "/agents/api-agent/proactivity/inbox/clear-delivered", {})
     search = _request(app, "POST", "/agents/api-agent/memory/search", {"query": "música"})
     hot_search = _request(app, "POST", "/agents/api-agent/memory/search", {"query": "música", "memory_type_filter": "hot"})
+    temporal_miss = _request(app, "POST", "/agents/api-agent/memory/search", {"query": "que hicimos hace dos semanas"})
     snapshot = _request(app, "GET", "/development/snapshot")
 
     assert marked["updated"] is True
@@ -1128,6 +1129,10 @@ def test_http_api_inbox_delivery_memory_search_and_snapshot(tmp_path) -> None:
     assert hot_search["memory_type_filter"] == "hot"
     assert hot_search["visible_candidates"] == len(hot_search["memory_candidates"])
     assert all(candidate["memory_type"] == "hot" for candidate in hot_search["memory_candidates"])
+    assert temporal_miss["temporal_query"] is True
+    assert temporal_miss["temporal_miss"] is True
+    assert temporal_miss["temporal_visible_miss"] is True
+    assert temporal_miss["visible_candidates"] == 0
     assert snapshot["snapshot"]["agent_count"] == 1
 
 

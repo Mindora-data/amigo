@@ -251,6 +251,9 @@ def build_nino_prompt(
     world_model: dict[str, Any],
     active_goals: list[str],
     memory_candidates: list[MemoryCandidate],
+    temporal_query: bool = False,
+    temporal_miss: bool = False,
+    temporal_window: dict[str, str] | None = None,
     recent_turns: list[dict[str, Any]] | None = None,
     cold_facts: list[Any] | None = None,
 ) -> dict[str, str]:
@@ -277,6 +280,18 @@ def build_nino_prompt(
     )[:8]
     concept_text = ", ".join(key for key, _ in concepts) or "none"
     continuity_mode = _asks_about_continuity(text, intent)
+    temporal_note = ""
+    if temporal_query:
+        if temporal_miss:
+            temporal_note = (
+                "Consulta temporal: no hay recuerdos recuperados dentro de la ventana pedida. "
+                "Dilo claramente y no inventes lo que ocurrio en esa fecha."
+            )
+        elif temporal_window:
+            temporal_note = (
+                f"Consulta temporal: usa preferentemente recuerdos dentro de {temporal_window.get('start')} "
+                f"a {temporal_window.get('end')}."
+            )
     continuity_instruction = (
         "El usuario pregunta por memoria, continuidad o diferencia con Claude directo. "
         "Usa al menos un recuerdo, preferencia u objetivo concreto disponible y explica brevemente como lo aplicaras. "
@@ -289,13 +304,14 @@ def build_nino_prompt(
         "Usa la memoria dada como contexto, no inventes recuerdos. Si no sabes algo, dilo. "
         "Mantén respuestas breves, normalmente entre 1 y 4 frases. "
         "No menciones detalles internos de implementación salvo que el usuario lo pregunte. "
-        f"{continuity_instruction}"
+        f"{continuity_instruction} {temporal_note}"
     )
     user = (
         f"Agente: {agent_id}\n"
         f"Intent: {intent}\n"
         f"Mensaje del usuario: {_redact_context(text)}\n\n"
         f"Modo continuidad: {'activo' if continuity_mode else 'pasivo'}\n"
+        f"Consulta temporal: {'sin resultados' if temporal_miss else 'activa' if temporal_query else 'no'}\n"
         f"Preferencias conocidas: {preferences}\n"
         f"Objetivos activos: {', '.join(active_goals) or 'none'}\n"
         f"Etapa de identidad: {self_model.get('identity_stage', 'unknown')}\n"

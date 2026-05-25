@@ -44,6 +44,16 @@ def test_policy_answers_user_memory_query_from_relation() -> None:
     assert "user_memory_query" in out["reason_trace"]
 
 
+def test_policy_answers_temporal_memory_miss_without_llm() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+
+    out = runtime.tick("agent-policy", {"intent": "question", "text": "que hablamos hace dos semanas?"})
+
+    assert "No encuentro recuerdos guardados de esa fecha" in out["action"]["payload"]["text"]
+    assert "temporal_memory_miss" in out["reason_trace"]
+    assert out["nino_context"]["temporal_miss"] is True
+
+
 def test_policy_does_not_use_unrelated_recent_memory() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     runtime.tick("agent-policy", {"intent": "question", "text": "quien eres?", "salience": 0.9})

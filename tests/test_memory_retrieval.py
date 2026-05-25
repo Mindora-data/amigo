@@ -98,6 +98,21 @@ def test_retrieval_understands_n_weeks_ago_temporal_query() -> None:
     assert out.memory_candidates
     assert out.memory_candidates[0].source_episode_id == "target"
 
+
+def test_retrieval_marks_temporal_miss_when_window_has_no_memory() -> None:
+    store = InMemoryEpisodeStore()
+    now = datetime.now(timezone.utc)
+    store.append(Episode("wrong", "a1", now - timedelta(days=1), "compré pan", "chat", 0.8, 0.9))
+
+    retriever = MemoryRetriever(store)
+    req = RetrieveRequest(query_intent="que hicimos hace dos semanas", self_state={}, relation_state={}, time_scope="long")
+    out = retriever.retrieve(agent_id="a1", request=req, top_k=3)
+
+    assert out.temporal_query is True
+    assert out.temporal_window is not None
+    assert out.temporal_miss is True
+    assert out.memory_candidates == []
+
 def test_retrieval_normalizes_accents_and_basic_synonyms() -> None:
     store = InMemoryEpisodeStore()
     now = datetime.now(timezone.utc)

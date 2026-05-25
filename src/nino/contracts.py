@@ -25,6 +25,9 @@ class RetrieveRequest:
 @dataclass(slots=True)
 class RetrieveResponse:
     memory_candidates: list[MemoryCandidate] = field(default_factory=list)
+    temporal_query: bool = False
+    temporal_window: dict[str, str] | None = None
+    temporal_miss: bool = False
 
 @dataclass(slots=True)
 class PolicyRequest:

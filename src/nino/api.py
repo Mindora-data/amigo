@@ -511,6 +511,7 @@ APP_HTML = """<!doctype html>
         `memoria usada: ${context.llm_context_memory_count ?? context.retrieved_memory_count ?? 0}`,
       ];
       if (goals.length) parts.push(`objetivos: ${goals.join(", ")}`);
+      if (context.temporal_miss) parts.push("memoria temporal: sin resultados");
       if (coldMemories.length) parts.push(`memoria fría: ${coldMemories.join(" · ")}`);
       if (hotMemories.length) parts.push(`memoria reciente: ${hotMemories.join(" · ")}`);
       addEntry("contexto NIÑO", parts.join("\\n"));
@@ -3040,6 +3041,7 @@ class NinoService:
             out["memory_candidates"] = candidates
         out["memory_type_filter"] = memory_type_filter
         out["visible_candidates"] = len(out.get("memory_candidates", []))
+        out["temporal_visible_miss"] = bool(out.get("temporal_miss") and out["visible_candidates"] == 0)
         out["visible_memory_type_counts"] = _memory_type_counts(out.get("memory_candidates", []))
         return out
 

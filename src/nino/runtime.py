@@ -62,6 +62,9 @@ def _nino_context_summary(
         "retrieved_memory_count": len(retrieved.memory_candidates),
         "llm_context_memory_count": len(llm_retrieved.memory_candidates),
         "memory_candidates": memory_candidates,
+        "temporal_query": llm_retrieved.temporal_query,
+        "temporal_window": llm_retrieved.temporal_window,
+        "temporal_miss": llm_retrieved.temporal_miss,
     }
 
 
@@ -1523,6 +1526,19 @@ class NinoRuntime:
                 reason_trace=["context_policy", "user_memory_query"],
             )
 
+        if request.percept_frame.get("temporal_miss") is True:
+            action = {
+                "type": "external_message",
+                "payload": {
+                    "text": "No encuentro recuerdos guardados de esa fecha. Puedo revisar otra ventana de tiempo si me das una pista más concreta."
+                },
+            }
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.62,
+                reason_trace=["context_policy", "temporal_memory_miss"],
+            )
+
         topic_match = TOPIC_RE.search(text)
         if topic_match:
             topic = _clean_preference_value(topic_match.group("topic"))
@@ -1661,6 +1677,9 @@ class NinoRuntime:
                 "maturity": state.cognitive_time.get("maturity", 0.0),
                 "active_goals": list(state.active_goals),
                 "active_cold_facts": _active_cold_fact_summaries(self.cold_store.list_for_agent(agent_id)),
+                "temporal_query": retrieved.temporal_query,
+                "temporal_window": retrieved.temporal_window,
+                "temporal_miss": retrieved.temporal_miss,
             },
             drive_vector=state.drive_vector,
             memory_candidates=retrieved.memory_candidates,
@@ -1684,6 +1703,9 @@ class NinoRuntime:
                     world_model=state.world_model,
                     active_goals=list(state.active_goals),
                     memory_candidates=llm_retrieved.memory_candidates,
+                    temporal_query=llm_retrieved.temporal_query,
+                    temporal_miss=llm_retrieved.temporal_miss,
+                    temporal_window=llm_retrieved.temporal_window,
                     recent_turns=self.conversation(agent_id)[-8:],
                     cold_facts=self.cold_store.list_for_agent(agent_id),
                 )

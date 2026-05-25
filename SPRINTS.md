@@ -408,6 +408,10 @@ Auditoria final de producto 100% local:
 129. Hecho inicial: la recuperación temporal entiende `el mes pasado` como ventana aproximada de 30 a 60 días.
 130. Hecho inicial: la recuperación temporal entiende `hace N días` y `hace N semanas`, incluyendo números en texto como `dos`.
 131. Hecho inicial: el prompt LLM activa modo continuidad ante preguntas temporales (`hace`, `ayer`, `mes pasado`, `semana pasada`) aunque el usuario no diga `recuerda`.
-132. Siguiente: añadir señales de “no encontré memoria de esa fecha” para evitar respuestas ambiguas cuando la ventana temporal no devuelve candidatos.
+132. Hecho inicial: `RetrieveResponse` marca `temporal_query`, `temporal_window` y `temporal_miss` para distinguir ausencia de recuerdos en la fecha pedida.
+133. Hecho inicial: `nino_context` y `/memory/search` exponen `temporal_miss`/`temporal_visible_miss`, de forma que UI y clientes pueden mostrar que no hubo memoria temporal.
+134. Hecho inicial: el prompt LLM recibe una instrucción explícita para decir que no encontró recuerdos de esa ventana temporal y no inventar eventos.
+135. Hecho inicial: la política local usa `temporal_miss` para responder “no encuentro recuerdos guardados de esa fecha” cuando no hay LLM o el proveedor falla.
+136. Siguiente: enriquecer `/user` para mostrar el estado “sin recuerdos de esa fecha” como mensaje normal sin texto técnico.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
