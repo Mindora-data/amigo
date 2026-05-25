@@ -339,6 +339,7 @@ Auditoria final de producto 100% local:
 60. Hecho inicial: la recuperacion semantica de memoria fria expande claves tecnicas (`user_location`, `user_study`, `current_project_focus`, etc.) a terminos naturales para responder mejor a preguntas indirectas como `donde vivo` o `en que estamos trabajando`.
 61. Hecho inicial: `nino_context.memory_candidates` expone `fact_id`, `source_episode_id` y `memory_type` (`hot`/`cold`) para distinguir memoria reciente de hechos persistidos en API/UI.
 62. Hecho inicial: `/app` agrupa el contexto de NIÑO en `memoria fría` y `memoria reciente`, usando `memory_type` para separar hechos persistidos de episodios calientes.
-63. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y mejorar la lista de busqueda de memoria para mostrar origen hot/cold.
+63. Hecho inicial: la busqueda de memoria en `/app` muestra `memoria fria`/`memoria reciente`, score, confidence y origen corto para rastrear cada candidato recuperado.
+64. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y mejorar la vista de memoria fria con validez activa/inactiva y origen.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

@@ -1024,7 +1024,11 @@ APP_HTML = """<!doctype html>
       const query = $("memoryQuery").value || "";
       const out = await api(agentPath("/memory/search"), {method: "POST", body: JSON.stringify({query_intent: query, time_scope: "long"})});
       clearList($("memoryList"));
-      out.memory_candidates.forEach((candidate) => addListItem($("memoryList"), candidate.statement, `score ${fmt(candidate.score)} · confidence ${fmt(candidate.confidence)}`));
+      out.memory_candidates.forEach((candidate) => {
+        const type = candidate.fact_id && candidate.fact_id.startsWith("cold::") ? "fría" : "reciente";
+        const source = candidate.source_episode_id ? ` · origen ${candidate.source_episode_id.slice(0, 8)}` : "";
+        addListItem($("memoryList"), candidate.statement, `memoria ${type} · score ${fmt(candidate.score)} · confidence ${fmt(candidate.confidence)}${source}`);
+      });
       print($("memory"), out);
     }
     $("episodes").onclick = loadEpisodes;
