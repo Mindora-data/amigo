@@ -10,7 +10,7 @@ import sqlite3
 import subprocess
 import threading
 from typing import Any, Callable
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 
 from .autonomy import BackgroundAutonomy
@@ -49,8 +49,9 @@ APP_HTML = """<!doctype html>
     h1 { margin: 0; font-size: 21px; letter-spacing: 0; }
     h2 { margin: 0; font-size: 13px; letter-spacing: 0; color: #33424a; }
     label { font-size: 12px; color: #53646d; }
-    .topbar { display: grid; grid-template-columns: auto minmax(220px, 360px); align-items: end; gap: 16px; }
+    .topbar { display: grid; grid-template-columns: auto minmax(180px, 260px) minmax(220px, 360px); align-items: end; gap: 16px; }
     .agent { display: grid; grid-template-columns: 58px minmax(0, 1fr); align-items: center; gap: 8px; }
+    .userLogin { display: grid; grid-template-columns: minmax(0, 1fr) 86px; gap: 8px; }
     input, textarea, select, button {
       font: inherit;
       border: 1px solid #b9c5cc;
@@ -170,6 +171,13 @@ APP_HTML = """<!doctype html>
     <section>
       <div class="topbar">
         <h1>NIÑO</h1>
+        <div>
+          <label for="userId">Usuario</label>
+          <div class="userLogin">
+            <input id="userId" value="mindora" autocomplete="username" aria-label="usuario">
+            <button id="loginUser" class="secondary">Login</button>
+          </div>
+        </div>
         <div class="agent">
           <label for="agentId">Agente</label>
           <input id="agentId" value="nino">
@@ -425,7 +433,9 @@ APP_HTML = """<!doctype html>
       if (!res.ok) throw new Error(data.error || res.statusText);
       return data;
     });
-    const agentPath = (tail) => `/agents/${encodeURIComponent($("agentId").value || "demo")}${tail}`;
+    const currentUserId = () => ($("userId").value || "local").trim() || "local";
+    const currentAgentId = () => ($("agentId").value || "nino").trim() || "nino";
+    const agentPath = (tail) => `/users/${encodeURIComponent(currentUserId())}/agents/${encodeURIComponent(currentAgentId())}${tail}`;
     const print = (target, value) => { target.textContent = JSON.stringify(value, null, 2); };
     const status = (text) => { $("status").textContent = text; };
     const fmt = (value) => Number.isFinite(Number(value)) ? Number(value).toFixed(3).replace(/0+$/, "").replace(/[.]$/, "") : "0";
@@ -529,6 +539,19 @@ APP_HTML = """<!doctype html>
       $("profileSummary").textContent = profile.profile.summary || "";
       print($("state"), data);
       status(`Actualizado: ${new Date().toLocaleTimeString()}`);
+    }
+    async function loginUser() {
+      const out = await api("/session/login", {method: "POST", body: JSON.stringify({user_id: currentUserId(), agent_id: currentAgentId()})});
+      $("userId").value = out.user_id;
+      $("agentId").value = out.agent_id;
+      localStorage.setItem("nino_user_id", out.user_id);
+      localStorage.setItem("nino_agent_id", out.agent_id);
+      status(`Login: ${out.user_id}`);
+      await refreshState();
+      await loadAgents();
+      await loadMemorySearch();
+      await loadConversation();
+      return out;
     }
     async function loadLLMStatus() {
       const out = await api(agentPath("/llm/status"));
@@ -800,7 +823,7 @@ APP_HTML = """<!doctype html>
       if (out.proactive_action) addEntry("niño · programado", out.proactive_action.payload.text);
     };
     async function loadAgents() {
-      const out = await api("/agents");
+      const out = await api(`/users/${encodeURIComponent(currentUserId())}/agents`);
       clearList($("agentList"));
       out.agents.forEach((agent) => {
         const item = document.createElement("button");
@@ -808,6 +831,7 @@ APP_HTML = """<!doctype html>
         item.textContent = agent;
         item.onclick = async () => {
           $("agentId").value = agent;
+          localStorage.setItem("nino_agent_id", agent);
           await refreshState();
           await loadMemorySearch();
           await loadConversation();
@@ -817,6 +841,7 @@ APP_HTML = """<!doctype html>
       print($("state"), out);
     }
     $("agents").onclick = loadAgents;
+    $("loginUser").onclick = loginUser;
     const prunePayload = (dryRun) => ({
       prefixes: $("prunePrefixes").value.split(",").map((item) => item.trim()).filter(Boolean),
       dry_run: dryRun
@@ -1224,7 +1249,9 @@ APP_HTML = """<!doctype html>
     $("text").addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") $("send").click();
     });
-    refreshState()
+    $("userId").value = localStorage.getItem("nino_user_id") || $("userId").value;
+    $("agentId").value = localStorage.getItem("nino_agent_id") || $("agentId").value;
+    loginUser()
       .then(loadAgents)
       .then(loadMemorySearch)
       .then(loadConversation)
@@ -1267,7 +1294,16 @@ API_ENDPOINTS = [
     "GET /operations/logs",
     "POST /operations/backup",
     "POST /operations/restart",
+    "POST /session/login",
     "GET /agents",
+    "GET /users/{user_id}/agents",
+    "POST /users/{user_id}/agents/{agent_id}/tick",
+    "GET /users/{user_id}/agents/{agent_id}/state",
+    "GET /users/{user_id}/agents/{agent_id}/conversation",
+    "GET /users/{user_id}/agents/{agent_id}/memory/facts",
+    "POST /users/{user_id}/agents/{agent_id}/memory/search",
+    "GET /users/{user_id}/agents/{agent_id}/profile",
+    "GET /users/{user_id}/agents/{agent_id}/metrics",
     "POST /agents/prune",
     "POST /agents/import",
     "POST /agents/{agent_id}/tick",
@@ -1375,6 +1411,24 @@ def _filter_cold_facts(facts: list[Any], status_filter: str = "all", key_filter:
     return filtered
 
 
+def _identity_slug(value: str, default: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", value.strip().lower()).strip("-_")
+    return slug or default
+
+
+def _scoped_agent_id(user_id: str, agent_id: str) -> str:
+    user_slug = _identity_slug(user_id, "local")
+    agent_slug = _identity_slug(agent_id, "nino")
+    return f"user::{user_slug}::agent::{agent_slug}"
+
+
+def _public_agent_id(scoped_agent_id: str, user_id: str) -> str | None:
+    prefix = f"user::{_identity_slug(user_id, 'local')}::agent::"
+    if not scoped_agent_id.startswith(prefix):
+        return None
+    return scoped_agent_id[len(prefix):]
+
+
 def _attach_current_report_summary(report: dict[str, Any]) -> None:
     report_file = report.get("report_file", {})
     path = report_file.get("path")
@@ -1437,7 +1491,7 @@ def _openapi_document() -> dict[str, Any]:
         if path == "/app":
             continue
         parameters = []
-        for name in ("agent_id", "item_id", "episode_id", "fact_id", "report_name"):
+        for name in ("user_id", "agent_id", "item_id", "episode_id", "fact_id", "report_name"):
             if "{" + name + "}" in path:
                 parameters.append({
                     "name": name,
@@ -1519,6 +1573,32 @@ class NinoService:
 
     def list_agents(self) -> dict[str, Any]:
         return {"agents": self.runtime.list_agents()}
+
+    def login(self, payload: dict[str, Any]) -> dict[str, Any]:
+        user_id = _identity_slug(str(payload.get("user_id", "local")), "local")
+        agent_id = _identity_slug(str(payload.get("agent_id", "nino")), "nino")
+        scoped_agent_id = _scoped_agent_id(user_id, agent_id)
+        self.runtime.load_or_init_state(scoped_agent_id)
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "agent_id": agent_id,
+            "scoped_agent_id": scoped_agent_id,
+            "privacy": "private_user_scope",
+        }
+
+    def list_user_agents(self, user_id: str) -> dict[str, Any]:
+        agents = [
+            public_id
+            for agent_id in self.runtime.list_agents()
+            for public_id in [_public_agent_id(agent_id, user_id)]
+            if public_id is not None
+        ]
+        return {
+            "user_id": _identity_slug(user_id, "local"),
+            "agents": sorted(agents),
+            "scope": "private_user_scope",
+        }
 
     def prune_agents(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self.runtime.prune_agents(
@@ -2551,79 +2631,7 @@ class NinoHttpApp:
         parsed = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
         return {key: values[-1] for key, values in parsed.items() if values}
 
-    def _route(self, method: str, path: str, payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-        if method == "GET" and path == "/":
-            return "200 OK", {
-                "service": "nino",
-                "status": "ok",
-                "endpoints": API_ENDPOINTS,
-            }
-        if method == "GET" and path == "/openapi.json":
-            return "200 OK", _openapi_document()
-        if method == "GET" and path == "/health":
-            return "200 OK", self.service.health()
-        if method == "GET" and path == "/health/deep":
-            return "200 OK", self.service.deep_health()
-        if method == "GET" and path == "/autonomy/status":
-            return "200 OK", self.service.autonomy_status()
-        if method == "POST" and path == "/autonomy/run-once":
-            return "200 OK", self.service.autonomy_run_once(payload)
-        if method == "GET" and path == "/development/snapshot":
-            return "200 OK", self.service.development_snapshot()
-        if method == "GET" and path == "/operations/mode":
-            return "200 OK", self.service.operating_mode()
-        if method == "GET" and path == "/operations/claude":
-            return "200 OK", self.service.claude_config()
-        if method == "POST" and path == "/operations/claude/configure":
-            return "200 OK", self.service.configure_claude(payload)
-        if method == "POST" and path == "/operations/claude/disable":
-            return "200 OK", self.service.disable_claude(payload)
-        if method == "GET" and path == "/operations/audit":
-            return "200 OK", self.service.product_audit()
-        if method == "GET" and path == "/operations/product-status":
-            return "200 OK", self.service.product_status()
-        if method == "GET" and path == "/operations/next-action":
-            return "200 OK", self.service.next_action()
-        if method == "GET" and path == "/operations/completion-audit":
-            return "200 OK", self.service.completion_audit()
-        if method == "POST" and path == "/operations/closing-report":
-            return "200 OK", self.service.closing_report()
-        if method == "GET" and path == "/operations/reports":
-            return "200 OK", self.service.list_reports()
-        if method == "GET" and path == "/operations/eval":
-            return "200 OK", self.service.product_eval()
-        if method == "GET" and path == "/operations/final-preflight":
-            return "200 OK", self.service.final_preflight()
-        if method == "POST" and path == "/operations/final-audit":
-            return "200 OK", self.service.final_audit()
-        if method == "GET" and path == "/operations/backups":
-            return "200 OK", self.service.list_backups()
-        if method == "GET" and path == "/operations/logs":
-            return "200 OK", self.service.logs()
-        if method == "POST" and path == "/operations/backup":
-            return "200 OK", self.service.backup()
-        if method == "POST" and path == "/operations/restart":
-            return "200 OK", self.service.restart_service(payload)
-
-        if method == "POST" and path == "/internal/scheduled":
-            return "200 OK", self.service.scheduled_all(payload)
-
-        parts = [part for part in path.split("/") if part]
-        if method == "GET" and parts == ["agents"]:
-            return "200 OK", self.service.list_agents()
-        if method == "GET" and len(parts) == 3 and parts[:2] == ["operations", "reports"]:
-            return "200 OK", self.service.get_report(parts[2])
-        if method == "POST" and parts == ["agents", "prune"]:
-            return "200 OK", self.service.prune_agents(payload)
-        if method == "POST" and parts == ["agents", "import"]:
-            return "200 OK", self.service.import_agent(payload)
-
-        if len(parts) < 2 or parts[0] != "agents":
-            return "404 Not Found", {"error": "not_found"}
-
-        agent_id = parts[1]
-        tail = parts[2:]
-
+    def _route_agent_tail(self, method: str, agent_id: str, tail: list[str], payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         if method == "POST" and tail == ["tick"]:
             return "200 OK", self.service.tick(agent_id, payload)
         if method == "GET" and tail == ["state"]:
@@ -2702,8 +2710,90 @@ class NinoHttpApp:
             return "200 OK", self.service.dream_cycle(agent_id, payload)
         if method == "POST" and tail == ["internal", "scheduled"]:
             return "200 OK", self.service.scheduled_cycle(agent_id, payload)
-
         return "404 Not Found", {"error": "not_found"}
+
+    def _route(self, method: str, path: str, payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        if method == "GET" and path == "/":
+            return "200 OK", {
+                "service": "nino",
+                "status": "ok",
+                "endpoints": API_ENDPOINTS,
+            }
+        if method == "GET" and path == "/openapi.json":
+            return "200 OK", _openapi_document()
+        if method == "GET" and path == "/health":
+            return "200 OK", self.service.health()
+        if method == "GET" and path == "/health/deep":
+            return "200 OK", self.service.deep_health()
+        if method == "GET" and path == "/autonomy/status":
+            return "200 OK", self.service.autonomy_status()
+        if method == "POST" and path == "/autonomy/run-once":
+            return "200 OK", self.service.autonomy_run_once(payload)
+        if method == "GET" and path == "/development/snapshot":
+            return "200 OK", self.service.development_snapshot()
+        if method == "GET" and path == "/operations/mode":
+            return "200 OK", self.service.operating_mode()
+        if method == "GET" and path == "/operations/claude":
+            return "200 OK", self.service.claude_config()
+        if method == "POST" and path == "/operations/claude/configure":
+            return "200 OK", self.service.configure_claude(payload)
+        if method == "POST" and path == "/operations/claude/disable":
+            return "200 OK", self.service.disable_claude(payload)
+        if method == "GET" and path == "/operations/audit":
+            return "200 OK", self.service.product_audit()
+        if method == "GET" and path == "/operations/product-status":
+            return "200 OK", self.service.product_status()
+        if method == "GET" and path == "/operations/next-action":
+            return "200 OK", self.service.next_action()
+        if method == "GET" and path == "/operations/completion-audit":
+            return "200 OK", self.service.completion_audit()
+        if method == "POST" and path == "/operations/closing-report":
+            return "200 OK", self.service.closing_report()
+        if method == "GET" and path == "/operations/reports":
+            return "200 OK", self.service.list_reports()
+        if method == "GET" and path == "/operations/eval":
+            return "200 OK", self.service.product_eval()
+        if method == "GET" and path == "/operations/final-preflight":
+            return "200 OK", self.service.final_preflight()
+        if method == "POST" and path == "/operations/final-audit":
+            return "200 OK", self.service.final_audit()
+        if method == "GET" and path == "/operations/backups":
+            return "200 OK", self.service.list_backups()
+        if method == "GET" and path == "/operations/logs":
+            return "200 OK", self.service.logs()
+        if method == "POST" and path == "/operations/backup":
+            return "200 OK", self.service.backup()
+        if method == "POST" and path == "/operations/restart":
+            return "200 OK", self.service.restart_service(payload)
+
+        if method == "POST" and path == "/internal/scheduled":
+            return "200 OK", self.service.scheduled_all(payload)
+
+        parts = [unquote(part) for part in path.split("/") if part]
+        if method == "POST" and parts == ["session", "login"]:
+            return "200 OK", self.service.login(payload)
+        if method == "GET" and len(parts) == 2 and parts[0] == "users" and parts[1]:
+            return "200 OK", self.service.list_user_agents(parts[1])
+        if method == "GET" and len(parts) == 3 and parts[0] == "users" and parts[2] == "agents":
+            return "200 OK", self.service.list_user_agents(parts[1])
+        if len(parts) >= 4 and parts[0] == "users" and parts[2] == "agents":
+            scoped_agent_id = _scoped_agent_id(parts[1], parts[3])
+            return self._route_agent_tail(method, scoped_agent_id, parts[4:], payload)
+        if method == "GET" and parts == ["agents"]:
+            return "200 OK", self.service.list_agents()
+        if method == "GET" and len(parts) == 3 and parts[:2] == ["operations", "reports"]:
+            return "200 OK", self.service.get_report(parts[2])
+        if method == "POST" and parts == ["agents", "prune"]:
+            return "200 OK", self.service.prune_agents(payload)
+        if method == "POST" and parts == ["agents", "import"]:
+            return "200 OK", self.service.import_agent(payload)
+
+        if len(parts) < 2 or parts[0] != "agents":
+            return "404 Not Found", {"error": "not_found"}
+
+        agent_id = parts[1]
+        tail = parts[2:]
+        return self._route_agent_tail(method, agent_id, tail, payload)
 
 
 def create_app(db_path: str | Path) -> NinoHttpApp:

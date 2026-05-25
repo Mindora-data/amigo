@@ -62,6 +62,11 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"Perfil" in body
     assert b"Export seguro" in body
     assert b"metricTick" in body
+    assert b"userId" in body
+    assert b"loginUser" in body
+    assert b"/session/login" in body
+    assert b"/users/${encodeURIComponent(currentUserId())}/agents" in body
+    assert b"nino_user_id" in body
     assert b"Consolidar" in body
     assert b"loadConversation" in body
     assert b"/conversation" in body
@@ -440,6 +445,44 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert tasks_before_run["tasks"][0]["status"] == "pending"
     assert ran_task["ok"] is True
     assert tasks_after_run["tasks"][0]["status"] == "completed"
+
+
+def test_http_api_scopes_memory_by_logged_user(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    ana_login = _request(app, "POST", "/session/login", {"user_id": "Ana", "agent_id": "nino"})
+    bob_login = _request(app, "POST", "/session/login", {"user_id": "Bob", "agent_id": "nino"})
+    _request(
+        app,
+        "POST",
+        "/users/ana/agents/nino/tick",
+        {"intent": "chat", "text": "me llamo Ana y me gusta violin", "salience": 0.9, "confidence": 0.95},
+    )
+    _request(
+        app,
+        "POST",
+        "/users/bob/agents/nino/tick",
+        {"intent": "chat", "text": "me llamo Bob y me gusta piano", "salience": 0.9, "confidence": 0.95},
+    )
+
+    ana_facts = _request(app, "GET", "/users/ana/agents/nino/memory/facts?status=active")
+    bob_facts = _request(app, "GET", "/users/bob/agents/nino/memory/facts?status=active")
+    ana_search = _request(app, "POST", "/users/ana/agents/nino/memory/search", {"query": "como me llamo", "memory_type_filter": "cold"})
+    bob_search = _request(app, "POST", "/users/bob/agents/nino/memory/search", {"query": "como me llamo", "memory_type_filter": "cold"})
+    ana_agents = _request(app, "GET", "/users/ana/agents")
+    bob_agents = _request(app, "GET", "/users/bob/agents")
+
+    assert ana_login["user_id"] == "ana"
+    assert ana_login["scoped_agent_id"] == "user::ana::agent::nino"
+    assert bob_login["scoped_agent_id"] == "user::bob::agent::nino"
+    assert ana_agents["agents"] == ["nino"]
+    assert bob_agents["agents"] == ["nino"]
+    assert "ana" in json.dumps(ana_facts).lower()
+    assert "bob" not in json.dumps(ana_facts).lower()
+    assert "bob" in json.dumps(bob_facts).lower()
+    assert "ana" not in json.dumps(bob_facts).lower()
+    assert all("bob" not in candidate["statement"].lower() for candidate in ana_search["memory_candidates"])
+    assert all("ana" not in candidate["statement"].lower() for candidate in bob_search["memory_candidates"])
 
 
 def test_http_api_openapi_matches_root_endpoint_catalog(tmp_path) -> None:

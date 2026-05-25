@@ -364,6 +364,9 @@ Auditoria final de producto 100% local:
 85. Hecho inicial: acuerdos de trabajo y expectativas del usuario no se invalidan entre si como hechos singleton; pueden coexistir como contexto activo si son distintos.
 86. Hecho inicial: recuperacion semantica y respuestas de memoria incluyen `working_agreement` y `user_expectation`, para que NIÑO pueda usar esos acuerdos al responder sobre continuidad/contexto.
 87. Hecho inicial: `/app` permite filtrar memoria fria por estado (`Todas`/`Activas`/`Inactivas`) y por clave, reutilizando los filtros del endpoint y mostrando visibles/totales.
-88. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas con memoria fria activa para detectar cuándo NIÑO suena demasiado a Claude directo.
+88. Hecho inicial: `/app` incorpora login local de usuario y usa rutas privadas `/users/{user_id}/agents/{agent_id}` para que varias personas puedan hablar con el mismo agente sin mezclar memoria privada.
+89. Hecho inicial: el servidor traduce `usuario + agente` a un `agent_id` interno aislado (`user::<usuario>::agent::<agente>`) y lista solo agentes del usuario conectado.
+90. Hecho inicial: la API queda probada contra fuga cruzada: dos usuarios con agente `nino` consolidan y recuperan memoria fria separada, sin ver hechos privados del otro.
+91. Siguiente: separar aprendizaje general anonimo de memoria privada, permitiendo aprender patrones de conversaciones sin exponer datos personales entre usuarios.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
