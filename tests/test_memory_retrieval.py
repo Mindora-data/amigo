@@ -78,3 +78,29 @@ def test_hybrid_retrieval_uses_cold_and_hot() -> None:
     req = RetrieveRequest(query_intent="preference mañanas", self_state={}, relation_state={}, time_scope="long")
     out = runtime.retrieve_memory("agent-h", req)
     assert any(c.fact_id.startswith("cold::") for c in out.memory_candidates)
+
+
+def test_retrieval_maps_indirect_location_query_to_cold_fact() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    runtime.tick("agent-h", {"intent": "chat", "text": "vivo en Madrid", "confidence": 0.95})
+
+    req = RetrieveRequest(query_intent="donde vivo", self_state={}, relation_state={}, time_scope="long")
+    out = runtime.retrieve_memory("agent-h", req)
+
+    assert out.memory_candidates
+    assert out.memory_candidates[0].statement == "ubicacion ciudad donde vivo vivir madrid"
+
+
+def test_retrieval_maps_indirect_project_focus_query_to_cold_fact() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    runtime.tick("agent-h", {"intent": "chat", "text": "estamos trabajando en memoria persistente", "confidence": 0.95})
+
+    req = RetrieveRequest(query_intent="en que estamos trabajando", self_state={}, relation_state={}, time_scope="long")
+    out = runtime.retrieve_memory("agent-h", req)
+
+    assert out.memory_candidates
+    assert any(
+        candidate.fact_id.startswith("cold::")
+        and candidate.statement == "foco proyecto trabajando trabajamos haciendo memoria persistente"
+        for candidate in out.memory_candidates
+    )

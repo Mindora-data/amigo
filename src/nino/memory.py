@@ -58,6 +58,31 @@ SYNONYMS = {
     "musica": "música",
     "musical": "música",
     "pianista": "piano",
+    "donde": "ubicacion",
+    "direccion": "ubicacion",
+    "ciudad": "ubicacion",
+    "vivo": "ubicacion",
+    "vivir": "ubicacion",
+    "estudio": "formacion",
+    "estudias": "formacion",
+    "aprendo": "formacion",
+    "aprendes": "formacion",
+    "trabajo": "ocupacion",
+    "trabajas": "ocupacion",
+    "rol": "ocupacion",
+    "proyecto": "proyecto",
+    "trabajamos": "foco",
+    "trabajando": "foco",
+    "haciendo": "foco",
+}
+FACT_KEY_TERMS = {
+    "user_name": "nombre identidad persona",
+    "user_role": "trabajo ocupacion rol profesion",
+    "user_location": "ubicacion ciudad donde vivo vivir",
+    "user_study": "formacion estudio estudias aprender",
+    "project_name": "proyecto nombre",
+    "current_project_focus": "foco proyecto trabajando trabajamos haciendo",
+    "preference": "preferencia gusto interesa",
 }
 
 def _without_accents(value: str) -> str:
@@ -85,6 +110,10 @@ def _semantic_overlap(query: str, text: str) -> float:
     if not q or not t:
         return 0.0
     return len(q.intersection(t)) / max(len(q), 1)
+
+def _cold_statement(key: str, value: str) -> str:
+    terms = FACT_KEY_TERMS.get(key, key.replace("_", " "))
+    return f"{terms} {value}".strip()
 
 def _recency_score(ts: datetime, now: datetime, scope: str) -> float:
     age_hours = max((now - ts).total_seconds() / 3600.0, 0.0)
@@ -130,7 +159,9 @@ class MemoryRetriever:
             for fact in self.cold_store.list_for_agent(agent_id):
                 if getattr(fact, "valid_to", None) is not None:
                     continue
-                statement = f"{getattr(fact, 'key', '')} {getattr(fact, 'value', '')}".strip()
+                key = str(getattr(fact, "key", ""))
+                value = str(getattr(fact, "value", ""))
+                statement = _cold_statement(key, value)
                 sem = _semantic_overlap(request.query_intent, statement)
                 if sem <= 0:
                     continue
