@@ -497,6 +497,39 @@ def test_ninoctl_memory_search_prints_readable_summary(tmp_path) -> None:
     assert "score=0.800 confidence=0.950 source=abc123" in result.stdout
 
 
+def test_ninoctl_memory_facts_lists_active_cold_memory(tmp_path) -> None:
+    curl = tmp_path / "curl"
+    curl.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' \"$*\" > \"$NINO_CURL_CALLS\"\n"
+        "cat <<'JSON'\n"
+        '{"facts":[{"key":"preference","value":"sprints","confidence":0.95,"source_episode_id":"ep1","valid_to":null},{"key":"user_location","value":"madrid","confidence":0.9,"source_episode_id":"ep2","valid_to":"2026-01-01T00:00:00+00:00"}]}\n'
+        "JSON\n",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+    calls = tmp_path / "curl-calls.log"
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_CURL_CALLS": str(calls),
+        "NINO_PORT": "65528",
+    }
+
+    result = subprocess.run(
+        ["scripts/ninoctl", "memory-facts", "--agent", "api-agent"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "http://127.0.0.1:65528/agents/api-agent/memory/facts" in calls.read_text(encoding="utf-8")
+    assert "cold memory facts: 1 (active)" in result.stdout
+    assert "- [active] preference: sprints" in result.stdout
+    assert "user_location" not in result.stdout
+
+
 def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     root = tmp_path / "repo"
     scripts_dir = root / "scripts"

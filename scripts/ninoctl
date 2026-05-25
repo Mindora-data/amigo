@@ -70,6 +70,7 @@ Commands:
   report      Print one closing evidence report. Use: scripts/ninoctl report <nino-closing-*.json|latest>
   eval        Run deterministic local regression evaluations.
   memory-search Search agent memory. Use: scripts/ninoctl memory-search [--agent nino] [--type all|cold|hot] <query>
+  memory-facts List cold memory facts. Use: scripts/ninoctl memory-facts [--agent nino] [--status active|inactive|all]
   logs        Show recent logs. Use: scripts/ninoctl logs -f
   backup      Create a timestamped SQLite backup.
   backups     List local SQLite backups.
@@ -659,6 +660,71 @@ for candidate in payload.get("memory_candidates", []):
 ' <<< "$response"
 }
 
+memory_facts() {
+  local agent="nino"
+  local status_filter="active"
+  local json_output=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --agent)
+        agent="${2:-}"
+        shift 2
+        ;;
+      --status)
+        status_filter="${2:-}"
+        shift 2
+        ;;
+      --json)
+        json_output=true
+        shift
+        ;;
+      --help|-h)
+        echo "Usage: scripts/ninoctl memory-facts [--agent nino] [--status active|inactive|all] [--json]"
+        return 0
+        ;;
+      *)
+        echo "Unknown memory-facts argument: $1" >&2
+        return 2
+        ;;
+    esac
+  done
+
+  if [[ -z "$agent" || ( "$status_filter" != "active" && "$status_filter" != "inactive" && "$status_filter" != "all" ) ]]; then
+    echo "Usage: scripts/ninoctl memory-facts [--agent nino] [--status active|inactive|all] [--json]" >&2
+    return 2
+  fi
+
+  local response
+  response="$(curl -fsS "$BASE_URL/agents/$agent/memory/facts")"
+  if [[ "$json_output" == true ]]; then
+    printf '%s\n' "$response"
+    return 0
+  fi
+  "$PYTHON_BIN" -c '
+import json
+import sys
+
+payload = json.load(sys.stdin)
+status_filter = sys.argv[1]
+facts = payload.get("facts", [])
+if status_filter == "active":
+    facts = [fact for fact in facts if not fact.get("valid_to")]
+elif status_filter == "inactive":
+    facts = [fact for fact in facts if fact.get("valid_to")]
+
+print(f"cold memory facts: {len(facts)} ({status_filter})")
+for fact in facts:
+    status = "inactive" if fact.get("valid_to") else "active"
+    source = fact.get("source_episode_id", "")
+    confidence = float(fact.get("confidence", 0.0))
+    key = fact.get("key", "")
+    value = fact.get("value", "")
+    print(f"- [{status}] {key}: {value}")
+    print(f"  confidence={confidence:.3f} source={source}")
+' "$status_filter" <<< "$response"
+}
+
 command="${1:-}"
 shift || true
 
@@ -693,6 +759,7 @@ case "$command" in
   report) report "${1:-}" ;;
   eval) eval_local "$@" ;;
   memory-search) memory_search "$@" ;;
+  memory-facts) memory_facts "$@" ;;
   logs) logs "${1:-}" ;;
   backup) backup ;;
   backups) backups ;;
