@@ -154,6 +154,25 @@ def _redact_context(value: str) -> str:
     return value
 
 
+def _asks_about_continuity(text: str, intent: str) -> bool:
+    haystack = f"{intent} {text}".casefold()
+    markers = (
+        "recuerda",
+        "recuerdas",
+        "recordar",
+        "memoria",
+        "continuidad",
+        "contexto",
+        "que sabes",
+        "qué sabes",
+        "que recuerdas",
+        "qué recuerdas",
+        "diferencia",
+        "claude directo",
+    )
+    return any(marker in haystack for marker in markers)
+
+
 def build_nino_prompt(
     *,
     agent_id: str,
@@ -189,16 +208,26 @@ def build_nino_prompt(
         reverse=True,
     )[:8]
     concept_text = ", ".join(key for key, _ in concepts) or "none"
+    continuity_mode = _asks_about_continuity(text, intent)
+    continuity_instruction = (
+        "El usuario pregunta por memoria, continuidad o diferencia con Claude directo. "
+        "Usa al menos un recuerdo, preferencia u objetivo concreto disponible y explica brevemente como lo aplicaras. "
+        "No hables de endpoints, SQLite, prompts ni trazas internas salvo que te lo pida."
+        if continuity_mode
+        else "Si el usuario no pregunta por memoria o continuidad, responde al tema sin explicar tus mecanismos internos."
+    )
     system = (
         "Eres NIÑO, un agente local persistente. Responde en español, con tono directo y natural. "
         "Usa la memoria dada como contexto, no inventes recuerdos. Si no sabes algo, dilo. "
         "Mantén respuestas breves, normalmente entre 1 y 4 frases. "
-        "No menciones detalles internos de implementación salvo que el usuario lo pregunte."
+        "No menciones detalles internos de implementación salvo que el usuario lo pregunte. "
+        f"{continuity_instruction}"
     )
     user = (
         f"Agente: {agent_id}\n"
         f"Intent: {intent}\n"
         f"Mensaje del usuario: {_redact_context(text)}\n\n"
+        f"Modo continuidad: {'activo' if continuity_mode else 'pasivo'}\n"
         f"Preferencias conocidas: {preferences}\n"
         f"Objetivos activos: {', '.join(active_goals) or 'none'}\n"
         f"Etapa de identidad: {self_model.get('identity_stage', 'unknown')}\n"

@@ -330,6 +330,7 @@ Auditoria final de producto 100% local:
 51. Hecho inicial: llamada viva de Claude validada con Keychain, launchd y certificado TLS del sistema.
 52. Hecho inicial: la UI muestra la respuesta del chat inmediatamente al volver `/tick`, antes de refrescar paneles secundarios.
 53. Hecho inicial: cada respuesta `/tick` incluye `nino_context` con fuente, madurez, objetivos activos y memoria usada; la UI lo muestra como `contexto NIÑO` para diferenciar agente local de Claude directo.
-54. Siguiente: mejorar la voz propia de NIÑO para que use explicitamente su memoria/contexto cuando el usuario pregunte por continuidad, sin convertir todas las respuestas en explicaciones internas.
+54. Hecho inicial: el prompt activa `Modo continuidad` cuando el usuario pregunta por memoria, contexto, continuidad o diferencia con Claude directo; en ese modo NIÑO debe usar recuerdos/preferencias/objetivos concretos sin exponer mecanismos internos.
+55. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y ajustar cuándo NIÑO debe consolidar automaticamente hechos útiles del usuario.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

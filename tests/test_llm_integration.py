@@ -39,6 +39,18 @@ def test_tick_uses_configured_llm_response() -> None:
     assert out["nino_context"]["llm_error"] is None
     assert "llm_context_memory_count" in out["nino_context"]
     assert isinstance(out["nino_context"]["memory_candidates"], list)
+    assert "Modo continuidad: activo" in llm.prompts[-1]["user"]
+    assert "Usa al menos un recuerdo" in llm.prompts[-1]["system"]
+
+
+def test_llm_prompt_keeps_internal_context_passive_for_plain_chat() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick("agent-llm", {"intent": "chat", "text": "hola, responde breve"})
+
+    assert "Modo continuidad: pasivo" in llm.prompts[-1]["user"]
+    assert "sin explicar tus mecanismos internos" in llm.prompts[-1]["system"]
 
 
 def test_conversation_persists_user_and_assistant_turns_without_extra_episodes() -> None:
