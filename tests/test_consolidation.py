@@ -54,6 +54,32 @@ def test_consolidation_is_idempotent_per_episode() -> None:
     assert len(cold.list_for_agent("a1")) == 1
 
 
+def test_consolidation_keeps_distinct_preferences_active() -> None:
+    cold = InMemoryColdStore()
+    consolidator = Consolidator(cold)
+    now = datetime.now(timezone.utc)
+    episodes = [
+        Episode("e1", "a1", now - timedelta(minutes=5), "prefiero trabajar con sprints claros", "chat", 0.9, 0.95),
+        Episode(
+            "e2",
+            "a1",
+            now - timedelta(minutes=4),
+            "prefiero que cuando avancemos me des el resultado verificado y el siguiente paso",
+            "chat",
+            0.9,
+            0.95,
+        ),
+    ]
+
+    out = consolidator.consolidate("a1", episodes, since=now - timedelta(hours=1), until=now)
+
+    active_values = {fact.value for fact in cold.list_for_agent("a1") if fact.valid_to is None}
+    assert len(out["cold_memory_updates"]) == 2
+    assert out["contradictions"] == []
+    assert "trabajar con sprints claros" in active_values
+    assert "que cuando avancemos me des el resultado verificado y el siguiente paso" in active_values
+
+
 def test_tick_auto_consolidates_high_confidence_preference() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
 

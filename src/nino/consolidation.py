@@ -7,7 +7,7 @@ import re
 from .memory import Episode
 
 PREFERENCE_RE = re.compile(
-    r"\b(prefiero|me gusta)\s+(?P<value>[\wáéíóúñ]+(?:\s+[\wáéíóúñ]+){0,4})",
+    r"\b(prefiero|me gusta)\s+(?P<value>[^.?!\n\r,;]{1,160})",
     re.IGNORECASE,
 )
 
@@ -61,6 +61,16 @@ def _clean_preference_value(value: str) -> str:
         words.pop(0)
     return " ".join(words)
 
+
+def _preferences_conflict(old_value: str, new_value: str) -> bool:
+    old = set(re.findall(r"[\wáéíóúñ]+", old_value.lower()))
+    new = set(re.findall(r"[\wáéíóúñ]+", new_value.lower()))
+    time_words = {"mañana", "mañanas", "noche", "noches", "tarde", "tardes"}
+    if old & time_words and new & time_words:
+        return True
+    return bool(old & new) and old_value != new_value
+
+
 class Consolidator:
     def __init__(self, cold_store: InMemoryColdStore) -> None:
         self.cold_store = cold_store
@@ -105,7 +115,7 @@ class Consolidator:
 
             active = [f for f in facts if f.key == key and f.valid_to is None]
             for old in active:
-                if old.value != value:
+                if old.value != value and _preferences_conflict(old.value, value):
                     old.valid_to = ep.timestamp
                     self.cold_store.upsert(old)
                     contradictions.append(
