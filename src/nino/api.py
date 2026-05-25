@@ -451,7 +451,17 @@ APP_HTML = """<!doctype html>
     };
     const addContextEntry = (context) => {
       if (!context) return;
-      const memories = (context.memory_candidates || []).slice(0, 2).map((item) => item.statement).filter(Boolean);
+      const candidates = context.memory_candidates || [];
+      const coldMemories = candidates
+        .filter((item) => item.memory_type === "cold")
+        .slice(0, 2)
+        .map((item) => item.statement)
+        .filter(Boolean);
+      const hotMemories = candidates
+        .filter((item) => item.memory_type !== "cold")
+        .slice(0, 2)
+        .map((item) => item.statement)
+        .filter(Boolean);
       const goals = (context.active_goals || []).slice(0, 2);
       const parts = [
         `fuente: ${context.response_source || "policy"}`,
@@ -459,7 +469,8 @@ APP_HTML = """<!doctype html>
         `memoria usada: ${context.llm_context_memory_count ?? context.retrieved_memory_count ?? 0}`,
       ];
       if (goals.length) parts.push(`objetivos: ${goals.join(", ")}`);
-      if (memories.length) parts.push(`recuerdo: ${memories.join(" · ")}`);
+      if (coldMemories.length) parts.push(`memoria fría: ${coldMemories.join(" · ")}`);
+      if (hotMemories.length) parts.push(`memoria reciente: ${hotMemories.join(" · ")}`);
       addEntry("contexto NIÑO", parts.join("\\n"));
     };
     const addEmptyConversation = () => {

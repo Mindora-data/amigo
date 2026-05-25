@@ -153,6 +153,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"Auditor" in body
     assert b"addContextEntry" in body
     assert "contexto NIÑO".encode("utf-8") in body
+    assert "memoria fría".encode("utf-8") in body
+    assert "memoria reciente".encode("utf-8") in body
     assert b'parts.join("\\n")' in body
     assert b'parts.join("\n")' not in body
 

@@ -338,6 +338,7 @@ Auditoria final de producto 100% local:
 59. Hecho inicial: la politica local recibe hechos frios activos y los usa al responder `que sabes de mi`/`quien soy`, haciendo visibles ubicacion, estudios, rol, proyecto y foco de trabajo sin depender solo del prompt Claude.
 60. Hecho inicial: la recuperacion semantica de memoria fria expande claves tecnicas (`user_location`, `user_study`, `current_project_focus`, etc.) a terminos naturales para responder mejor a preguntas indirectas como `donde vivo` o `en que estamos trabajando`.
 61. Hecho inicial: `nino_context.memory_candidates` expone `fact_id`, `source_episode_id` y `memory_type` (`hot`/`cold`) para distinguir memoria reciente de hechos persistidos en API/UI.
-62. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y mejorar el render de contexto en `/app` para agrupar memoria hot/cold.
+62. Hecho inicial: `/app` agrupa el contexto de NIÑO en `memoria fría` y `memoria reciente`, usando `memory_type` para separar hechos persistidos de episodios calientes.
+63. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y mejorar la lista de busqueda de memoria para mostrar origen hot/cold.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
