@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from io import BytesIO
+import importlib.util
+import json
 import tomllib
 from pathlib import Path
 
@@ -31,3 +34,44 @@ def test_user_docs_do_not_recommend_inline_anthropic_api_key_assignment() -> Non
 
     assert "ANTHROPIC_API_KEY=..." not in docs
     assert "read -rsp 'ANTHROPIC_API_KEY: '" in docs
+
+
+def test_vercel_python_adapter_serves_wsgi_app(monkeypatch, tmp_path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.setenv("NINO_DB_PATH", str(tmp_path / "nino-vercel.db"))
+    spec = importlib.util.spec_from_file_location("nino_vercel_index", root / "api" / "index.py")
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    captured: dict[str, str] = {}
+
+    def start_response(status: str, headers: list[tuple[str, str]]) -> None:
+        captured["status"] = status
+        captured["content_type"] = dict(headers).get("Content-Type", "")
+
+    body = b"".join(
+        module.app(
+            {
+                "REQUEST_METHOD": "GET",
+                "PATH_INFO": "/user",
+                "QUERY_STRING": "",
+                "CONTENT_LENGTH": "0",
+                "wsgi.input": BytesIO(b""),
+            },
+            start_response,
+        )
+    )
+
+    assert captured["status"].startswith("200")
+    assert captured["content_type"].startswith("text/html")
+    assert b"minimalUserApp" in body
+
+
+def test_vercel_config_routes_all_requests_to_python_adapter() -> None:
+    root = Path(__file__).resolve().parents[1]
+    config = json.loads((root / "vercel.json").read_text(encoding="utf-8"))
+
+    assert config["$schema"] == "https://openapi.vercel.sh/vercel.json"
+    assert config["rewrites"] == [{"source": "/(.*)", "destination": "/api/index.py"}]

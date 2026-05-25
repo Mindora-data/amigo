@@ -394,6 +394,9 @@ Auditoria final de producto 100% local:
 115. Hecho inicial: las trazas, `llm_status`, `nino_context` y fuentes de respuesta reflejan el proveedor real (`llm_deepseek`, `llm_claude`) en lugar de asumir siempre Claude.
 116. Hecho inicial: `POST /operations/deepseek/configure` guarda DeepSeek en `.env.local` con permisos 600, no devuelve la clave y cambia el runtime activo sin reinicio inmediato.
 117. Hecho inicial: `/app` permite guardar DeepSeek desde la consola LLM manteniendo Claude disponible como configuración alternativa.
-118. Siguiente: preparar validación Vercel de la UI final minimalista y documentar el despliegue externo.
+118. Hecho inicial: `api/index.py` expone la app WSGI de NIÑO para Vercel usando `NINO_DB_PATH` o `/tmp/nino-vercel.db`.
+119. Hecho inicial: `vercel.json` reescribe todas las rutas a `/api/index.py`, permitiendo probar `/user`, `/chat` y API en despliegue serverless.
+120. Hecho inicial: `README.md` documenta variables DeepSeek y comandos base para validar NIÑO en Vercel.
+121. Siguiente: ejecutar una validación externa real en Vercel cuando haya proyecto Vercel conectado y credenciales disponibles.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

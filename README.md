@@ -460,6 +460,42 @@ scripts/nino-smoke --json
 scripts/ninoctl product-status
 ```
 
+## Vercel validation
+
+The repo includes `api/index.py` and `vercel.json` so Vercel can run NIÑO as a
+Python WSGI function. The final user surface is `/user` or `/chat`; `/app`
+remains the operations console.
+
+Required project environment variables for a DeepSeek test:
+
+```bash
+NINO_LLM_PROVIDER=deepseek
+NINO_DEEPSEEK_API_KEY=...
+NINO_DEEPSEEK_MODEL=deepseek-chat
+```
+
+Optional:
+
+```bash
+NINO_DEEPSEEK_BASE_URL=https://api.deepseek.com/chat/completions
+NINO_DB_PATH=/tmp/nino-vercel.db
+```
+
+Local packaging check:
+
+```bash
+.venv/bin/python -m pytest tests/test_packaging.py -q
+```
+
+External validation once the Vercel project is connected:
+
+```bash
+vercel env add NINO_LLM_PROVIDER
+vercel env add NINO_DEEPSEEK_API_KEY
+vercel env add NINO_DEEPSEEK_MODEL
+vercel deploy
+```
+
 Proactivity is closed by default. Enable it explicitly:
 
 ```bash
