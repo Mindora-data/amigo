@@ -12,7 +12,7 @@ from nino.autonomy import BackgroundAutonomy
 from nino.persistence import create_persistent_runtime
 
 
-def _request(app, method: str, path: str, payload: dict | None = None) -> dict:
+def _request(app, method: str, path: str, payload: dict | None = None, headers: dict[str, str] | None = None) -> dict:
     data = b"" if payload is None else json.dumps(payload).encode("utf-8")
     captured: dict[str, str] = {}
     split = urlsplit(path)
@@ -27,9 +27,32 @@ def _request(app, method: str, path: str, payload: dict | None = None) -> dict:
         "CONTENT_LENGTH": str(len(data)),
         "wsgi.input": BytesIO(data),
     }
+    for key, value in (headers or {}).items():
+        environ[f"HTTP_{key.upper().replace('-', '_')}"] = value
     body = b"".join(app(environ, start_response))
     assert captured["status"].startswith("200"), body.decode("utf-8")
     return json.loads(body.decode("utf-8"))
+
+
+def _request_status(app, method: str, path: str, payload: dict | None = None, headers: dict[str, str] | None = None) -> tuple[str, dict]:
+    data = b"" if payload is None else json.dumps(payload).encode("utf-8")
+    captured: dict[str, str] = {}
+    split = urlsplit(path)
+
+    def start_response(status: str, headers_out: list[tuple[str, str]]) -> None:
+        captured["status"] = status
+
+    environ = {
+        "REQUEST_METHOD": method,
+        "PATH_INFO": split.path,
+        "QUERY_STRING": split.query,
+        "CONTENT_LENGTH": str(len(data)),
+        "wsgi.input": BytesIO(data),
+    }
+    for key, value in (headers or {}).items():
+        environ[f"HTTP_{key.upper().replace('-', '_')}"] = value
+    body = b"".join(app(environ, start_response))
+    return captured["status"], json.loads(body.decode("utf-8"))
 
 
 def _raw_request(app, method: str, path: str) -> tuple[str, bytes]:
@@ -67,6 +90,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/session/login" in body
     assert b"/users/${encodeURIComponent(currentUserId())}/agents" in body
     assert b"nino_user_id" in body
+    assert b"nino_session_token" in body
+    assert b"X-Nino-Session" in body
     assert b"globalModel" in body
     assert b"globalSuggestions" in body
     assert b"/operations/global-suggestions" in body
@@ -208,11 +233,19 @@ def test_http_api_serves_minimal_user_app(tmp_path) -> None:
     assert b"chatView" in body
     assert b"voiceButton" in body
     assert b"/session/login" in body
+    assert b"nino_session_token" in body
+    assert b"x-nino-session" in body
     assert b"/users/${encodeURIComponent(currentUserId())}/agents/${encodeURIComponent(AGENT_ID)}" in body
     assert b"/conversation" in body
     assert b"/tick" in body
     assert b"SpeechRecognition" in body
     assert b"webkitSpeechRecognition" in body
+    assert b"speechSynthesis" in body
+    assert b"SpeechSynthesisUtterance" in body
+    assert b"loadProactiveInbox" in body
+    assert b"/proactivity/inbox" in body
+    assert b"/delivered" in body
+    assert b"setInterval" in body
     assert b"/operations/" not in body
     assert b"/memory/facts" not in body
     assert b"Cierre final" not in body
@@ -525,6 +558,7 @@ def test_http_api_scopes_memory_by_logged_user(tmp_path) -> None:
     bob_agents = _request(app, "GET", "/users/bob/agents")
 
     assert ana_login["user_id"] == "ana"
+    assert ana_login["session_token"]
     assert ana_login["scoped_agent_id"] == "user::ana::agent::nino"
     assert bob_login["scoped_agent_id"] == "user::bob::agent::nino"
     assert ana_agents["agents"] == ["nino"]
@@ -535,6 +569,32 @@ def test_http_api_scopes_memory_by_logged_user(tmp_path) -> None:
     assert "ana" not in json.dumps(bob_facts).lower()
     assert all("bob" not in candidate["statement"].lower() for candidate in ana_search["memory_candidates"])
     assert all("ana" not in candidate["statement"].lower() for candidate in bob_search["memory_candidates"])
+
+
+def test_http_api_can_require_session_token_for_user_scoped_routes(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("NINO_REQUIRE_SESSION", "true")
+    app = create_app(tmp_path / "nino.db")
+
+    login = _request(app, "POST", "/session/login", {"user_id": "Ana", "agent_id": "nino"})
+    missing_status, missing = _request_status(app, "GET", "/users/ana/agents/nino/conversation")
+    wrong_status, wrong = _request_status(
+        app,
+        "GET",
+        "/users/bob/agents/nino/conversation",
+        headers={"X-Nino-Session": login["session_token"]},
+    )
+    ok = _request(
+        app,
+        "GET",
+        "/users/ana/agents/nino/conversation",
+        headers={"X-Nino-Session": login["session_token"]},
+    )
+
+    assert missing_status.startswith("401")
+    assert missing["error"] == "session_required"
+    assert wrong_status.startswith("401")
+    assert wrong["error"] == "session_user_mismatch"
+    assert ok["turns"] == []
 
 
 def test_http_api_tick_accepts_time_context_and_records_temporal_event(tmp_path) -> None:

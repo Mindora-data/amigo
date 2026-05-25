@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import sqlite3
 import subprocess
 import threading
@@ -438,8 +439,13 @@ APP_HTML = """<!doctype html>
   <script>
     const $ = (id) => document.getElementById(id);
     const log = $("log");
+    const sessionToken = () => localStorage.getItem("nino_session_token") || "";
     const api = (path, options = {}) => fetch(path, {
-      headers: {"Content-Type": "application/json"},
+      headers: {
+        "Content-Type": "application/json",
+        ...(sessionToken() ? {"X-Nino-Session": sessionToken()} : {}),
+        ...(options.headers || {}),
+      },
       ...options
     }).then(async (res) => {
       const data = await res.json();
@@ -559,6 +565,7 @@ APP_HTML = """<!doctype html>
       $("agentId").value = out.agent_id;
       localStorage.setItem("nino_user_id", out.user_id);
       localStorage.setItem("nino_agent_id", out.agent_id);
+      if (out.session_token) localStorage.setItem("nino_session_token", out.session_token);
       status(`Login: ${out.user_id}`);
       await refreshState();
       await loadAgents();
@@ -1463,9 +1470,13 @@ USER_HTML = """<!doctype html>
   <script>
     const $ = (id) => document.getElementById(id);
     const STORAGE_USER = "nino_user_id";
+    const STORAGE_SESSION = "nino_session_token";
     const AGENT_ID = "nino";
     let recognition = null;
     let listening = false;
+    let voiceReply = false;
+    let inboxTimer = null;
+    const deliveredInbox = new Set();
 
     function currentUserId() {
       return ($("userId").value || localStorage.getItem(STORAGE_USER) || "usuario").trim();
@@ -1474,7 +1485,10 @@ USER_HTML = """<!doctype html>
       return `/users/${encodeURIComponent(currentUserId())}/agents/${encodeURIComponent(AGENT_ID)}${path}`;
     }
     async function api(path, options = {}) {
+      const token = localStorage.getItem(STORAGE_SESSION);
+      const sessionHeader = token ? {"x-nino-session": token} : {};
       const headers = {"content-type": "application/json", ...(options.headers || {})};
+      Object.assign(headers, sessionHeader, options.headers || {});
       const res = await fetch(path, {...options, headers});
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || res.statusText);
@@ -1490,15 +1504,25 @@ USER_HTML = """<!doctype html>
       $("messages").appendChild(row);
       $("messages").scrollTop = $("messages").scrollHeight;
     }
+    function speak(text) {
+      if (!voiceReply || !("speechSynthesis" in window) || !text) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "es-ES";
+      window.speechSynthesis.speak(utterance);
+    }
     async function loginUser(event) {
       if (event) event.preventDefault();
       const userId = currentUserId();
       localStorage.setItem(STORAGE_USER, userId);
-      await api("/session/login", {method: "POST", body: JSON.stringify({user_id: userId, agent_id: AGENT_ID})});
+      const login = await api("/session/login", {method: "POST", body: JSON.stringify({user_id: userId, agent_id: AGENT_ID})});
+      if (login.session_token) localStorage.setItem(STORAGE_SESSION, login.session_token);
       $("loginView").style.display = "none";
       $("chatView").style.display = "grid";
       $("logoutButton").hidden = false;
       await loadConversation();
+      await loadProactiveInbox();
+      startInboxPolling();
       $("text").focus();
     }
     async function loadConversation() {
@@ -1523,7 +1547,10 @@ USER_HTML = """<!doctype html>
           body: JSON.stringify({intent: "chat", text, salience: 0.7, confidence: 0.8}),
         });
         const reply = out.action && out.action.payload ? out.action.payload.text : "";
-        if (reply) addMessage("nino", reply);
+        if (reply) {
+          addMessage("nino", reply);
+          speak(reply);
+        }
         setStatus("");
       } catch (err) {
         setStatus(err.message);
@@ -1552,13 +1579,41 @@ USER_HTML = """<!doctype html>
       recognition.onresult = (event) => {
         const transcript = Array.from(event.results).map((result) => result[0].transcript).join(" ");
         $("text").value = transcript;
+        voiceReply = true;
         $("composer").requestSubmit();
       };
+    }
+    async function loadProactiveInbox() {
+      if ($("chatView").style.display !== "grid") return;
+      const out = await api(agentPath("/proactivity/inbox"));
+      for (const item of out.inbox || []) {
+        if (item.status === "delivered" || deliveredInbox.has(item.id)) continue;
+        const text = item.action && item.action.payload ? item.action.payload.text : "";
+        if (!text) continue;
+        deliveredInbox.add(item.id);
+        addMessage("nino", text);
+        speak(text);
+        await api(agentPath(`/proactivity/inbox/${encodeURIComponent(item.id)}/delivered`), {method: "POST", body: "{}"});
+      }
+    }
+    function startInboxPolling() {
+      if (inboxTimer) return;
+      inboxTimer = window.setInterval(() => {
+        loadProactiveInbox().catch(() => {});
+      }, 30000);
+    }
+    function stopInboxPolling() {
+      if (!inboxTimer) return;
+      window.clearInterval(inboxTimer);
+      inboxTimer = null;
     }
     $("loginView").addEventListener("submit", loginUser);
     $("composer").addEventListener("submit", sendText);
     $("logoutButton").onclick = () => {
       localStorage.removeItem(STORAGE_USER);
+      localStorage.removeItem(STORAGE_SESSION);
+      stopInboxPolling();
+      voiceReply = false;
       $("chatView").style.display = "none";
       $("loginView").style.display = "grid";
       $("logoutButton").hidden = true;
@@ -1567,6 +1622,7 @@ USER_HTML = """<!doctype html>
     };
     $("voiceButton").onclick = () => {
       if (!recognition) return;
+      voiceReply = true;
       if (listening) recognition.stop();
       else recognition.start();
     };
@@ -1867,6 +1923,7 @@ class NinoService:
         self.autonomy = autonomy
         self.db_path = Path(db_path) if db_path is not None else None
         self.restart_callback = restart_callback
+        self.sessions: dict[str, dict[str, str]] = {}
 
     def health(self) -> dict[str, Any]:
         return {"ok": True, "service": "nino"}
@@ -1901,14 +1958,34 @@ class NinoService:
         user_id = _identity_slug(str(payload.get("user_id", "local")), "local")
         agent_id = _identity_slug(str(payload.get("agent_id", "nino")), "nino")
         scoped_agent_id = _scoped_agent_id(user_id, agent_id)
+        session_token = secrets.token_urlsafe(32)
+        self.sessions[session_token] = {
+            "user_id": user_id,
+            "agent_id": agent_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
         self.runtime.load_or_init_state(scoped_agent_id)
         return {
             "ok": True,
             "user_id": user_id,
             "agent_id": agent_id,
             "scoped_agent_id": scoped_agent_id,
+            "session_token": session_token,
             "privacy": "private_user_scope",
         }
+
+    def authorize_user_scope(self, user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        required = os.environ.get("NINO_REQUIRE_SESSION", "").strip().lower() in {"1", "true", "yes", "on"}
+        if not required:
+            return {"ok": True, "required": False}
+        token = str(payload.get("_session_token", "")).strip()
+        session = self.sessions.get(token)
+        scoped_user_id = _identity_slug(user_id, "local")
+        if not session:
+            return {"ok": False, "required": True, "error": "session_required"}
+        if session.get("user_id") != scoped_user_id:
+            return {"ok": False, "required": True, "error": "session_user_mismatch"}
+        return {"ok": True, "required": True, "user_id": scoped_user_id}
 
     def list_user_agents(self, user_id: str) -> dict[str, Any]:
         agents = [
@@ -3037,6 +3114,9 @@ class NinoHttpApp:
                 )
                 return [encoded]
             payload = self._read_json(environ)
+            session_token = environ.get("HTTP_X_NINO_SESSION", "").strip()
+            if session_token:
+                payload["_session_token"] = session_token
             if method == "GET":
                 payload = {**self._read_query(environ), **payload}
             status, body = self._route(method, path, payload)
@@ -3222,10 +3302,19 @@ class NinoHttpApp:
         if method == "POST" and parts == ["session", "login"]:
             return "200 OK", self.service.login(payload)
         if method == "GET" and len(parts) == 2 and parts[0] == "users" and parts[1]:
+            auth = self.service.authorize_user_scope(parts[1], payload)
+            if not auth["ok"]:
+                return "401 Unauthorized", auth
             return "200 OK", self.service.list_user_agents(parts[1])
         if method == "GET" and len(parts) == 3 and parts[0] == "users" and parts[2] == "agents":
+            auth = self.service.authorize_user_scope(parts[1], payload)
+            if not auth["ok"]:
+                return "401 Unauthorized", auth
             return "200 OK", self.service.list_user_agents(parts[1])
         if len(parts) >= 4 and parts[0] == "users" and parts[2] == "agents":
+            auth = self.service.authorize_user_scope(parts[1], payload)
+            if not auth["ok"]:
+                return "401 Unauthorized", auth
             scoped_agent_id = _scoped_agent_id(parts[1], parts[3])
             return self._route_agent_tail(method, scoped_agent_id, parts[4:], payload)
         if method == "GET" and parts == ["agents"]:

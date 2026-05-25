@@ -397,6 +397,11 @@ Auditoria final de producto 100% local:
 118. Hecho inicial: `api/index.py` expone la app WSGI de NIÑO para Vercel usando `NINO_DB_PATH` o `/tmp/nino-vercel.db`.
 119. Hecho inicial: `vercel.json` reescribe todas las rutas a `/api/index.py`, permitiendo probar `/user`, `/chat` y API en despliegue serverless.
 120. Hecho inicial: `README.md` documenta variables DeepSeek y comandos base para validar NIÑO en Vercel.
-121. Siguiente: ejecutar una validación externa real en Vercel cuando haya proyecto Vercel conectado y credenciales disponibles.
+121. Validación pendiente: ejecutar una validación externa real en Vercel cuando haya proyecto Vercel conectado y credenciales disponibles.
+122. Hecho inicial: la UI final `/user` puede leer en voz alta respuestas de NIÑO cuando la conversación se inicia desde el control de voz.
+123. Hecho inicial: la UI final `/user` consulta discretamente el inbox proactivo, muestra avisos pendientes como mensajes de NIÑO y los marca entregados sin añadir paneles internos.
+124. Hecho inicial: `/session/login` devuelve `session_token` y las UIs lo guardan/envián como `X-Nino-Session`.
+125. Hecho inicial: si `NINO_REQUIRE_SESSION=true`, las rutas `/users/{user_id}/...` rechazan peticiones sin sesión o con sesión de otro usuario.
+126. Siguiente: añadir gestión mínima de cuenta/sesión en UI final sin convertirla en panel de configuración.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
