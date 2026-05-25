@@ -335,6 +335,7 @@ Auditoria final de producto 100% local:
 56. Hecho inicial: la consolidacion conserva preferencias distintas como memoria activa y solo invalida preferencias cuando parecen alternativas del mismo tipo, evitando que una preferencia nueva borre otra no relacionada.
 57. Hecho inicial: la consolidacion extrae hechos explicitos de identidad/contexto (`me llamo`, `trabajo como`, `mi proyecto se llama`) y los autoconsolida con confianza alta sin depender de que el usuario diga `prefiero`.
 58. Hecho inicial: la consolidacion amplia hechos verificables con `vivo en`, `estudio` y `estoy/estamos trabajando en`, sustituyendo solo el dato activo del mismo tipo cuando aparece una version mas reciente de alta confianza.
-59. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y mejorar recuperacion/uso visible de estos hechos en respuestas posteriores.
+59. Hecho inicial: la politica local recibe hechos frios activos y los usa al responder `que sabes de mi`/`quien soy`, haciendo visibles ubicacion, estudios, rol, proyecto y foco de trabajo sin depender solo del prompt Claude.
+60. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y mejorar recuperacion semantica de hechos frios para preguntas indirectas.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

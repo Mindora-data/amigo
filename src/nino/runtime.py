@@ -131,6 +131,46 @@ def _clean_preference_value(value: str) -> str:
         words.pop(0)
     return " ".join(words)
 
+
+def _active_cold_fact_summaries(cold_facts: list[Any]) -> list[dict[str, str]]:
+    summaries: list[dict[str, str]] = []
+    for fact in cold_facts:
+        if getattr(fact, "valid_to", None) is not None:
+            continue
+        key = str(getattr(fact, "key", "")).strip()
+        value = str(getattr(fact, "value", "")).strip()
+        if key and value:
+            summaries.append({"key": key, "value": value})
+    return summaries
+
+
+def _memory_fact_phrase(key: str, value: str) -> str | None:
+    if key == "user_name":
+        return f"te llamas {value}"
+    if key == "user_role":
+        return f"trabajas como {value}"
+    if key == "user_location":
+        return f"vives en {value}"
+    if key == "user_study":
+        return f"estudias {value}"
+    if key == "project_name":
+        return f"tu proyecto se llama {value}"
+    if key == "current_project_focus":
+        return f"estamos trabajando en {value}"
+    return None
+
+
+def _memory_fact_phrases(cold_facts: list[dict[str, str]]) -> list[str]:
+    phrases: list[str] = []
+    seen: set[str] = set()
+    for fact in cold_facts:
+        phrase = _memory_fact_phrase(fact.get("key", ""), fact.get("value", ""))
+        if phrase and phrase not in seen:
+            phrases.append(phrase)
+            seen.add(phrase)
+    return phrases
+
+
 def _detect_emotional_tone(text: str) -> str | None:
     for tone, pattern in EMOTION_PATTERNS.items():
         if pattern.search(text):
@@ -1121,11 +1161,16 @@ class NinoRuntime:
         if "quién soy" in lowered or "quien soy" in lowered:
             name = relation.get("user_name")
             preferences = sorted(relation.get("preferences", {}).keys())
+            fact_phrases = _memory_fact_phrases(request.percept_frame.get("active_cold_facts", []))
             if name:
                 detail = f"Te tengo como {name}"
                 if preferences:
                     detail += f", y recuerdo que te interesa {preferences[0]}"
+                if fact_phrases:
+                    detail += f"; también recuerdo que {', '.join(fact_phrases[:3])}"
                 detail += "."
+            elif fact_phrases:
+                detail = "Recuerdo que " + ", ".join(fact_phrases[:4]) + "."
             else:
                 detail = "Todavía no tengo tu nombre guardado."
             action = {"type": "external_message", "payload": {"text": detail}}
@@ -1211,11 +1256,14 @@ class NinoRuntime:
         if "que recuerdas de mi" in plain or "que sabes de mi" in plain:
             name = relation.get("user_name")
             preferences = sorted(relation.get("preferences", {}).keys())
+            fact_phrases = _memory_fact_phrases(request.percept_frame.get("active_cold_facts", []))
             parts = []
             if name:
                 parts.append(f"recuerdo que eres {name}")
             if preferences:
                 parts.append(f"recuerdo que te interesa {', '.join(preferences[:3])}")
+            if fact_phrases:
+                parts.append("recuerdo que " + ", ".join(fact_phrases[:4]))
             if not parts:
                 answer = "Todavía tengo poca memoria sobre ti. Puedo empezar por tu nombre, gustos y cosas importantes que quieras conservar."
             else:
@@ -1363,6 +1411,7 @@ class NinoRuntime:
                 **percept_frame,
                 "maturity": state.cognitive_time.get("maturity", 0.0),
                 "active_goals": list(state.active_goals),
+                "active_cold_facts": _active_cold_fact_summaries(self.cold_store.list_for_agent(agent_id)),
             },
             drive_vector=state.drive_vector,
             memory_candidates=retrieved.memory_candidates,

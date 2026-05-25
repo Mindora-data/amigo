@@ -106,6 +106,32 @@ def test_policy_answers_internal_preference_query() -> None:
     assert "internal_preference_query" in out["reason_trace"]
 
 
+def test_policy_answers_user_memory_query_with_cold_context_facts() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    runtime.tick("agent-policy", {"intent": "chat", "text": "vivo en Madrid", "salience": 0.8, "confidence": 0.95})
+    runtime.tick(
+        "agent-policy",
+        {"intent": "chat", "text": "estamos trabajando en memoria persistente", "salience": 0.8, "confidence": 0.95},
+    )
+
+    out = runtime.tick("agent-policy", {"intent": "question", "text": "que sabes de mi"})
+
+    answer = out["action"]["payload"]["text"]
+    assert "vives en madrid" in answer
+    assert "estamos trabajando en memoria persistente" in answer
+    assert "user_memory_query" in out["reason_trace"]
+
+
+def test_policy_answers_identity_query_with_cold_context_facts() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    runtime.tick("agent-policy", {"intent": "chat", "text": "mi proyecto se llama NIÑO", "salience": 0.8, "confidence": 0.95})
+
+    out = runtime.tick("agent-policy", {"intent": "question", "text": "quién soy"})
+
+    assert "tu proyecto se llama niño" in out["action"]["payload"]["text"]
+    assert "relation_self_query" in out["reason_trace"]
+
+
 def test_policy_answers_goal_query() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     runtime.tick("agent-policy", {"intent": "question", "text": "por qué me calma la música?", "salience": 0.9})
