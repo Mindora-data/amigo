@@ -43,6 +43,19 @@ def test_retrieval_ignores_generic_intent_overlap() -> None:
 
     assert out.memory_candidates == []
 
+def test_retrieval_understands_last_week_temporal_query() -> None:
+    store = InMemoryEpisodeStore()
+    now = datetime.now(timezone.utc)
+    store.append(Episode("old", "a1", now - timedelta(days=10), "me fue bien en la cita", "chat", 0.8, 0.9))
+    store.append(Episode("new", "a1", now - timedelta(days=1), "compré pan", "chat", 0.8, 0.9))
+
+    retriever = MemoryRetriever(store)
+    req = RetrieveRequest(query_intent="que te dije la semana pasada", self_state={}, relation_state={}, time_scope="long")
+    out = retriever.retrieve(agent_id="a1", request=req, top_k=3)
+
+    assert out.memory_candidates
+    assert out.memory_candidates[0].source_episode_id == "old"
+
 def test_retrieval_normalizes_accents_and_basic_synonyms() -> None:
     store = InMemoryEpisodeStore()
     now = datetime.now(timezone.utc)

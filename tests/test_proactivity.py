@@ -41,6 +41,33 @@ def test_allowed_proactivity_sends_from_salient_recent_memory_and_records_send()
     assert "salient_memory_follow_up" in out.reason_trace
     assert state.relation_state["proactivity"]["sent_at"] == [now.isoformat()]
 
+def test_proactivity_prioritizes_temporal_event_reminder() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime.configure_proactivity(
+        "agent-p",
+        ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=0),
+    )
+    runtime.tick(
+        "agent-p",
+        {
+            "intent": "chat",
+            "text": "mañana tengo cita",
+            "salience": 0.9,
+            "confidence": 0.95,
+            "now": now.isoformat(),
+        },
+    )
+
+    out = runtime.evaluate_proactivity("agent-p", now=now + timedelta(days=1))
+    state = runtime.load_or_init_state("agent-p")
+
+    assert out.should_send is True
+    assert out.action is not None
+    assert "mañana tengo cita" in out.action["payload"]["text"]
+    assert "event_reminder" in out.reason_trace
+    assert state.relation_state["temporal_events"][0]["status"] == "reminded"
+
 
 def test_proactivity_daily_cap_blocks_second_message() -> None:
     runtime = NinoRuntime(InMemoryStateStore())

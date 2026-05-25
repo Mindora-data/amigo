@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import re
 from typing import Protocol
 
@@ -75,6 +75,10 @@ SYNONYMS = {
     "trabajamos": "foco",
     "trabajando": "foco",
     "haciendo": "foco",
+    "ayer": "tiempo",
+    "hoy": "tiempo",
+    "semana": "tiempo",
+    "pasada": "tiempo",
 }
 FACT_KEY_TERMS = {
     "user_name": "nombre identidad persona",
@@ -128,6 +132,18 @@ def _recency_score(ts: datetime, now: datetime, scope: str) -> float:
         horizon = 24.0 * 365
     return _clamp01(1.0 - (age_hours / horizon))
 
+def _temporal_window(query: str, now: datetime) -> tuple[datetime, datetime] | None:
+    plain = _without_accents(query)
+    if "semana pasada" in plain:
+        return now - timedelta(days=14), now - timedelta(days=7)
+    if "ayer" in plain:
+        start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        return start, start + timedelta(days=1)
+    if "hoy" in plain:
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return start, start + timedelta(days=1)
+    return None
+
 class MemoryRetriever:
     def __init__(self, episode_store: InMemoryEpisodeStore, cold_store: ColdStoreProtocol | None = None) -> None:
         self.episode_store = episode_store
@@ -135,11 +151,14 @@ class MemoryRetriever:
 
     def retrieve(self, agent_id: str, request: RetrieveRequest, top_k: int = 5) -> RetrieveResponse:
         now = datetime.now(timezone.utc)
+        temporal_window = _temporal_window(request.query_intent, now)
         scored: list[MemoryCandidate] = []
 
         # HOT
         for ep in self.episode_store.list_for_agent(agent_id):
             sem = _semantic_overlap(request.query_intent, f"{ep.intent} {ep.text}")
+            if temporal_window is not None and temporal_window[0] <= ep.timestamp <= temporal_window[1]:
+                sem = max(sem, 0.35)
             if sem <= 0:
                 continue
             rec = _recency_score(ep.timestamp, now, request.time_scope)

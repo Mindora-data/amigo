@@ -25,6 +25,7 @@ from .proactivity import (
     ProactivityEngine,
     configure_proactivity_state,
     default_proactivity_state,
+    mark_temporal_event_reminded,
     record_proactive_send,
 )
 
@@ -51,6 +52,7 @@ def _nino_context_summary(
     ]
     return {
         "agent_id": state.agent_id,
+        "current_time": state.updated_at.isoformat(),
         "response_source": source,
         "llm_provider": llm_provider,
         "llm_error": llm_error,
@@ -105,8 +107,18 @@ def _without_accents(value: str) -> str:
 
 def _parse_datetime(value: Any) -> datetime:
     if isinstance(value, datetime):
-        return value
-    return datetime.fromisoformat(str(value))
+        parsed = value
+    else:
+        parsed = datetime.fromisoformat(str(value))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+def _now_from_percept(percept_frame: dict[str, Any]) -> datetime:
+    for key in ("now", "timestamp"):
+        if percept_frame.get(key):
+            return _parse_datetime(percept_frame[key])
+    return datetime.now(timezone.utc)
 
 def _redact_text(value: str) -> str:
     value = re.sub(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", "[email]", value)
@@ -127,6 +139,36 @@ def _semantic_tags(text: str) -> list[str]:
     if "?" in text:
         tags.append("question")
     return sorted(set(tags))
+
+def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
+    plain = _without_accents(text)
+    if not any(word in plain for word in ("cita", "examen", "reunion", "reunión", "llamada", "quedada")):
+        return []
+    due_at: datetime | None = None
+    if "mañana" in plain or "manana" in plain:
+        due_at = (now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+    elif "hoy" in plain:
+        due_at = now.replace(hour=max(now.hour, 9), minute=0, second=0, microsecond=0)
+    elif "luego" in plain or "esta tarde" in plain:
+        due_at = now + timedelta(hours=2)
+    if due_at is None:
+        return []
+    kind = "event"
+    for candidate in ("cita", "examen", "reunion", "llamada", "quedada"):
+        if candidate in plain:
+            kind = candidate
+            break
+    return [
+        {
+            "id": f"{kind}:{due_at.isoformat()}:{abs(hash(text)) % 100000}",
+            "kind": kind,
+            "text": text[:180],
+            "due_at": due_at.isoformat(),
+            "status": "pending",
+            "source": "user_statement",
+            "created_at": now.isoformat(),
+        }
+    ]
 
 def _clean_preference_value(value: str) -> str:
     words = _normalize_text(value).split()
@@ -230,6 +272,14 @@ def _update_relation_from_percept(
         for tag in tags:
             tag_counts[tag] = int(tag_counts.get(tag, 0)) + 1
         relation["semantic_tag_counts"] = tag_counts
+    temporal_events = _extract_temporal_events(text, now)
+    if temporal_events:
+        existing = list(relation.get("temporal_events", []))
+        existing_ids = {str(item.get("id")) for item in existing if isinstance(item, dict)}
+        for event in temporal_events:
+            if event["id"] not in existing_ids:
+                existing.append(event)
+        relation["temporal_events"] = existing[-50:]
 
     return relation
 
@@ -652,6 +702,13 @@ class NinoRuntime:
             if result.action is not None:
                 self.enqueue_proactive_action(agent_id, result.action, now=sent_at)
                 state = self.load_or_init_state(agent_id)
+                event_id = result.action.get("payload", {}).get("temporal_event_id")
+                if event_id:
+                    state.relation_state = mark_temporal_event_reminded(
+                        state.relation_state,
+                        str(event_id),
+                        sent_at,
+                    )
             state.relation_state = record_proactive_send(state.relation_state, sent_at)
             state.updated_at = sent_at
             self.state_store.put(state)
@@ -1390,6 +1447,7 @@ class NinoRuntime:
         state = self.load_or_init_state(agent_id)
         intent = str(percept_frame.get("intent", "unknown"))
         text = str(percept_frame.get("text", ""))
+        now = _now_from_percept(percept_frame)
         query_intent = text.strip() or intent
         if intent not in GENERIC_INTENTS and text.strip():
             query_intent = f"{intent} {text}".strip()
@@ -1454,7 +1512,6 @@ class NinoRuntime:
             except Exception as exc:
                 llm_error = exc.__class__.__name__
 
-        now = datetime.now(timezone.utc)
         episode = Episode(
             episode_id=str(uuid4()),
             agent_id=agent_id,

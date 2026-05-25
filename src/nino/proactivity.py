@@ -136,6 +136,46 @@ def _latest_autobiographical_memory(self_model: dict[str, Any]) -> dict[str, Any
     timeline = list(self_model.get("autobiographical_timeline", []))
     return timeline[-1] if timeline else None
 
+def _parse_dt(value: Any) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+def _due_temporal_event(relation_state: dict[str, Any], now: datetime) -> dict[str, Any] | None:
+    events = [event for event in relation_state.get("temporal_events", []) if isinstance(event, dict)]
+    due: list[tuple[datetime, dict[str, Any]]] = []
+    for event in events:
+        if event.get("status") not in {None, "pending"}:
+            continue
+        due_at = _parse_dt(event.get("due_at"))
+        if due_at is None:
+            continue
+        if now - timedelta(hours=6) <= due_at <= now + timedelta(hours=24):
+            due.append((due_at, event))
+    if not due:
+        return None
+    due.sort(key=lambda item: item[0])
+    return due[0][1]
+
+def mark_temporal_event_reminded(relation_state: dict[str, Any], event_id: str, now: datetime) -> dict[str, Any]:
+    relation = dict(relation_state)
+    updated = []
+    for raw in relation.get("temporal_events", []):
+        if not isinstance(raw, dict):
+            updated.append(raw)
+            continue
+        event = dict(raw)
+        if str(event.get("id")) == event_id:
+            event["status"] = "reminded"
+            event["reminded_at"] = now.isoformat()
+        updated.append(event)
+    relation["temporal_events"] = updated
+    return relation
+
 
 class ProactivityEngine:
     def __init__(self, episode_store: InMemoryEpisodeStore) -> None:
@@ -185,6 +225,24 @@ class ProactivityEngine:
             if now < next_allowed:
                 reason_trace.append("minimum_interval")
                 return ProactivityResponse(False, None, reason_trace, next_allowed)
+
+        temporal_event = _due_temporal_event(relation_state, now)
+        if temporal_event is not None:
+            reason_trace.extend(["temporal_memory", "event_reminder"])
+            event_text = str(temporal_event.get("text", "un evento pendiente"))
+            return ProactivityResponse(
+                should_send=True,
+                action={
+                    "type": "external_message",
+                    "payload": {
+                        "text": f"Tengo esto marcado en el tiempo: {event_text}. ¿Quieres que lo preparemos o lo revisemos?",
+                        "source": "relation_state.temporal_events",
+                        "temporal_event_id": temporal_event.get("id"),
+                        "due_at": temporal_event.get("due_at"),
+                    },
+                },
+                reason_trace=reason_trace,
+            )
 
         open_question = _latest_open_question(world_model)
         if open_question and not _contains_sensitive_term(str(open_question.get("text", ""))):

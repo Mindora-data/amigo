@@ -367,6 +367,10 @@ Auditoria final de producto 100% local:
 88. Hecho inicial: `/app` incorpora login local de usuario y usa rutas privadas `/users/{user_id}/agents/{agent_id}` para que varias personas puedan hablar con el mismo agente sin mezclar memoria privada.
 89. Hecho inicial: el servidor traduce `usuario + agente` a un `agent_id` interno aislado (`user::<usuario>::agent::<agente>`) y lista solo agentes del usuario conectado.
 90. Hecho inicial: la API queda probada contra fuga cruzada: dos usuarios con agente `nino` consolidan y recuperan memoria fria separada, sin ver hechos privados del otro.
-91. Siguiente: separar aprendizaje general anonimo de memoria privada, permitiendo aprender patrones de conversaciones sin exponer datos personales entre usuarios.
+91. Hecho inicial: cada tick acepta contexto temporal (`now`/`timestamp`), guarda episodios con esa fecha y expone `nino_context.current_time` para que NIÑO sepa cuándo ocurre la conversación.
+92. Hecho inicial: la memoria caliente interpreta consultas temporales como `semana pasada`, `ayer` y `hoy`, recuperando episodios por ventana temporal aunque haya poco solape semántico.
+93. Hecho inicial: NIÑO extrae eventos temporales simples (`mañana tengo cita`, `luego tengo reunión`, `hoy tengo examen`) a `relation_state.temporal_events`.
+94. Hecho inicial: la proactividad prioriza recordatorios de eventos temporales próximos y los marca como `reminded` para evitar avisos repetidos.
+95. Siguiente: separar aprendizaje general anonimo de memoria privada, permitiendo aprender patrones de conversaciones sin exponer datos personales entre usuarios.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

@@ -485,6 +485,23 @@ def test_http_api_scopes_memory_by_logged_user(tmp_path) -> None:
     assert all("ana" not in candidate["statement"].lower() for candidate in bob_search["memory_candidates"])
 
 
+def test_http_api_tick_accepts_time_context_and_records_temporal_event(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    now = "2026-05-21T10:00:00+00:00"
+
+    tick = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "chat", "text": "mañana tengo cita", "salience": 0.9, "confidence": 0.95, "now": now},
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+
+    assert tick["nino_context"]["current_time"] == now
+    assert relation["relation_state"]["temporal_events"][0]["text"] == "mañana tengo cita"
+    assert relation["relation_state"]["temporal_events"][0]["due_at"] == "2026-05-22T09:00:00+00:00"
+
+
 def test_http_api_openapi_matches_root_endpoint_catalog(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 
