@@ -460,7 +460,7 @@ APP_HTML = """<!doctype html>
       ];
       if (goals.length) parts.push(`objetivos: ${goals.join(", ")}`);
       if (memories.length) parts.push(`recuerdo: ${memories.join(" · ")}`);
-      addEntry("contexto NIÑO", parts.join("\n"));
+      addEntry("contexto NIÑO", parts.join("\\n"));
     };
     const addEmptyConversation = () => {
       const item = document.createElement("div");

@@ -151,6 +151,10 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"latest_report" in body
     assert b"renderCompletionAudit" in body
     assert b"Auditor" in body
+    assert b"addContextEntry" in body
+    assert "contexto NIÑO".encode("utf-8") in body
+    assert b'parts.join("\\n")' in body
+    assert b'parts.join("\n")' not in body
 
 
 def test_http_api_ticks_and_restores_state(tmp_path) -> None:
