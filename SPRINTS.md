@@ -383,5 +383,7 @@ Auditoria final de producto 100% local:
 104. Requisito de producto final: el sitio para usuario debe ser extremadamente minimalista; primera pantalla de login y, tras entrar, solo experiencia de chat o voz.
 105. Requisito de producto final: mantener `/app` como consola operativa/desarrollo, separada de la UI final de usuario para no exponer controles internos.
 106. Siguiente tras recurrencias: crear la UI final minimalista de usuario (`login -> chat/voz`) sobre las APIs ya existentes.
+107. Decisión técnica pendiente: cambiar el proveedor LLM principal a DeepSeek por coste, manteniendo el diseño multi-proveedor para no acoplar NIÑO a un único modelo.
+108. Validación pendiente: hacer una prueba en Vercel para confirmar que la UI final minimalista y la integración con el backend/API funcionan correctamente en despliegue externo.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
