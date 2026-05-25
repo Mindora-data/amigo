@@ -380,5 +380,8 @@ Auditoria final de producto 100% local:
 101. Hecho inicial: `GET /operations/global-suggestions` expone sugerencias agregadas repetidas, con `privacy=anonymous_aggregate`.
 102. Hecho inicial: `/app` añade controles `Global anónimo` y `Sugerencias` para inspeccionar aprendizaje agregado sin salir de la UI.
 103. Siguiente: añadir recurrencias temporales (`cada lunes`, `todos los días`) con límites anti-spam y edición de eventos desde UI.
+104. Requisito de producto final: el sitio para usuario debe ser extremadamente minimalista; primera pantalla de login y, tras entrar, solo experiencia de chat o voz.
+105. Requisito de producto final: mantener `/app` como consola operativa/desarrollo, separada de la UI final de usuario para no exponer controles internos.
+106. Siguiente tras recurrencias: crear la UI final minimalista de usuario (`login -> chat/voz`) sobre las APIs ya existentes.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
