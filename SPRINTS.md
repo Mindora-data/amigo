@@ -357,6 +357,9 @@ Auditoria final de producto 100% local:
 78. Hecho inicial: `scripts/ninoctl memory-facts` imprime resumen con conteos active/inactive/total usando `fact_counts` del endpoint.
 79. Hecho inicial: `scripts/ninoctl memory-facts` acepta `--key <clave>` para inspeccionar rapidamente preferencias, ubicacion, proyecto u otra familia de hechos frios.
 80. Hecho inicial: `README.md` documenta `memory-facts --key` y explica filtros por estado y clave.
-81. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y exponer filtros de hechos frios por estado/clave en API si clientes externos lo necesitan.
+81. Hecho inicial: `GET /agents/{agent_id}/memory/facts` acepta filtros query `status=active|inactive|all` y `key=<clave>`, devolviendo `visible_facts`, `visible_fact_counts`, `status_filter` y `key_filter`.
+82. Hecho inicial: `/app` carga memoria fria con `status=all` explicitamente para conservar la vista completa mientras el endpoint queda filtrable para clientes externos.
+83. Hecho inicial: `scripts/ninoctl memory-facts` delega los filtros `--status` y `--key` al endpoint, evitando filtrar solo en cliente.
+84. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y añadir controles UI para filtrar hechos frios por estado/clave.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

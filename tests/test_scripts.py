@@ -524,7 +524,7 @@ def test_ninoctl_memory_facts_lists_active_cold_memory(tmp_path) -> None:
         text=True,
     )
 
-    assert "http://127.0.0.1:65528/agents/api-agent/memory/facts" in calls.read_text(encoding="utf-8")
+    assert "http://127.0.0.1:65528/agents/api-agent/memory/facts?status=active&key=preference" in calls.read_text(encoding="utf-8")
     assert "cold memory facts: 1 (active, total 2, active 1, inactive 1)" in result.stdout
     assert "key filter: preference" in result.stdout
     assert "- [active] preference: sprints" in result.stdout

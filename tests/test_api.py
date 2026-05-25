@@ -4,6 +4,7 @@ from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from nino.api import create_app
 from nino.api import create_app_with_runtime
@@ -14,13 +15,15 @@ from nino.persistence import create_persistent_runtime
 def _request(app, method: str, path: str, payload: dict | None = None) -> dict:
     data = b"" if payload is None else json.dumps(payload).encode("utf-8")
     captured: dict[str, str] = {}
+    split = urlsplit(path)
 
     def start_response(status: str, headers: list[tuple[str, str]]) -> None:
         captured["status"] = status
 
     environ = {
         "REQUEST_METHOD": method,
-        "PATH_INFO": path,
+        "PATH_INFO": split.path,
+        "QUERY_STRING": split.query,
         "CONTENT_LENGTH": str(len(data)),
         "wsgi.input": BytesIO(data),
     }
@@ -933,6 +936,7 @@ def test_http_api_lists_and_deletes_memory_items(tmp_path) -> None:
 
     episodes = _request(app, "GET", "/agents/api-agent/episodes")
     facts = _request(app, "GET", "/agents/api-agent/memory/facts")
+    filtered = _request(app, "GET", "/agents/api-agent/memory/facts?status=active&key=preference")
 
     episode_id = episodes["episodes"][0]["episode_id"]
     fact_id = facts["facts"][0]["fact_id"]
@@ -943,6 +947,10 @@ def test_http_api_lists_and_deletes_memory_items(tmp_path) -> None:
     assert facts["fact_counts"]["active"] == 1
     assert facts["fact_counts"]["inactive"] == 0
     assert facts["fact_counts"]["active_by_key"]["preference"] == 1
+    assert filtered["status_filter"] == "active"
+    assert filtered["key_filter"] == "preference"
+    assert filtered["visible_facts"] == 1
+    assert filtered["visible_fact_counts"]["active_by_key"]["preference"] == 1
     assert deleted_episode["deleted"] is True
     assert deleted_fact["deleted"] is True
     assert _request(app, "GET", "/agents/api-agent/episodes")["episodes"] == []

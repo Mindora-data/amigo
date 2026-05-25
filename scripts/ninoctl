@@ -700,8 +700,12 @@ memory_facts() {
     return 2
   fi
 
+  local path="/agents/$agent/memory/facts?status=$status_filter"
+  if [[ -n "$key_filter" ]]; then
+    path="${path}&key=$key_filter"
+  fi
   local response
-  response="$(curl -fsS "$BASE_URL/agents/$agent/memory/facts")"
+  response="$(curl -fsS "$BASE_URL$path")"
   if [[ "$json_output" == true ]]; then
     printf '%s\n' "$response"
     return 0

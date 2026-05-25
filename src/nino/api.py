@@ -10,7 +10,7 @@ import sqlite3
 import subprocess
 import threading
 from typing import Any, Callable
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 
 from .autonomy import BackgroundAutonomy
@@ -1014,7 +1014,7 @@ APP_HTML = """<!doctype html>
       print($("memory"), out);
     }
     async function loadFacts() {
-      const out = await api(agentPath("/memory/facts"));
+      const out = await api(agentPath("/memory/facts?status=all"));
       clearList($("memoryList"));
       if (out.fact_counts) {
         const counts = out.fact_counts;
@@ -1339,6 +1339,19 @@ def _cold_fact_counts(facts: list[Any]) -> dict[str, Any]:
         bucket = counts[f"{status}_by_key"]
         bucket[key] = int(bucket.get(key, 0)) + 1
     return counts
+
+
+def _filter_cold_facts(facts: list[Any], status_filter: str = "all", key_filter: str = "") -> list[Any]:
+    filtered = list(facts)
+    if status_filter == "active":
+        filtered = [fact for fact in filtered if getattr(fact, "valid_to", None) is None]
+    elif status_filter == "inactive":
+        filtered = [fact for fact in filtered if getattr(fact, "valid_to", None) is not None]
+    elif status_filter != "all":
+        raise ValueError("status must be active, inactive or all")
+    if key_filter:
+        filtered = [fact for fact in filtered if str(getattr(fact, "key", "")) == key_filter]
+    return filtered
 
 
 def _attach_current_report_summary(report: dict[str, Any]) -> None:
@@ -2271,9 +2284,20 @@ class NinoService:
     def llm_probe(self, agent_id: str) -> dict[str, Any]:
         return {"probe": _to_jsonable(self.runtime.llm_probe(agent_id))}
 
-    def list_memory_facts(self, agent_id: str) -> dict[str, Any]:
+    def list_memory_facts(self, agent_id: str, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         facts = self.runtime.cold_store.list_for_agent(agent_id)
-        return {"facts": _to_jsonable(facts), "fact_counts": _cold_fact_counts(facts)}
+        filters = filters or {}
+        status_filter = str(filters.get("status", filters.get("status_filter", "all")) or "all")
+        key_filter = str(filters.get("key", filters.get("key_filter", "")) or "")
+        filtered = _filter_cold_facts(facts, status_filter=status_filter, key_filter=key_filter)
+        return {
+            "facts": _to_jsonable(filtered),
+            "fact_counts": _cold_fact_counts(facts),
+            "visible_fact_counts": _cold_fact_counts(filtered),
+            "status_filter": status_filter,
+            "key_filter": key_filter,
+            "visible_facts": len(filtered),
+        }
 
     def delete_episode(self, agent_id: str, episode_id: str) -> dict[str, Any]:
         return self.runtime.delete_episode(agent_id, episode_id)
@@ -2475,6 +2499,8 @@ class NinoHttpApp:
                 )
                 return [encoded]
             payload = self._read_json(environ)
+            if method == "GET":
+                payload = {**self._read_query(environ), **payload}
             status, body = self._route(method, path, payload)
         except KeyError as exc:
             status, body = "400 Bad Request", {"error": f"missing required field: {exc.args[0]}"}
@@ -2499,6 +2525,10 @@ class NinoHttpApp:
             return {}
         raw = environ["wsgi.input"].read(length)
         return json.loads(raw.decode("utf-8"))
+
+    def _read_query(self, environ: dict[str, Any]) -> dict[str, Any]:
+        parsed = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
+        return {key: values[-1] for key, values in parsed.items() if values}
 
     def _route(self, method: str, path: str, payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         if method == "GET" and path == "/":
@@ -2588,7 +2618,7 @@ class NinoHttpApp:
         if method == "DELETE" and len(tail) == 2 and tail[0] == "episodes":
             return "200 OK", self.service.delete_episode(agent_id, tail[1])
         if method == "GET" and tail == ["memory", "facts"]:
-            return "200 OK", self.service.list_memory_facts(agent_id)
+            return "200 OK", self.service.list_memory_facts(agent_id, payload)
         if method == "DELETE" and len(tail) == 3 and tail[:2] == ["memory", "facts"]:
             return "200 OK", self.service.delete_memory_fact(agent_id, tail[2])
         if method == "GET" and tail == ["relation"]:
