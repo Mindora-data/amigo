@@ -376,6 +376,9 @@ Auditoria final de producto 100% local:
 97. Hecho inicial: NIÑO mantiene un modelo global anónimo con conteos agregados de intents, tags y conceptos, separado de la memoria privada por usuario.
 98. Hecho inicial: el modelo global se persiste en SQLite y no guarda texto crudo, nombres, emails ni números sensibles.
 99. Hecho inicial: `GET /operations/global-model` expone solo el agregado anónimo para inspección y auditoría.
-100. Siguiente: usar el modelo global anónimo para mejorar sugerencias/proactividad sin incorporar datos privados de otros usuarios.
+100. Hecho inicial: la proactividad puede usar patrones del modelo global anónimo como última opción, sin incorporar texto privado ni identidad de otros usuarios.
+101. Hecho inicial: `GET /operations/global-suggestions` expone sugerencias agregadas repetidas, con `privacy=anonymous_aggregate`.
+102. Hecho inicial: `/app` añade controles `Global anónimo` y `Sugerencias` para inspeccionar aprendizaje agregado sin salir de la UI.
+103. Siguiente: añadir recurrencias temporales (`cada lunes`, `todos los días`) con límites anti-spam y edición de eventos desde UI.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

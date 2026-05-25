@@ -227,3 +227,22 @@ def test_proactivity_can_follow_relation_preference_without_salient_episode() ->
     assert out.action is not None
     assert "piano" in out.action["payload"]["text"]
     assert "preference_continuity_follow_up" in out.reason_trace
+
+
+def test_proactivity_can_suggest_anonymous_global_pattern_without_private_text() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime.tick("other-a", {"intent": "music", "text": "soy Ana y me gusta piano", "salience": 0.4})
+    runtime.tick("other-b", {"intent": "music", "text": "mi email es bob@example.com y me gusta piano", "salience": 0.4})
+    runtime.configure_proactivity("agent-p", ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=0))
+
+    out = runtime.evaluate_proactivity("agent-p", now=now)
+    rendered = str(out.action).lower()
+
+    assert out.should_send is True
+    assert out.action is not None
+    assert out.action["payload"]["global_concept"] == "piano"
+    assert "anonymous_global_model" in out.reason_trace
+    assert "ana" not in rendered
+    assert "bob" not in rendered
+    assert "example.com" not in rendered

@@ -810,6 +810,7 @@ class NinoRuntime:
             now=now,
             self_model=state.self_model,
             world_model=state.world_model,
+            global_model=self.global_model_store.get(),
             drive_vector=state.drive_vector,
             active_goals=state.active_goals,
         )

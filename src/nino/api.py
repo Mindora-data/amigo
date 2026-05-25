@@ -214,6 +214,10 @@ APP_HTML = """<!doctype html>
           <button id="snapshot" class="secondary">Snapshot</button>
         </div>
         <div class="row">
+          <button id="globalModel" class="secondary">Global anónimo</button>
+          <button id="globalSuggestions" class="secondary">Sugerencias</button>
+        </div>
+        <div class="row">
           <button id="openapi" class="secondary">API</button>
           <button id="audit" class="secondary">Auditoría</button>
         </div>
@@ -860,6 +864,8 @@ APP_HTML = """<!doctype html>
     };
     $("healthDeep").onclick = async () => print($("state"), await api("/health/deep"));
     $("snapshot").onclick = async () => print($("state"), await api("/development/snapshot"));
+    $("globalModel").onclick = async () => print($("state"), await api("/operations/global-model"));
+    $("globalSuggestions").onclick = async () => print($("state"), await api("/operations/global-suggestions"));
     $("openapi").onclick = async () => print($("state"), await api("/openapi.json"));
     $("audit").onclick = async () => print($("state"), await api(agentPath("/audit")));
     $("profile").onclick = async () => print($("state"), await api(agentPath("/profile")));
@@ -1276,6 +1282,7 @@ API_ENDPOINTS = [
     "POST /autonomy/run-once",
     "GET /development/snapshot",
     "GET /operations/global-model",
+    "GET /operations/global-suggestions",
     "GET /operations/mode",
     "GET /operations/claude",
     "POST /operations/claude/configure",
@@ -1613,6 +1620,18 @@ class NinoService:
 
     def global_model(self) -> dict[str, Any]:
         return {"global_model": self.runtime.global_model(), "privacy": "anonymous_aggregate"}
+
+    def global_suggestions(self) -> dict[str, Any]:
+        model = self.runtime.global_model()
+        concepts = model.get("concept_counts", {})
+        ranked = []
+        if isinstance(concepts, dict):
+            ranked = [
+                {"concept": concept, "count": count, "prompt": f"Explorar {concept} desde el contexto privado del usuario."}
+                for concept, count in sorted(concepts.items(), key=lambda item: (int(item[1]), str(item[0])), reverse=True)
+                if int(count) >= 2
+            ][:5]
+        return {"suggestions": ranked, "privacy": "anonymous_aggregate"}
 
     def backup(self) -> dict[str, Any]:
         if self.db_path is None:
@@ -2737,6 +2756,8 @@ class NinoHttpApp:
             return "200 OK", self.service.development_snapshot()
         if method == "GET" and path == "/operations/global-model":
             return "200 OK", self.service.global_model()
+        if method == "GET" and path == "/operations/global-suggestions":
+            return "200 OK", self.service.global_suggestions()
         if method == "GET" and path == "/operations/mode":
             return "200 OK", self.service.operating_mode()
         if method == "GET" and path == "/operations/claude":

@@ -176,6 +176,22 @@ def mark_temporal_event_reminded(relation_state: dict[str, Any], event_id: str, 
     relation["temporal_events"] = updated
     return relation
 
+def _top_global_concept(global_model: dict[str, Any]) -> str | None:
+    counts = global_model.get("concept_counts", {})
+    if not isinstance(counts, dict):
+        return None
+    blocked = {"chat", "question", "unknown", "email", "correo", "password", "contraseña", "pin"}
+    ranked = sorted(
+        (
+            (str(concept), int(count))
+            for concept, count in counts.items()
+            if str(concept) not in blocked and int(count) >= 2
+        ),
+        key=lambda item: (item[1], item[0]),
+        reverse=True,
+    )
+    return ranked[0][0] if ranked else None
+
 
 class ProactivityEngine:
     def __init__(self, episode_store: InMemoryEpisodeStore) -> None:
@@ -188,12 +204,14 @@ class ProactivityEngine:
         now: datetime | None = None,
         self_model: dict[str, Any] | None = None,
         world_model: dict[str, Any] | None = None,
+        global_model: dict[str, Any] | None = None,
         drive_vector: dict[str, float] | None = None,
         active_goals: list[str] | None = None,
     ) -> ProactivityResponse:
         now = now or datetime.now(timezone.utc)
         self_model = self_model or {}
         world_model = world_model or {}
+        global_model = global_model or {}
         drive_vector = drive_vector or {}
         active_goals = active_goals or []
         proactivity = dict(relation_state.get("proactivity", default_proactivity_state()))
@@ -307,6 +325,22 @@ class ProactivityEngine:
                     "payload": {
                         "text": f"Estoy integrando algo de nuestra historia: {autobiographical.get('summary', '')}.",
                         "source": "self_model.autobiographical_timeline",
+                    },
+                },
+                reason_trace=reason_trace,
+            )
+
+        global_concept = _top_global_concept(global_model)
+        if global_concept and drive_vector.get("curiosity", 0.0) >= 0.5:
+            reason_trace.extend(["anonymous_global_model", "general_pattern_suggestion"])
+            return ProactivityResponse(
+                should_send=True,
+                action={
+                    "type": "external_message",
+                    "payload": {
+                        "text": f"He detectado un patrón general anónimo alrededor de {global_concept}. ¿Quieres explorarlo desde tu propio contexto?",
+                        "source": "operations.global_model",
+                        "global_concept": global_concept,
                     },
                 },
                 reason_trace=reason_trace,
