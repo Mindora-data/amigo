@@ -94,6 +94,35 @@ def test_proactivity_reminds_weekday_event_with_exact_time() -> None:
     assert "jueves a las 17:30" in out.action["payload"]["text"]
 
 
+def test_proactivity_reschedules_weekly_recurring_event_after_reminder() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 25, 10, tzinfo=timezone.utc)
+    runtime.configure_proactivity(
+        "agent-p",
+        ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=0),
+    )
+    runtime.tick(
+        "agent-p",
+        {
+            "intent": "chat",
+            "text": "cada lunes a las 9 tengo llamada",
+            "salience": 0.9,
+            "confidence": 0.95,
+            "now": now.isoformat(),
+        },
+    )
+
+    first = runtime.evaluate_proactivity("agent-p", now=datetime(2026, 6, 1, 8, tzinfo=timezone.utc))
+    state = runtime.load_or_init_state("agent-p")
+    event = state.relation_state["temporal_events"][0]
+
+    assert first.should_send is True
+    assert first.action is not None
+    assert first.action["payload"]["recurrence"] == "weekly"
+    assert event["status"] == "pending"
+    assert event["next_due_at"] == "2026-06-08T09:00:00+00:00"
+
+
 def test_proactivity_daily_cap_blocks_second_message() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)

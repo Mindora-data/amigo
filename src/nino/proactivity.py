@@ -149,12 +149,16 @@ def _due_temporal_event(relation_state: dict[str, Any], now: datetime) -> dict[s
     events = [event for event in relation_state.get("temporal_events", []) if isinstance(event, dict)]
     due: list[tuple[datetime, dict[str, Any]]] = []
     for event in events:
-        if event.get("status") not in {None, "pending"}:
+        recurrence = event.get("recurrence")
+        if event.get("status") not in {None, "pending", "reminded"}:
             continue
-        due_at = _parse_dt(event.get("due_at"))
+        if event.get("status") == "reminded" and not recurrence:
+            continue
+        due_at = _parse_dt(event.get("next_due_at") or event.get("due_at"))
         if due_at is None:
             continue
-        if now - timedelta(hours=6) <= due_at <= now + timedelta(hours=24):
+        lead_hours = max(0.0, float(event.get("lead_time_hours") or 24))
+        if now - timedelta(hours=6) <= due_at <= now + timedelta(hours=lead_hours):
             due.append((due_at, event))
     if not due:
         return None
@@ -170,8 +174,17 @@ def mark_temporal_event_reminded(relation_state: dict[str, Any], event_id: str, 
             continue
         event = dict(raw)
         if str(event.get("id")) == event_id:
-            event["status"] = "reminded"
             event["reminded_at"] = now.isoformat()
+            interval_days = event.get("recurrence_interval_days")
+            due_at = _parse_dt(event.get("next_due_at") or event.get("due_at"))
+            if event.get("recurrence") and interval_days and due_at is not None:
+                next_due = due_at + timedelta(days=int(interval_days))
+                while next_due <= now:
+                    next_due += timedelta(days=int(interval_days))
+                event["status"] = "pending"
+                event["next_due_at"] = next_due.isoformat()
+            else:
+                event["status"] = "reminded"
         updated.append(event)
     relation["temporal_events"] = updated
     return relation
@@ -256,7 +269,8 @@ class ProactivityEngine:
                         "text": f"Tengo esto marcado en el tiempo: {event_text}. ¿Quieres que lo preparemos o lo revisemos?",
                         "source": "relation_state.temporal_events",
                         "temporal_event_id": temporal_event.get("id"),
-                        "due_at": temporal_event.get("due_at"),
+                        "due_at": temporal_event.get("next_due_at") or temporal_event.get("due_at"),
+                        "recurrence": temporal_event.get("recurrence"),
                     },
                 },
                 reason_trace=reason_trace,

@@ -379,11 +379,14 @@ Auditoria final de producto 100% local:
 100. Hecho inicial: la proactividad puede usar patrones del modelo global anónimo como última opción, sin incorporar texto privado ni identidad de otros usuarios.
 101. Hecho inicial: `GET /operations/global-suggestions` expone sugerencias agregadas repetidas, con `privacy=anonymous_aggregate`.
 102. Hecho inicial: `/app` añade controles `Global anónimo` y `Sugerencias` para inspeccionar aprendizaje agregado sin salir de la UI.
-103. Siguiente: añadir recurrencias temporales (`cada lunes`, `todos los días`) con límites anti-spam y edición de eventos desde UI.
-104. Requisito de producto final: el sitio para usuario debe ser extremadamente minimalista; primera pantalla de login y, tras entrar, solo experiencia de chat o voz.
-105. Requisito de producto final: mantener `/app` como consola operativa/desarrollo, separada de la UI final de usuario para no exponer controles internos.
-106. Siguiente tras recurrencias: crear la UI final minimalista de usuario (`login -> chat/voz`) sobre las APIs ya existentes.
-107. Decisión técnica pendiente: cambiar el proveedor LLM principal a DeepSeek por coste, manteniendo el diseño multi-proveedor para no acoplar NIÑO a un único modelo.
-108. Validación pendiente: hacer una prueba en Vercel para confirmar que la UI final minimalista y la integración con el backend/API funcionan correctamente en despliegue externo.
+103. Hecho inicial: los eventos temporales soportan recurrencias `daily`/`weekly` desde frases como `todos los días`, `cada día`, `cada lunes` o `cada semana`.
+104. Hecho inicial: la proactividad reprograma eventos recurrentes tras avisar actualizando `next_due_at`, evitando repetir el mismo aviso.
+105. Hecho inicial: `GET/PATCH/DELETE /agents/{agent_id}/temporal-events` permite listar, editar estado/datos básicos y borrar eventos temporales.
+106. Hecho inicial: `/app` permite ver eventos temporales y pausar/reactivar/eliminar recordatorios desde la consola operativa.
+107. Requisito de producto final: el sitio para usuario debe ser extremadamente minimalista; primera pantalla de login y, tras entrar, solo experiencia de chat o voz.
+108. Requisito de producto final: mantener `/app` como consola operativa/desarrollo, separada de la UI final de usuario para no exponer controles internos.
+109. Decisión técnica pendiente: cambiar el proveedor LLM principal a DeepSeek por coste, manteniendo el diseño multi-proveedor para no acoplar NIÑO a un único modelo.
+110. Validación pendiente: hacer una prueba en Vercel para confirmar que la UI final minimalista y la integración con el backend/API funcionan correctamente en despliegue externo.
+111. Siguiente: crear la UI final minimalista de usuario (`login -> chat/voz`) sobre las APIs ya existentes.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

@@ -70,6 +70,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"globalModel" in body
     assert b"globalSuggestions" in body
     assert b"/operations/global-suggestions" in body
+    assert b"temporalEvents" in body
+    assert b"/temporal-events" in body
+    assert b"loadTemporalEvents" in body
     assert b"Consolidar" in body
     assert b"loadConversation" in body
     assert b"/conversation" in body
@@ -269,11 +272,16 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /operations/logs" in root["endpoints"]
     assert "POST /operations/restart" in root["endpoints"]
     assert "POST /agents/{agent_id}/tasks/run-next" in root["endpoints"]
+    assert "GET /agents/{agent_id}/temporal-events" in root["endpoints"]
+    assert "PATCH /agents/{agent_id}/temporal-events/{event_id}" in root["endpoints"]
+    assert "DELETE /agents/{agent_id}/temporal-events/{event_id}" in root["endpoints"]
     assert openapi["openapi"] == "3.1.0"
     assert "/agents/{agent_id}/tick" in openapi["paths"]
     assert "post" in openapi["paths"]["/agents/{agent_id}/tick"]
     assert "delete" in openapi["paths"]["/agents/{agent_id}/episodes/{episode_id}"]
     assert "delete" in openapi["paths"]["/agents/{agent_id}/memory/facts/{fact_id}"]
+    assert "/agents/{agent_id}/temporal-events/{event_id}" in openapi["paths"]
+    assert "patch" in openapi["paths"]["/agents/{agent_id}/temporal-events/{event_id}"]
     assert "/operations/claude" in openapi["paths"]
     assert "/operations/claude/configure" in openapi["paths"]
     assert "/operations/claude/disable" in openapi["paths"]
@@ -535,6 +543,65 @@ def test_http_api_temporal_event_accepts_weekday_and_exact_time(tmp_path) -> Non
     assert relation["relation_state"]["temporal_events"][0]["kind"] == "reunion"
     assert relation["relation_state"]["temporal_events"][0]["due_at"] == "2026-05-28T17:30:00+00:00"
     assert relation["relation_state"]["temporal_events"][0]["lead_time_hours"] == 24
+
+
+def test_http_api_temporal_event_accepts_weekly_recurrence(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {
+            "intent": "chat",
+            "text": "cada lunes a las 9 tengo llamada",
+            "salience": 0.9,
+            "confidence": 0.95,
+            "now": "2026-05-25T10:00:00+00:00",
+        },
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+    event = relation["relation_state"]["temporal_events"][0]
+
+    assert event["kind"] == "llamada"
+    assert event["due_at"] == "2026-06-01T09:00:00+00:00"
+    assert event["next_due_at"] == "2026-06-01T09:00:00+00:00"
+    assert event["recurrence"] == "weekly"
+    assert event["recurrence_interval_days"] == 7
+
+
+def test_http_api_lists_updates_and_deletes_temporal_events(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {
+            "intent": "chat",
+            "text": "mañana tengo cita",
+            "salience": 0.9,
+            "confidence": 0.95,
+            "now": "2026-05-21T10:00:00+00:00",
+        },
+    )
+
+    listed = _request(app, "GET", "/agents/api-agent/temporal-events")
+    event_id = listed["events"][0]["id"]
+    updated = _request(
+        app,
+        "PATCH",
+        f"/agents/api-agent/temporal-events/{event_id}",
+        {"status": "paused", "lead_time_hours": 3},
+    )
+    deleted = _request(app, "DELETE", f"/agents/api-agent/temporal-events/{event_id}")
+    empty = _request(app, "GET", "/agents/api-agent/temporal-events")
+
+    assert listed["count"] == 1
+    assert updated["updated"] is True
+    assert updated["event"]["status"] == "paused"
+    assert updated["event"]["lead_time_hours"] == 3
+    assert deleted["deleted"] is True
+    assert empty["events"] == []
 
 
 def test_http_api_global_model_is_anonymous_aggregate(tmp_path) -> None:

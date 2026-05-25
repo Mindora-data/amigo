@@ -259,6 +259,18 @@ def _due_at_from_text(text: str, now: datetime) -> datetime | None:
         due_at += timedelta(days=1)
     return due_at
 
+def _recurrence_from_text(text: str) -> dict[str, Any]:
+    plain = _without_accents(text)
+    if "todos los dias" in plain or "cada dia" in plain or "diario" in plain:
+        return {"recurrence": "daily", "recurrence_interval_days": 1}
+    if "cada semana" in plain or "semanal" in plain:
+        return {"recurrence": "weekly", "recurrence_interval_days": 7}
+    if "cada " in plain:
+        for day in WEEKDAY_OFFSETS:
+            if f"cada {day}" in plain:
+                return {"recurrence": "weekly", "recurrence_interval_days": 7}
+    return {"recurrence": None, "recurrence_interval_days": None}
+
 def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
     plain = _without_accents(text)
     if not any(word in plain for word in ("cita", "examen", "reunion", "reunión", "llamada", "quedada")):
@@ -266,6 +278,7 @@ def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
     due_at = _due_at_from_text(text, now)
     if due_at is None:
         return []
+    recurrence = _recurrence_from_text(text)
     kind = "event"
     for candidate in ("cita", "examen", "reunion", "llamada", "quedada"):
         if candidate in plain:
@@ -281,6 +294,8 @@ def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
             "source": "user_statement",
             "created_at": now.isoformat(),
             "lead_time_hours": 24,
+            "next_due_at": due_at.isoformat(),
+            **recurrence,
         }
     ]
 
@@ -885,6 +900,46 @@ class NinoRuntime:
         if hasattr(self.cold_store, "delete_fact"):
             deleted = bool(self.cold_store.delete_fact(agent_id, fact_id))
         return {"agent_id": agent_id, "fact_id": fact_id, "deleted": deleted}
+
+    def list_temporal_events(self, agent_id: str) -> list[dict[str, Any]]:
+        state = self.load_or_init_state(agent_id)
+        return [dict(event) for event in state.relation_state.get("temporal_events", []) if isinstance(event, dict)]
+
+    def update_temporal_event(self, agent_id: str, event_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        state = self.load_or_init_state(agent_id)
+        events = self.list_temporal_events(agent_id)
+        updated = []
+        found: dict[str, Any] | None = None
+        allowed = {"text", "due_at", "next_due_at", "status", "lead_time_hours", "recurrence", "recurrence_interval_days"}
+        for event in events:
+            if str(event.get("id")) == event_id:
+                for key in allowed:
+                    if key in patch:
+                        event[key] = patch[key]
+                if event.get("status") == "reminded" and event.get("recurrence"):
+                    event["status"] = "pending"
+                event["updated_at"] = now.isoformat()
+                found = dict(event)
+            updated.append(event)
+        if found is None:
+            return {"agent_id": agent_id, "event_id": event_id, "updated": False, "error": "event_not_found"}
+        state.relation_state = {**state.relation_state, "temporal_events": updated}
+        state.updated_at = now
+        self.state_store.put(state)
+        return {"agent_id": agent_id, "event_id": event_id, "updated": True, "event": found}
+
+    def delete_temporal_event(self, agent_id: str, event_id: str) -> dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        state = self.load_or_init_state(agent_id)
+        events = self.list_temporal_events(agent_id)
+        kept = [event for event in events if str(event.get("id")) != event_id]
+        deleted = len(kept) != len(events)
+        if deleted:
+            state.relation_state = {**state.relation_state, "temporal_events": kept}
+            state.updated_at = now
+            self.state_store.put(state)
+        return {"agent_id": agent_id, "event_id": event_id, "deleted": deleted}
 
     def retrieve_memory(self, agent_id: str, request: RetrieveRequest) -> RetrieveResponse:
         return self.retriever.retrieve(agent_id=agent_id, request=request, top_k=5)

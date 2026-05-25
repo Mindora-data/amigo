@@ -318,6 +318,9 @@ APP_HTML = """<!doctype html>
           <button id="inbox" class="secondary">Inbox</button>
           <button id="clearDelivered" class="secondary">Limpiar entregados</button>
         </div>
+        <div class="row">
+          <button id="temporalEvents" class="secondary">Eventos</button>
+        </div>
         <div id="inboxList" class="list"></div>
         <div class="output"><pre id="proactivity">{}</pre></div>
       </div>
@@ -1026,6 +1029,45 @@ APP_HTML = """<!doctype html>
       print($("proactivity"), out);
     }
     $("inbox").onclick = loadInbox;
+    async function loadTemporalEvents() {
+      const out = await api(agentPath("/temporal-events"));
+      clearList($("inboxList"));
+      out.events.forEach((event) => {
+        const row = document.createElement("div");
+        row.className = "listItem";
+        const title = document.createElement("div");
+        title.textContent = event.text || event.id;
+        const detail = document.createElement("div");
+        detail.className = "muted";
+        const recurrence = event.recurrence ? ` · ${event.recurrence}` : "";
+        detail.textContent = `${event.status || "pending"} · ${event.next_due_at || event.due_at || "sin fecha"}${recurrence}`;
+        row.appendChild(title);
+        row.appendChild(detail);
+        const pause = document.createElement("button");
+        pause.className = "secondary";
+        pause.textContent = event.status === "paused" ? "Reactivar" : "Pausar";
+        pause.onclick = async () => {
+          const statusValue = event.status === "paused" ? "pending" : "paused";
+          const updated = await api(agentPath(`/temporal-events/${encodeURIComponent(event.id)}`), {method: "PATCH", body: JSON.stringify({status: statusValue})});
+          print($("proactivity"), updated);
+          await loadTemporalEvents();
+        };
+        row.appendChild(pause);
+        const remove = document.createElement("button");
+        remove.className = "danger";
+        remove.textContent = "Eliminar";
+        remove.onclick = async () => {
+          if (!confirm("Eliminar este evento temporal?")) return;
+          const deleted = await api(agentPath(`/temporal-events/${encodeURIComponent(event.id)}`), {method: "DELETE"});
+          print($("proactivity"), deleted);
+          await loadTemporalEvents();
+        };
+        row.appendChild(remove);
+        $("inboxList").appendChild(row);
+      });
+      print($("proactivity"), out);
+    }
+    $("temporalEvents").onclick = loadTemporalEvents;
     $("clearDelivered").onclick = async () => {
       const out = await api(agentPath("/proactivity/inbox/clear-delivered"), {method: "POST", body: "{}"});
       print($("proactivity"), out);
@@ -1323,6 +1365,9 @@ API_ENDPOINTS = [
     "POST /agents/{agent_id}/llm/probe",
     "GET /agents/{agent_id}/memory/facts",
     "DELETE /agents/{agent_id}/memory/facts/{fact_id}",
+    "GET /agents/{agent_id}/temporal-events",
+    "PATCH /agents/{agent_id}/temporal-events/{event_id}",
+    "DELETE /agents/{agent_id}/temporal-events/{event_id}",
     "GET /agents/{agent_id}/relation",
     "GET /agents/{agent_id}/self-model",
     "GET /agents/{agent_id}/world-model",
@@ -1499,7 +1544,7 @@ def _openapi_document() -> dict[str, Any]:
         if path == "/app":
             continue
         parameters = []
-        for name in ("user_id", "agent_id", "item_id", "episode_id", "fact_id", "report_name"):
+        for name in ("user_id", "agent_id", "item_id", "episode_id", "fact_id", "event_id", "report_name"):
             if "{" + name + "}" in path:
                 parameters.append({
                     "name": name,
@@ -2433,6 +2478,16 @@ class NinoService:
         state = self.runtime.load_or_init_state(agent_id)
         return {"relation_state": _to_jsonable(state.relation_state)}
 
+    def list_temporal_events(self, agent_id: str) -> dict[str, Any]:
+        events = self.runtime.list_temporal_events(agent_id)
+        return {"events": _to_jsonable(events), "count": len(events)}
+
+    def update_temporal_event(self, agent_id: str, event_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.runtime.update_temporal_event(agent_id, event_id, payload)
+
+    def delete_temporal_event(self, agent_id: str, event_id: str) -> dict[str, Any]:
+        return self.runtime.delete_temporal_event(agent_id, event_id)
+
     def get_self_model(self, agent_id: str) -> dict[str, Any]:
         state = self.runtime.load_or_init_state(agent_id)
         return {"self_model": _to_jsonable(state.self_model)}
@@ -2673,6 +2728,12 @@ class NinoHttpApp:
             return "200 OK", self.service.list_memory_facts(agent_id, payload)
         if method == "DELETE" and len(tail) == 3 and tail[:2] == ["memory", "facts"]:
             return "200 OK", self.service.delete_memory_fact(agent_id, tail[2])
+        if method == "GET" and tail == ["temporal-events"]:
+            return "200 OK", self.service.list_temporal_events(agent_id)
+        if method == "PATCH" and len(tail) == 2 and tail[0] == "temporal-events":
+            return "200 OK", self.service.update_temporal_event(agent_id, tail[1], payload)
+        if method == "DELETE" and len(tail) == 2 and tail[0] == "temporal-events":
+            return "200 OK", self.service.delete_temporal_event(agent_id, tail[1])
         if method == "GET" and tail == ["relation"]:
             return "200 OK", self.service.get_relation(agent_id)
         if method == "GET" and tail == ["self-model"]:
