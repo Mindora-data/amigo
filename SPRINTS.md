@@ -333,6 +333,7 @@ Auditoria final de producto 100% local:
 54. Hecho inicial: el prompt activa `Modo continuidad` cuando el usuario pregunta por memoria, contexto, continuidad o diferencia con Claude directo; en ese modo NIÑO debe usar recuerdos/preferencias/objetivos concretos sin exponer mecanismos internos.
 55. Hecho inicial: `tick` intenta consolidar automaticamente preferencias de alta confianza (`confidence >= 0.9`) y devuelve `auto_consolidated_count`/`auto_consolidation` para hacer visible cuándo NIÑO convirtió conversación en memoria fría.
 56. Hecho inicial: la consolidacion conserva preferencias distintas como memoria activa y solo invalida preferencias cuando parecen alternativas del mismo tipo, evitando que una preferencia nueva borre otra no relacionada.
-57. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y ajustar cuándo NIÑO debe consolidar automaticamente hechos no formulados como preferencias explícitas.
+57. Hecho inicial: la consolidacion extrae hechos explicitos de identidad/contexto (`me llamo`, `trabajo como`, `mi proyecto se llama`) y los autoconsolida con confianza alta sin depender de que el usuario diga `prefiero`.
+58. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y ampliar extraccion de hechos solo cuando el patron sea suficientemente verificable.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
