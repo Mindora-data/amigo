@@ -121,6 +121,57 @@ def test_consolidation_supersedes_changed_identity_fact() -> None:
     assert out["contradictions"][0]["key"] == "project_name"
 
 
+def test_consolidation_extracts_explicit_user_context_facts() -> None:
+    cold = InMemoryColdStore()
+    consolidator = Consolidator(cold)
+    now = datetime.now(timezone.utc)
+    episodes = [
+        Episode(
+            "e1",
+            "a1",
+            now - timedelta(minutes=5),
+            "vivo en Madrid y estudio inteligencia artificial",
+            "chat",
+            0.9,
+            0.95,
+        ),
+        Episode(
+            "e2",
+            "a1",
+            now - timedelta(minutes=4),
+            "estamos trabajando en memoria persistente para NIÑO",
+            "chat",
+            0.9,
+            0.95,
+        ),
+    ]
+
+    out = consolidator.consolidate("a1", episodes, since=now - timedelta(hours=1), until=now)
+
+    facts = {(fact.key, fact.value) for fact in cold.list_for_agent("a1") if fact.valid_to is None}
+    assert len(out["cold_memory_updates"]) == 3
+    assert ("user_location", "madrid") in facts
+    assert ("user_study", "inteligencia artificial") in facts
+    assert ("current_project_focus", "memoria persistente para niño") in facts
+
+
+def test_consolidation_supersedes_changed_context_fact() -> None:
+    cold = InMemoryColdStore()
+    consolidator = Consolidator(cold)
+    now = datetime.now(timezone.utc)
+    episodes = [
+        Episode("e1", "a1", now - timedelta(minutes=5), "vivo en Madrid", "chat", 0.9, 0.95),
+        Episode("e2", "a1", now - timedelta(minutes=4), "vivo en Barcelona", "chat", 0.9, 0.95),
+    ]
+
+    out = consolidator.consolidate("a1", episodes, since=now - timedelta(hours=1), until=now)
+
+    active = [fact for fact in cold.list_for_agent("a1") if fact.key == "user_location" and fact.valid_to is None]
+    assert [fact.value for fact in active] == ["barcelona"]
+    assert len(out["contradictions"]) == 1
+    assert out["contradictions"][0]["key"] == "user_location"
+
+
 def test_tick_auto_consolidates_high_confidence_preference() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
 
@@ -149,6 +200,21 @@ def test_tick_auto_consolidates_high_confidence_identity_fact() -> None:
     assert out["auto_consolidated_count"] == 1
     assert out["auto_consolidation"]["cold_memory_updates"][0]["key"] == "project_name"
     assert facts[0].value == "niño"
+    assert "auto_memory_consolidation" in out["reason_trace"]
+
+
+def test_tick_auto_consolidates_high_confidence_context_fact() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+
+    out = runtime.tick(
+        "agent-c",
+        {"intent": "chat", "text": "estamos trabajando en memoria persistente", "salience": 0.8, "confidence": 0.95},
+    )
+
+    facts = runtime.cold_store.list_for_agent("agent-c")
+    assert out["auto_consolidated_count"] == 1
+    assert out["auto_consolidation"]["cold_memory_updates"][0]["key"] == "current_project_focus"
+    assert facts[0].value == "memoria persistente"
     assert "auto_memory_consolidation" in out["reason_trace"]
 
 

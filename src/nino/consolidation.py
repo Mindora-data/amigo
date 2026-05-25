@@ -20,6 +20,12 @@ FACT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     ("user_role", re.compile(r"\btrabajo como\s+(?P<value>[^.?!\n\r,;]{1,120})", re.IGNORECASE)),
     ("project_name", re.compile(r"\bmi proyecto se llama\s+(?P<value>[^.?!\n\r,;]{1,120})", re.IGNORECASE)),
+    ("user_location", re.compile(r"\bvivo en\s+(?P<value>[^.?!\n\r,;]{1,120})", re.IGNORECASE)),
+    ("user_study", re.compile(r"\bestudio\s+(?P<value>[^.?!\n\r,;]{1,120})", re.IGNORECASE)),
+    (
+        "current_project_focus",
+        re.compile(r"\b(?:estoy|estamos)\s+trabajando en\s+(?P<value>[^.?!\n\r,;]{1,160})", re.IGNORECASE),
+    ),
 )
 
 @dataclass(slots=True)
@@ -78,7 +84,7 @@ def _clean_fact_value(value: str) -> str:
     while words and words[0] in {"el", "la", "los", "las", "un", "una"}:
         words.pop(0)
     for i, word in enumerate(words):
-        if word in {"y", "pero"}:
+        if word in {"y", "pero", "aunque"}:
             words = words[:i]
             break
     return " ".join(words[:12])

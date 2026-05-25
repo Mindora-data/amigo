@@ -334,6 +334,7 @@ Auditoria final de producto 100% local:
 55. Hecho inicial: `tick` intenta consolidar automaticamente preferencias de alta confianza (`confidence >= 0.9`) y devuelve `auto_consolidated_count`/`auto_consolidation` para hacer visible cuándo NIÑO convirtió conversación en memoria fría.
 56. Hecho inicial: la consolidacion conserva preferencias distintas como memoria activa y solo invalida preferencias cuando parecen alternativas del mismo tipo, evitando que una preferencia nueva borre otra no relacionada.
 57. Hecho inicial: la consolidacion extrae hechos explicitos de identidad/contexto (`me llamo`, `trabajo como`, `mi proyecto se llama`) y los autoconsolida con confianza alta sin depender de que el usuario diga `prefiero`.
-58. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y ampliar extraccion de hechos solo cuando el patron sea suficientemente verificable.
+58. Hecho inicial: la consolidacion amplia hechos verificables con `vivo en`, `estudio` y `estoy/estamos trabajando en`, sustituyendo solo el dato activo del mismo tipo cuando aparece una version mas reciente de alta confianza.
+59. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y mejorar recuperacion/uso visible de estos hechos en respuestas posteriores.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
