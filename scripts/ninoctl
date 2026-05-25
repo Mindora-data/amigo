@@ -69,6 +69,7 @@ Commands:
   reports     List local closing evidence reports.
   report      Print one closing evidence report. Use: scripts/ninoctl report <nino-closing-*.json|latest>
   eval        Run deterministic local regression evaluations.
+  memory-search Search agent memory. Use: scripts/ninoctl memory-search [--agent nino] [--type all|cold|hot] <query>
   logs        Show recent logs. Use: scripts/ninoctl logs -f
   backup      Create a timestamped SQLite backup.
   backups     List local SQLite backups.
@@ -301,6 +302,22 @@ status() {
 request() {
   local path="$1"
   curl -fsS "$BASE_URL$path"
+  echo
+}
+
+json_string() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  printf '"%s"' "$value"
+}
+
+post_json() {
+  local path="$1"
+  local body="$2"
+  curl -fsS -X POST "$BASE_URL$path" -H "Content-Type: application/json" -d "$body"
   echo
 }
 
@@ -557,6 +574,91 @@ eval_local() {
   "$ROOT_DIR/scripts/nino-eval" "$@"
 }
 
+memory_search() {
+  local agent="nino"
+  local memory_type="all"
+  local scope="long"
+  local json_output=false
+  local query_parts=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --agent)
+        agent="${2:-}"
+        shift 2
+        ;;
+      --type)
+        memory_type="${2:-}"
+        shift 2
+        ;;
+      --scope)
+        scope="${2:-}"
+        shift 2
+        ;;
+      --json)
+        json_output=true
+        shift
+        ;;
+      --help|-h)
+        echo "Usage: scripts/ninoctl memory-search [--agent nino] [--type all|cold|hot] [--scope recent|medium|long] [--json] <query>"
+        return 0
+        ;;
+      *)
+        query_parts+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -z "$agent" || -z "$memory_type" || -z "$scope" || ${#query_parts[@]} -eq 0 ]]; then
+    echo "Usage: scripts/ninoctl memory-search [--agent nino] [--type all|cold|hot] [--scope recent|medium|long] [--json] <query>" >&2
+    return 2
+  fi
+  if [[ "$memory_type" != "all" && "$memory_type" != "cold" && "$memory_type" != "hot" ]]; then
+    echo "--type must be all, cold or hot." >&2
+    return 2
+  fi
+
+  local query body
+  query="${query_parts[*]}"
+  body="{\"query_intent\":$(json_string "$query"),\"time_scope\":$(json_string "$scope"),\"memory_type_filter\":$(json_string "$memory_type")}"
+  local response
+  response="$(curl -fsS -X POST "$BASE_URL/agents/$agent/memory/search" -H "Content-Type: application/json" -d "$body")"
+  if [[ "$json_output" == true ]]; then
+    printf '%s\n' "$response"
+    return 0
+  fi
+  "$PYTHON_BIN" -c '
+import json
+import sys
+
+payload = json.load(sys.stdin)
+counts = payload.get("memory_type_counts", {})
+visible = payload.get("visible_memory_type_counts", {})
+visible_candidates = payload.get("visible_candidates", 0)
+total = counts.get("total", 0)
+cold_visible = visible.get("cold", 0)
+cold_total = counts.get("cold", 0)
+hot_visible = visible.get("hot", 0)
+hot_total = counts.get("hot", 0)
+active_filter = payload.get("memory_type_filter", "all")
+print(
+    f"memory: {visible_candidates}/{total} "
+    f"(cold {cold_visible}/{cold_total}, "
+    f"hot {hot_visible}/{hot_total}, "
+    f"filter {active_filter})"
+)
+for candidate in payload.get("memory_candidates", []):
+    score = float(candidate.get("score", 0.0))
+    confidence = float(candidate.get("confidence", 0.0))
+    memory_type = candidate.get("memory_type", "hot")
+    statement = candidate.get("statement", "")
+    source = candidate.get("source_episode_id", "")
+    print(f"- [{memory_type}] {statement}")
+    print(f"  score={score:.3f} confidence={confidence:.3f} source={source}")
+' <<< "$response"
+}
+
 command="${1:-}"
 shift || true
 
@@ -590,6 +692,7 @@ case "$command" in
   reports) reports ;;
   report) report "${1:-}" ;;
   eval) eval_local "$@" ;;
+  memory-search) memory_search "$@" ;;
   logs) logs "${1:-}" ;;
   backup) backup ;;
   backups) backups ;;

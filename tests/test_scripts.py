@@ -52,6 +52,13 @@ def test_scripts_default_to_macos_system_cert_bundle() -> None:
     assert "SSL_CERT_FILE=/etc/ssl/cert.pem" in launchd
 
 
+def test_readme_documents_memory_search_cli_examples() -> None:
+    readme = Path("README.md").read_text(encoding="utf-8")
+
+    assert 'scripts/ninoctl memory-search --agent nino --type cold "donde vivo"' in readme
+    assert "Use `--json`" in readme
+
+
 def test_launchd_doctor_reports_protected_desktop_path_and_recent_error(tmp_path) -> None:
     home = tmp_path / "home"
     repo = home / "Desktop" / "bebe"
@@ -426,6 +433,68 @@ def test_ninoctl_status_and_wait_health_report_curl_error_detail(tmp_path) -> No
     assert "health: not responding at http://127.0.0.1:65529 (curl: (7) Operation not permitted)" in status.stdout
     assert waited.returncode == 1
     assert "health: not responding at http://127.0.0.1:65529 after 1s (curl: (7) Operation not permitted)" in waited.stderr
+
+
+def test_ninoctl_memory_search_posts_type_filter(tmp_path) -> None:
+    calls = tmp_path / "curl-calls.log"
+    curl = tmp_path / "curl"
+    curl.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' \"$*\" > \"$NINO_CURL_CALLS\"\n"
+        "printf '{\"memory_candidates\": [], \"memory_type_filter\": \"cold\"}\\n'\n",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_CURL_CALLS": str(calls),
+        "NINO_PORT": "65528",
+    }
+
+    result = subprocess.run(
+        ["scripts/ninoctl", "memory-search", "--agent", "api-agent", "--type", "cold", "--json", "donde vivo"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    call = calls.read_text(encoding="utf-8")
+    assert "-X POST http://127.0.0.1:65528/agents/api-agent/memory/search" in call
+    assert "-H Content-Type: application/json" in call
+    assert '"query_intent":"donde vivo"' in call
+    assert '"memory_type_filter":"cold"' in call
+    assert json.loads(result.stdout)["memory_type_filter"] == "cold"
+
+
+def test_ninoctl_memory_search_prints_readable_summary(tmp_path) -> None:
+    curl = tmp_path / "curl"
+    curl.write_text(
+        "#!/usr/bin/env bash\n"
+        "cat <<'JSON'\n"
+        '{"memory_candidates":[{"memory_type":"cold","statement":"ubicacion madrid","score":0.8,"confidence":0.95,"source_episode_id":"abc123"}],"memory_type_counts":{"cold":1,"hot":1,"total":2},"visible_memory_type_counts":{"cold":1,"hot":0,"total":1},"visible_candidates":1,"memory_type_filter":"cold"}\n'
+        "JSON\n",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_PORT": "65528",
+    }
+
+    result = subprocess.run(
+        ["scripts/ninoctl", "memory-search", "--type", "cold", "donde vivo"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "memory: 1/2 (cold 1/1, hot 0/1, filter cold)" in result.stdout
+    assert "- [cold] ubicacion madrid" in result.stdout
+    assert "score=0.800 confidence=0.950 source=abc123" in result.stdout
 
 
 def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:

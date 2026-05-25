@@ -51,6 +51,7 @@ scripts/ninoctl closing-report
 scripts/ninoctl reports
 scripts/ninoctl report nino-closing-YYYYMMDD-HHMMSS.json
 scripts/ninoctl report latest
+scripts/ninoctl memory-search --agent nino --type cold "donde vivo"
 scripts/ninoctl logs
 scripts/ninoctl backup
 scripts/ninoctl backups
@@ -62,6 +63,19 @@ Follow logs:
 ```bash
 scripts/ninoctl logs -f
 ```
+
+Search NIÑO memory from the CLI:
+
+```bash
+scripts/ninoctl memory-search "sprints"
+scripts/ninoctl memory-search --agent nino --type cold "donde vivo"
+scripts/ninoctl memory-search --type hot --scope recent "que hablamos"
+scripts/ninoctl memory-search --type cold --json "proyecto"
+```
+
+`--type` accepts `all`, `cold` or `hot`. The default output is a readable
+summary with hot/cold counts, score, confidence and source episode. Use `--json`
+for automation.
 
 When NIÑO is running as the launchd service, `scripts/ninoctl status` reports
 the launchd PID/state and `scripts/ninoctl logs` reads the launchd log if there

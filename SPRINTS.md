@@ -347,6 +347,9 @@ Auditoria final de producto 100% local:
 68. Hecho inicial: `POST /agents/{agent_id}/memory/search` devuelve `memory_type_counts` y `visible_memory_type_counts` con totales `cold`/`hot`/`total` antes y despues del filtro aplicado.
 69. Hecho inicial: `/app` muestra una fila resumen de resultados de memoria con visibles/totales y desglose fria/reciente segun el filtro activo.
 70. Hecho inicial: `memory/retrieve` y `memory/search` anotan cada candidato con `memory_type` (`cold`/`hot`) para que clientes externos no dependan de parsear `fact_id`.
-71. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y añadir filtros de memoria en CLI o scripts si aparece uso externo recurrente.
+71. Hecho inicial: `scripts/ninoctl memory-search` permite buscar memoria desde CLI con `--agent`, `--type all|cold|hot` y `--scope`, reutilizando el endpoint `/memory/search`.
+72. Hecho inicial: `scripts/ninoctl memory-search` imprime por defecto un resumen legible con conteos, tipo, score, confidence y origen; `--json` conserva la salida cruda para automatizacion.
+73. Hecho inicial: `README.md` documenta ejemplos de `scripts/ninoctl memory-search`, incluyendo filtros `--type`, `--scope` y salida `--json` para automatizacion.
+74. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y añadir una busqueda CLI rapida de memoria fria activa si aparece necesidad operativa.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
