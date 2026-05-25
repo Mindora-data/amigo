@@ -1275,6 +1275,7 @@ API_ENDPOINTS = [
     "GET /autonomy/status",
     "POST /autonomy/run-once",
     "GET /development/snapshot",
+    "GET /operations/global-model",
     "GET /operations/mode",
     "GET /operations/claude",
     "POST /operations/claude/configure",
@@ -1609,6 +1610,9 @@ class NinoService:
 
     def development_snapshot(self) -> dict[str, Any]:
         return {"snapshot": self.runtime.development_snapshot()}
+
+    def global_model(self) -> dict[str, Any]:
+        return {"global_model": self.runtime.global_model(), "privacy": "anonymous_aggregate"}
 
     def backup(self) -> dict[str, Any]:
         if self.db_path is None:
@@ -2731,6 +2735,8 @@ class NinoHttpApp:
             return "200 OK", self.service.autonomy_run_once(payload)
         if method == "GET" and path == "/development/snapshot":
             return "200 OK", self.service.development_snapshot()
+        if method == "GET" and path == "/operations/global-model":
+            return "200 OK", self.service.global_model()
         if method == "GET" and path == "/operations/mode":
             return "200 OK", self.service.operating_mode()
         if method == "GET" and path == "/operations/claude":

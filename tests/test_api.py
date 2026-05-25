@@ -193,6 +193,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     openapi = _request(app, "GET", "/openapi.json")
     mode = _request(app, "GET", "/operations/mode")
     claude = _request(app, "GET", "/operations/claude")
+    global_model_initial = _request(app, "GET", "/operations/global-model")
     _request(app, "POST", "/operations/backup", {})
     tick = _request(
         app,
@@ -248,6 +249,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /operations/claude" in root["endpoints"]
     assert "POST /operations/claude/configure" in root["endpoints"]
     assert "POST /operations/claude/disable" in root["endpoints"]
+    assert "GET /operations/global-model" in root["endpoints"]
     assert "GET /operations/audit" in root["endpoints"]
     assert "GET /operations/product-status" in root["endpoints"]
     assert "GET /operations/next-action" in root["endpoints"]
@@ -270,6 +272,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "/operations/claude" in openapi["paths"]
     assert "/operations/claude/configure" in openapi["paths"]
     assert "/operations/claude/disable" in openapi["paths"]
+    assert "/operations/global-model" in openapi["paths"]
     assert "/operations/audit" in openapi["paths"]
     assert "/operations/product-status" in openapi["paths"]
     assert "/operations/next-action" in openapi["paths"]
@@ -292,6 +295,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert mode["external_llm"]["config"]["enabled"] is False
     assert "memory" in mode["offline_capabilities"]
     assert claude["configured"] is False
+    assert global_model_initial["privacy"] == "anonymous_aggregate"
+    assert global_model_initial["global_model"]["conversation_count"] == 0
     assert claude["api_key_present"] is False
     assert claude["api_key_source"] is None
     assert claude["keychain_service"] is None
@@ -522,6 +527,24 @@ def test_http_api_temporal_event_accepts_weekday_and_exact_time(tmp_path) -> Non
     assert relation["relation_state"]["temporal_events"][0]["kind"] == "reunion"
     assert relation["relation_state"]["temporal_events"][0]["due_at"] == "2026-05-28T17:30:00+00:00"
     assert relation["relation_state"]["temporal_events"][0]["lead_time_hours"] == 24
+
+
+def test_http_api_global_model_is_anonymous_aggregate(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(app, "POST", "/users/ana/agents/nino/tick", {"intent": "music", "text": "soy Ana y me gusta piano"})
+    _request(app, "POST", "/users/bob/agents/nino/tick", {"intent": "chat", "text": "mi email es bob@example.com y me gusta guitarra"})
+
+    out = _request(app, "GET", "/operations/global-model")
+    rendered = json.dumps(out).lower()
+
+    assert out["privacy"] == "anonymous_aggregate"
+    assert out["global_model"]["conversation_count"] == 2
+    assert out["global_model"]["tag_counts"]["preference"] == 2
+    assert "piano" in out["global_model"]["concept_counts"]
+    assert "guitarra" in out["global_model"]["concept_counts"]
+    assert "ana" not in rendered
+    assert "bob" not in rendered
+    assert "example.com" not in rendered
 
 
 def test_http_api_openapi_matches_root_endpoint_catalog(tmp_path) -> None:

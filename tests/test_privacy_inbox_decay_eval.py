@@ -22,6 +22,37 @@ def test_safe_export_redacts_name_email_and_numbers(tmp_path) -> None:
     assert "[number]" in texts
 
 
+def test_global_model_learns_anonymous_patterns_without_private_text(tmp_path) -> None:
+    runtime = create_persistent_runtime(tmp_path / "nino.db")
+    runtime.tick("user::ana::agent::nino", {"intent": "music", "text": "soy Ana y me gusta piano", "salience": 0.9})
+    runtime.tick("user::bob::agent::nino", {"intent": "chat", "text": "mi email es bob@example.com y me gusta guitarra", "salience": 0.9})
+
+    global_model = runtime.global_model()
+    rendered = str(global_model).lower()
+
+    assert global_model["conversation_count"] == 2
+    assert global_model["tag_counts"]["music"] == 2
+    assert global_model["tag_counts"]["preference"] == 2
+    assert global_model["concept_counts"]["piano"] == 1
+    assert global_model["concept_counts"]["guitarra"] == 1
+    assert "ana" not in rendered
+    assert "bob" not in rendered
+    assert "example.com" not in rendered
+
+
+def test_global_model_persists_without_private_memory(tmp_path) -> None:
+    db_path = tmp_path / "nino.db"
+    runtime = create_persistent_runtime(db_path)
+    runtime.tick("agent-p", {"intent": "music", "text": "soy Pablo y me gusta piano", "salience": 0.9})
+
+    restarted = create_persistent_runtime(db_path)
+    global_model = restarted.global_model()
+
+    assert global_model["conversation_count"] == 1
+    assert global_model["concept_counts"]["piano"] == 1
+    assert "pablo" not in str(global_model).lower()
+
+
 def test_proactivity_records_inbox_item(tmp_path) -> None:
     runtime = create_persistent_runtime(tmp_path / "nino.db")
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)

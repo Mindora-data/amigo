@@ -373,6 +373,9 @@ Auditoria final de producto 100% local:
 94. Hecho inicial: la proactividad prioriza recordatorios de eventos temporales próximos y los marca como `reminded` para evitar avisos repetidos.
 95. Hecho inicial: el parser temporal entiende días de la semana y horas exactas (`el jueves a las 17:30 tengo reunión`) conservando la zona horaria del turno.
 96. Hecho inicial: los eventos temporales guardan `lead_time_hours` y la proactividad avisa dentro de la ventana previa sin repetir tras marcar `reminded`.
-97. Siguiente: separar aprendizaje general anonimo de memoria privada, permitiendo aprender patrones de conversaciones sin exponer datos personales entre usuarios.
+97. Hecho inicial: NIÑO mantiene un modelo global anónimo con conteos agregados de intents, tags y conceptos, separado de la memoria privada por usuario.
+98. Hecho inicial: el modelo global se persiste en SQLite y no guarda texto crudo, nombres, emails ni números sensibles.
+99. Hecho inicial: `GET /operations/global-model` expone solo el agregado anónimo para inspección y auditoría.
+100. Siguiente: usar el modelo global anónimo para mejorar sugerencias/proactividad sin incorporar datos privados de otros usuarios.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

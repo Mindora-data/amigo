@@ -298,6 +298,56 @@ class SQLiteColdStore:
         return [row["agent_id"] for row in rows]
 
 
+class SQLiteGlobalModelStore:
+    def __init__(self, path: str | Path) -> None:
+        self.conn = _connect(path)
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS global_models (
+                model_id TEXT PRIMARY KEY,
+                payload_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        self.conn.commit()
+
+    def get(self) -> dict[str, object]:
+        row = self.conn.execute("SELECT payload_json FROM global_models WHERE model_id = ?", ("anonymous",)).fetchone()
+        if row is None:
+            return {
+                "schema_version": 1,
+                "conversation_count": 0,
+                "intent_counts": {},
+                "tag_counts": {},
+                "concept_counts": {},
+                "updated_at": None,
+            }
+        return json.loads(row["payload_json"])
+
+    def put(self, model: dict[str, object]) -> None:
+        payload = {
+            "schema_version": int(model.get("schema_version", 1)),
+            "conversation_count": int(model.get("conversation_count", 0)),
+            "intent_counts": dict(model.get("intent_counts", {})),
+            "tag_counts": dict(model.get("tag_counts", {})),
+            "concept_counts": dict(model.get("concept_counts", {})),
+            "updated_at": model.get("updated_at"),
+        }
+        updated_at = str(payload.get("updated_at") or datetime.now().isoformat())
+        self.conn.execute(
+            """
+            INSERT INTO global_models (model_id, payload_json, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(model_id) DO UPDATE SET
+                payload_json = excluded.payload_json,
+                updated_at = excluded.updated_at
+            """,
+            ("anonymous", json.dumps(payload, sort_keys=True), updated_at),
+        )
+        self.conn.commit()
+
+
 def create_persistent_runtime(path: str | Path) -> NinoRuntime:
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -305,4 +355,5 @@ def create_persistent_runtime(path: str | Path) -> NinoRuntime:
         state_store=SQLiteStateStore(db_path),
         episode_store=SQLiteEpisodeStore(db_path),
         cold_store=SQLiteColdStore(db_path),
+        global_model_store=SQLiteGlobalModelStore(db_path),
     )

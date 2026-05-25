@@ -89,6 +89,34 @@ class InMemoryStateStore:
     def list_agent_ids(self) -> list[str]:
         return sorted(self._states.keys())
 
+class InMemoryGlobalModelStore:
+    def __init__(self) -> None:
+        self._model: dict[str, Any] = {
+            "schema_version": 1,
+            "conversation_count": 0,
+            "intent_counts": {},
+            "tag_counts": {},
+            "concept_counts": {},
+            "updated_at": None,
+        }
+
+    def get(self) -> dict[str, Any]:
+        return {
+            "schema_version": self._model.get("schema_version", 1),
+            "conversation_count": int(self._model.get("conversation_count", 0)),
+            "intent_counts": dict(self._model.get("intent_counts", {})),
+            "tag_counts": dict(self._model.get("tag_counts", {})),
+            "concept_counts": dict(self._model.get("concept_counts", {})),
+            "updated_at": self._model.get("updated_at"),
+        }
+
+    def put(self, model: dict[str, Any]) -> None:
+        self._model = self._sanitize_global_model(model)
+
+    def _sanitize_global_model(self, model: dict[str, Any]) -> dict[str, Any]:
+        allowed = {"schema_version", "conversation_count", "intent_counts", "tag_counts", "concept_counts", "updated_at"}
+        return {key: model[key] for key in allowed if key in model}
+
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
@@ -124,6 +152,39 @@ def _redact_text(value: str) -> str:
     value = re.sub(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", "[email]", value)
     value = re.sub(r"\b\d{3,}\b", "[number]", value)
     return value
+
+def _safe_global_tokens(text: str) -> list[str]:
+    blocked = {
+        "soy", "llamo", "email", "correo", "telefono", "teléfono", "direccion", "dirección",
+        "password", "contraseña", "pin", "dni", "pablo", "ana", "bob",
+    }
+    tokens = []
+    for token in _tokens_for_model(_redact_text(text)):
+        normalized = _without_accents(token)
+        if normalized in blocked or normalized.startswith("["):
+            continue
+        if re.search(r"\d", normalized):
+            continue
+        tokens.append(normalized)
+    return tokens[:12]
+
+def _update_global_model(model: dict[str, Any], percept_frame: dict[str, Any], now: datetime) -> dict[str, Any]:
+    updated = {
+        "schema_version": 1,
+        "conversation_count": int(model.get("conversation_count", 0)) + 1,
+        "intent_counts": dict(model.get("intent_counts", {})),
+        "tag_counts": dict(model.get("tag_counts", {})),
+        "concept_counts": dict(model.get("concept_counts", {})),
+        "updated_at": now.isoformat(),
+    }
+    intent = str(percept_frame.get("intent", "unknown"))
+    updated["intent_counts"][intent] = int(updated["intent_counts"].get(intent, 0)) + 1
+    text = str(percept_frame.get("text", ""))
+    for tag in _semantic_tags(text):
+        updated["tag_counts"][tag] = int(updated["tag_counts"].get(tag, 0)) + 1
+    for token in _safe_global_tokens(f"{intent} {text}"):
+        updated["concept_counts"][token] = int(updated["concept_counts"].get(token, 0)) + 1
+    return updated
 
 def _semantic_tags(text: str) -> list[str]:
     plain = _without_accents(text)
@@ -589,11 +650,13 @@ class NinoRuntime:
         state_store: InMemoryStateStore,
         episode_store: InMemoryEpisodeStore | None = None,
         cold_store: InMemoryColdStore | None = None,
+        global_model_store: InMemoryGlobalModelStore | None = None,
         llm_client: LLMClient | None = None,
     ) -> None:
         self.state_store = state_store
         self.episode_store = episode_store or InMemoryEpisodeStore()
         self.cold_store = cold_store or InMemoryColdStore()
+        self.global_model_store = global_model_store or InMemoryGlobalModelStore()
         self.retriever = MemoryRetriever(self.episode_store, self.cold_store)
         self.consolidator = Consolidator(self.cold_store)
         self.proactivity = ProactivityEngine(self.episode_store)
@@ -1175,8 +1238,9 @@ class NinoRuntime:
     def development_snapshot(self) -> dict[str, Any]:
         agents = self.list_agents()
         metrics = [self.metrics(agent_id) for agent_id in agents]
+        global_model = self.global_model()
         if not metrics:
-            return {"agent_count": 0, "agents": [], "average_maturity": 0.0, "total_episodes": 0}
+            return {"agent_count": 0, "agents": [], "average_maturity": 0.0, "total_episodes": 0, "global_model": global_model}
         return {
             "agent_count": len(agents),
             "agents": agents,
@@ -1184,7 +1248,11 @@ class NinoRuntime:
             "total_episodes": sum(item["episode_count"] for item in metrics),
             "total_cold_memory": sum(item["cold_memory_count"] for item in metrics),
             "total_open_questions": sum(item["open_question_count"] for item in metrics),
+            "global_model": global_model,
         }
+
+    def global_model(self) -> dict[str, Any]:
+        return self.global_model_store.get()
 
     def agent_profile(self, agent_id: str) -> dict[str, Any]:
         state = self.load_or_init_state(agent_id)
@@ -1626,6 +1694,7 @@ class NinoRuntime:
         )
         _regulate_drives(state, percept_frame)
         _update_cognitive_models(state, percept_frame, now)
+        self.global_model_store.put(_update_global_model(self.global_model_store.get(), percept_frame, now))
         state.active_goals = _derive_active_goals(state)
         state.energy = _clamp01(state.drive_vector.get("energy", state.energy))
         self.state_store.put(state)
