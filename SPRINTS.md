@@ -390,6 +390,10 @@ Auditoria final de producto 100% local:
 111. Hecho inicial: `GET /user` y `GET /chat` sirven la UI final minimalista de usuario, separada de `/app`.
 112. Hecho inicial: la UI final muestra primero login y, tras entrar, solo chat con NIÑO y control de voz si el navegador soporta Web Speech.
 113. Hecho inicial: la UI final usa rutas privadas `/users/{user_id}/agents/nino/...`, conservando aislamiento de memoria por usuario.
-114. Siguiente: preparar cambio de proveedor LLM a DeepSeek manteniendo Claude como fallback configurable.
+114. Hecho inicial: el runtime LLM soporta proveedor `deepseek` mediante API compatible con chat completions (`DEEPSEEK_API_KEY`/`NINO_DEEPSEEK_API_KEY`).
+115. Hecho inicial: las trazas, `llm_status`, `nino_context` y fuentes de respuesta reflejan el proveedor real (`llm_deepseek`, `llm_claude`) en lugar de asumir siempre Claude.
+116. Hecho inicial: `POST /operations/deepseek/configure` guarda DeepSeek en `.env.local` con permisos 600, no devuelve la clave y cambia el runtime activo sin reinicio inmediato.
+117. Hecho inicial: `/app` permite guardar DeepSeek desde la consola LLM manteniendo Claude disponible como configuración alternativa.
+118. Siguiente: preparar validación Vercel de la UI final minimalista y documentar el despliegue externo.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

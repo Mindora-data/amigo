@@ -82,6 +82,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/operations/claude/configure" in body
     assert b"/operations/claude/disable" in body
     assert b"Guardar Claude" in body
+    assert b"Guardar DeepSeek" in body
+    assert b"deepseek-chat" in body
+    assert b"/operations/deepseek/configure" in body
     assert b"Cierre guiado" in body
     assert b"guidedFinal" in body
     assert b"waitForHealth" in body
@@ -282,6 +285,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /operations/claude" in root["endpoints"]
     assert "POST /operations/claude/configure" in root["endpoints"]
     assert "POST /operations/claude/disable" in root["endpoints"]
+    assert "POST /operations/deepseek/configure" in root["endpoints"]
     assert "GET /operations/global-model" in root["endpoints"]
     assert "GET /operations/global-suggestions" in root["endpoints"]
     assert "GET /operations/audit" in root["endpoints"]
@@ -311,6 +315,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "/operations/claude" in openapi["paths"]
     assert "/operations/claude/configure" in openapi["paths"]
     assert "/operations/claude/disable" in openapi["paths"]
+    assert "/operations/deepseek/configure" in openapi["paths"]
     assert "/operations/global-model" in openapi["paths"]
     assert "/operations/global-suggestions" in openapi["paths"]
     assert "/operations/audit" in openapi["paths"]
@@ -787,6 +792,47 @@ def test_http_api_configures_claude_in_keychain_without_env_secret(tmp_path, mon
     assert "sk-ant-keychain-secret" not in content
     assert "sk-ant-keychain-secret" not in json.dumps(configured)
     assert calls[0][:4] == ["/usr/bin/security", "add-generic-password", "-U", "-a"]
+
+
+def test_http_api_configures_deepseek_without_returning_key(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("NINO_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("NINO_DEEPSEEK_API_KEY", raising=False)
+    (tmp_path / ".env.local").write_text(
+        "NINO_PORT=8000\nANTHROPIC_API_KEY=old-secret\nNINO_DEEPSEEK_API_KEY=old-deepseek\n",
+        encoding="utf-8",
+    )
+    app = create_app(tmp_path / "nino.db")
+
+    configured = _request(
+        app,
+        "POST",
+        "/operations/deepseek/configure",
+        {
+            "api_key": "deepseek-secret",
+            "model": "deepseek-chat",
+            "base_url": "https://example.test/chat/completions",
+        },
+    )
+    status = _request(app, "GET", "/operations/claude")
+    content = (tmp_path / ".env.local").read_text(encoding="utf-8")
+
+    assert configured["ok"] is True
+    assert configured["provider"] == "deepseek"
+    assert configured["llm"]["configured"] is True
+    assert configured["llm"]["provider"] == "deepseek"
+    assert status["configured"] is True
+    assert status["provider"] == "deepseek"
+    assert status["api_key_present"] is True
+    assert "deepseek-secret" not in json.dumps(configured)
+    assert "NINO_PORT=8000" in content
+    assert "NINO_LLM_PROVIDER=deepseek" in content
+    assert "NINO_DEEPSEEK_MODEL=deepseek-chat" in content
+    assert "NINO_DEEPSEEK_BASE_URL=https://example.test/chat/completions" in content
+    assert "NINO_DEEPSEEK_API_KEY=deepseek-secret" in content
+    assert "old-secret" not in content
+    assert "old-deepseek" not in content
+    assert oct((tmp_path / ".env.local").stat().st_mode & 0o777) == "0o600"
 
 
 def test_http_api_disables_claude_and_cleans_local_config(tmp_path, monkeypatch) -> None:

@@ -677,6 +677,11 @@ class NinoRuntime:
         self.proactivity = ProactivityEngine(self.episode_store)
         self.llm_client = llm_client if llm_client is not None else build_configured_llm()
 
+    def _llm_provider(self) -> str | None:
+        if self.llm_client is None:
+            return None
+        return str(getattr(self.llm_client, "provider", "claude"))
+
     def load_or_init_state(self, agent_id: str) -> AgentState:
         existing = self.state_store.get(agent_id)
         if existing:
@@ -1146,10 +1151,11 @@ class NinoRuntime:
     def llm_status(self, agent_id: str) -> dict[str, Any]:
         state = self.load_or_init_state(agent_id)
         client = self.llm_client
+        provider = self._llm_provider()
         return {
             "agent_id": agent_id,
             "enabled": client is not None,
-            "provider": "claude" if client is not None else None,
+            "provider": provider,
             "model": getattr(client, "model", None) if client is not None else None,
             "max_tokens": getattr(client, "max_tokens", None) if client is not None else None,
             "last_response": state.relation_state.get("last_llm_response"),
@@ -1157,6 +1163,7 @@ class NinoRuntime:
 
     def llm_probe(self, agent_id: str) -> dict[str, Any]:
         client = self.llm_client
+        provider = self._llm_provider()
         if client is None:
             return {
                 "agent_id": agent_id,
@@ -1164,10 +1171,10 @@ class NinoRuntime:
                 "provider": None,
                 "model": None,
                 "error": "llm_not_configured",
-            }
+        }
         prompt = {
             "system": "Responde solo con una frase breve en español.",
-            "user": "Di que Claude esta conectado a NIÑO.",
+            "user": f"Di que {provider or 'el LLM'} esta conectado a NIÑO.",
         }
         try:
             text = client.complete(prompt)
@@ -1175,14 +1182,14 @@ class NinoRuntime:
             return {
                 "agent_id": agent_id,
                 "ok": False,
-                "provider": "claude",
+                "provider": provider,
                 "model": getattr(client, "model", None),
                 "error": exc.__class__.__name__,
             }
         return {
             "agent_id": agent_id,
             "ok": bool(text),
-            "provider": "claude",
+            "provider": provider,
             "model": getattr(client, "model", None),
             "text": text,
             "error": None,
@@ -1665,6 +1672,7 @@ class NinoRuntime:
         )
         decision = self.policy_decide(policy_req)
         llm_error: str | None = None
+        llm_provider = self._llm_provider()
         if self.llm_client is not None and text.strip():
             try:
                 prompt = build_nino_prompt(
@@ -1684,7 +1692,7 @@ class NinoRuntime:
                     decision = PolicyResponse(
                         chosen_action={"type": "external_message", "payload": {"text": llm_text}},
                         confidence=0.72,
-                        reason_trace=[*decision.reason_trace, "llm_provider_claude"],
+                        reason_trace=[*decision.reason_trace, f"llm_provider_{llm_provider}"],
                     )
             except Exception as exc:
                 llm_error = exc.__class__.__name__
@@ -1716,7 +1724,7 @@ class NinoRuntime:
         state.updated_at = now
         state.relation_state = _update_relation_from_percept(state.relation_state, percept_frame, now)
         response_text = str(decision.chosen_action.get("payload", {}).get("text", "")).strip()
-        source = "llm_claude" if "llm_provider_claude" in decision.reason_trace else "policy"
+        source = f"llm_{llm_provider}" if llm_provider and f"llm_provider_{llm_provider}" in decision.reason_trace else "policy"
         if response_text:
             state.relation_state = _append_response_history(
                 state.relation_state,
@@ -1727,7 +1735,7 @@ class NinoRuntime:
             state.relation_state = {
                 **state.relation_state,
                 "last_llm_response": {
-                    "provider": "claude" if self.llm_client is not None else None,
+                    "provider": llm_provider,
                     "source": source,
                     "error": llm_error,
                     "at": now.isoformat(),
@@ -1740,7 +1748,7 @@ class NinoRuntime:
             payload={
                 "intent": intent,
                 "action_type": decision.chosen_action.get("type"),
-                "response_source": "llm_claude" if "llm_provider_claude" in decision.reason_trace else "policy",
+                "response_source": source,
                 "confidence": decision.confidence,
                 "reason_trace": decision.reason_trace,
                 "llm_error": llm_error,
@@ -1765,12 +1773,12 @@ class NinoRuntime:
             "auto_consolidation": auto_consolidation,
             "maturity": state.cognitive_time["maturity"],
             "active_goals": list(state.active_goals),
-            "llm_provider": "claude" if self.llm_client is not None else None,
+            "llm_provider": llm_provider,
             "llm_error": llm_error,
             "nino_context": _nino_context_summary(
                 state=state,
                 source=source,
-                llm_provider="claude" if self.llm_client is not None else None,
+                llm_provider=llm_provider,
                 llm_error=llm_error,
                 retrieved=retrieved,
                 llm_retrieved=llm_retrieved,

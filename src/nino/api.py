@@ -345,6 +345,12 @@ APP_HTML = """<!doctype html>
           <button id="saveClaude" class="secondary">Guardar Claude</button>
           <button id="llmProbe" class="secondary">Probar Claude</button>
         </div>
+        <input id="deepseekModel" value="deepseek-chat" aria-label="modelo DeepSeek">
+        <input id="deepseekKey" type="password" placeholder="DEEPSEEK_API_KEY" aria-label="api key DeepSeek">
+        <div class="row">
+          <button id="saveDeepSeek" class="secondary">Guardar DeepSeek</button>
+          <input id="deepseekBaseUrl" value="https://api.deepseek.com/chat/completions" aria-label="base url DeepSeek">
+        </div>
         <div class="row">
           <button id="guidedFinal" class="danger">Cierre guiado</button>
         </div>
@@ -1237,6 +1243,22 @@ APP_HTML = """<!doctype html>
       status(out.ok ? "Claude configurado. Reinicia launchd para persistencia completa." : `Claude no configurado: ${out.error || "error"}`);
       await loadLLMStatus();
     };
+    $("saveDeepSeek").onclick = async () => {
+      const apiKey = $("deepseekKey").value.trim();
+      const model = $("deepseekModel").value.trim() || "deepseek-chat";
+      const baseUrl = $("deepseekBaseUrl").value.trim() || "https://api.deepseek.com/chat/completions";
+      if (!apiKey) return status("Pega una DEEPSEEK_API_KEY para configurar DeepSeek.");
+      if (!confirm("Guardar DeepSeek en .env.local con permisos locales 600?")) return;
+      const out = await api("/operations/deepseek/configure", {
+        method: "POST",
+        body: JSON.stringify({api_key: apiKey, model, base_url: baseUrl})
+      });
+      $("deepseekKey").value = "";
+      $("llmSummary").textContent = describeClaudeConfig(out.llm || out);
+      print($("llm"), out);
+      status(out.ok ? "DeepSeek configurado. Reinicia launchd para persistencia completa." : `DeepSeek no configurado: ${out.error || "error"}`);
+      await loadLLMStatus();
+    };
     $("guidedFinal").onclick = async () => {
       const mode = $("claudeSecretMode").value;
       if (!confirm(mode === "keychain" ? "Guardar Claude, reiniciar el servicio y ejecutar cierre final con llamada real a Claude?" : "Guardar Claude en .env.local, reiniciar el servicio y ejecutar cierre final con llamada real a Claude?")) return;
@@ -1576,6 +1598,7 @@ API_ENDPOINTS = [
     "GET /operations/claude",
     "POST /operations/claude/configure",
     "POST /operations/claude/disable",
+    "POST /operations/deepseek/configure",
     "GET /operations/audit",
     "GET /operations/product-status",
     "GET /operations/next-action",
@@ -2047,6 +2070,7 @@ class NinoService:
     def operating_mode(self) -> dict[str, Any]:
         llm_client = self.runtime.llm_client
         config = llm_config_status()
+        provider = getattr(llm_client, "provider", None) if llm_client is not None else config["provider"]
         return {
             "local_first": True,
             "storage": {
@@ -2055,7 +2079,7 @@ class NinoService:
             },
             "external_llm": {
                 "enabled": llm_client is not None,
-                "provider": "claude" if llm_client is not None else None,
+                "provider": provider if llm_client is not None else None,
                 "model": getattr(llm_client, "model", None) if llm_client is not None else None,
                 "config": config,
             },
@@ -2068,16 +2092,17 @@ class NinoService:
                 "export_import",
                 "backup",
             ],
-            "external_capabilities": ["claude_responses"] if llm_client is not None else [],
+            "external_capabilities": [f"{provider}_responses"] if provider and llm_client is not None else [],
         }
 
     def claude_config(self) -> dict[str, Any]:
         client = self.runtime.llm_client
         config = llm_config_status()
+        provider = getattr(client, "provider", None) if client is not None else config["provider"]
         return {
             "configured": config["enabled"],
             "runtime_enabled": client is not None,
-            "provider": "claude" if client is not None else config["provider"],
+            "provider": provider,
             "model": getattr(client, "model", None) if client is not None else config["model"],
             "api_key_present": config["api_key_present"],
             "api_key_source": config["api_key_source"],
@@ -2168,6 +2193,65 @@ class NinoService:
             ],
         }
 
+    def configure_deepseek(self, payload: dict[str, Any]) -> dict[str, Any]:
+        api_key = str(payload.get("api_key", "")).strip()
+        model = str(payload.get("model", "deepseek-chat")).strip() or "deepseek-chat"
+        base_url = str(payload.get("base_url", "https://api.deepseek.com/chat/completions")).strip() or "https://api.deepseek.com/chat/completions"
+        if not api_key:
+            return {"ok": False, "error": "missing_api_key", "llm": self.claude_config()}
+        if any(char in model for char in "\r\n="):
+            return {"ok": False, "error": "invalid_model", "llm": self.claude_config()}
+        if any(char in base_url for char in "\r\n="):
+            return {"ok": False, "error": "invalid_base_url", "llm": self.claude_config()}
+
+        env_file = Path(".env.local")
+        preserved: list[str] = []
+        if env_file.exists():
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                if not line.startswith(
+                    (
+                        "NINO_LLM_PROVIDER=",
+                        "NINO_CLAUDE_MODEL=",
+                        "ANTHROPIC_API_KEY=",
+                        "NINO_KEYCHAIN_SERVICE=",
+                        "NINO_DEEPSEEK_MODEL=",
+                        "NINO_DEEPSEEK_BASE_URL=",
+                        "NINO_DEEPSEEK_API_KEY=",
+                        "DEEPSEEK_API_KEY=",
+                    )
+                ):
+                    preserved.append(line)
+        lines = [
+            *preserved,
+            "NINO_LLM_PROVIDER=deepseek",
+            f"NINO_DEEPSEEK_MODEL={model}",
+            f"NINO_DEEPSEEK_BASE_URL={base_url}",
+            f"NINO_DEEPSEEK_API_KEY={api_key}",
+        ]
+        env_file.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+        env_file.chmod(0o600)
+
+        os.environ["NINO_LLM_PROVIDER"] = "deepseek"
+        os.environ["NINO_DEEPSEEK_MODEL"] = model
+        os.environ["NINO_DEEPSEEK_BASE_URL"] = base_url
+        os.environ["NINO_DEEPSEEK_API_KEY"] = api_key
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        os.environ.pop("NINO_KEYCHAIN_SERVICE", None)
+        self.runtime.llm_client = build_configured_llm()
+        return {
+            "ok": True,
+            "env_file": str(env_file),
+            "provider": "deepseek",
+            "model": model,
+            "base_url": base_url,
+            "restart_recommended": True,
+            "llm": self.claude_config(),
+            "notes": [
+                "La API key no se devuelve en esta respuesta.",
+                "Reinicia launchd para que el servicio persistente cargue .env.local desde cero.",
+            ],
+        }
+
     def disable_claude(self, payload: dict[str, Any]) -> dict[str, Any]:
         if payload.get("confirm") is not True:
             return {"ok": False, "error": "confirmation_required", "claude": self.claude_config()}
@@ -2199,13 +2283,31 @@ class NinoService:
                 line
                 for line in env_file.read_text(encoding="utf-8").splitlines()
                 if not line.startswith(
-                    ("NINO_LLM_PROVIDER=", "NINO_CLAUDE_MODEL=", "ANTHROPIC_API_KEY=", "NINO_KEYCHAIN_SERVICE=")
+                    (
+                        "NINO_LLM_PROVIDER=",
+                        "NINO_CLAUDE_MODEL=",
+                        "ANTHROPIC_API_KEY=",
+                        "NINO_KEYCHAIN_SERVICE=",
+                        "NINO_DEEPSEEK_MODEL=",
+                        "NINO_DEEPSEEK_BASE_URL=",
+                        "NINO_DEEPSEEK_API_KEY=",
+                        "DEEPSEEK_API_KEY=",
+                    )
                 )
             ]
             env_file.write_text(("\n".join(preserved).rstrip() + "\n") if preserved else "", encoding="utf-8")
             env_file.chmod(0o600)
 
-        for name in ("NINO_LLM_PROVIDER", "NINO_CLAUDE_MODEL", "ANTHROPIC_API_KEY", "NINO_KEYCHAIN_SERVICE"):
+        for name in (
+            "NINO_LLM_PROVIDER",
+            "NINO_CLAUDE_MODEL",
+            "ANTHROPIC_API_KEY",
+            "NINO_KEYCHAIN_SERVICE",
+            "NINO_DEEPSEEK_MODEL",
+            "NINO_DEEPSEEK_BASE_URL",
+            "NINO_DEEPSEEK_API_KEY",
+            "DEEPSEEK_API_KEY",
+        ):
             os.environ.pop(name, None)
         self.runtime.llm_client = None
         return {
@@ -3084,6 +3186,8 @@ class NinoHttpApp:
             return "200 OK", self.service.configure_claude(payload)
         if method == "POST" and path == "/operations/claude/disable":
             return "200 OK", self.service.disable_claude(payload)
+        if method == "POST" and path == "/operations/deepseek/configure":
+            return "200 OK", self.service.configure_deepseek(payload)
         if method == "GET" and path == "/operations/audit":
             return "200 OK", self.service.product_audit()
         if method == "GET" and path == "/operations/product-status":

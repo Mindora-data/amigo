@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from nino.consolidation import MemoryFact
-from nino.llm import build_configured_llm, llm_config_status
+from nino.llm import DeepSeekClient, build_configured_llm, llm_config_status
 from nino.runtime import InMemoryStateStore, NinoRuntime
 
 
@@ -15,6 +15,12 @@ class FakeLLM:
     def complete(self, prompt: dict[str, Any]) -> str:
         self.prompts.append(prompt)
         return self.text
+
+
+class FakeDeepSeekLLM(FakeLLM):
+    provider = "deepseek"
+    model = "deepseek-chat"
+    max_tokens = 320
 
 
 class FailingLLM:
@@ -54,6 +60,20 @@ def test_tick_context_memory_candidates_include_origin_fields() -> None:
     assert candidate["fact_id"]
     assert candidate["source_episode_id"]
     assert candidate["memory_type"] in {"hot", "cold"}
+
+
+def test_tick_reports_actual_llm_provider() -> None:
+    llm = FakeDeepSeekLLM("Respuesta desde DeepSeek.")
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    out = runtime.tick("agent-llm", {"intent": "chat", "text": "hola"})
+
+    assert out["action"]["payload"]["text"] == "Respuesta desde DeepSeek."
+    assert out["llm_provider"] == "deepseek"
+    assert "llm_provider_deepseek" in out["reason_trace"]
+    assert out["nino_context"]["response_source"] == "llm_deepseek"
+    assert runtime.llm_status("agent-llm")["provider"] == "deepseek"
+    assert runtime.llm_status("agent-llm")["last_response"]["source"] == "llm_deepseek"
 
 
 def test_llm_prompt_keeps_internal_context_passive_for_plain_chat() -> None:
@@ -162,6 +182,42 @@ def test_llm_config_status_builds_claude_client_without_exposing_key(monkeypatch
     assert client is not None
     assert getattr(client, "model") == "claude-test"
     assert getattr(client, "max_tokens") == 111
+
+
+def test_llm_config_status_builds_deepseek_client_without_exposing_key(monkeypatch) -> None:
+    monkeypatch.setenv("NINO_LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-secret")
+    monkeypatch.setenv("NINO_DEEPSEEK_MODEL", "deepseek-reasoner")
+    monkeypatch.setenv("NINO_DEEPSEEK_BASE_URL", "https://example.test/chat/completions")
+    monkeypatch.setenv("NINO_LLM_MAX_TOKENS", "222")
+
+    status = llm_config_status()
+    client = build_configured_llm()
+
+    assert status["enabled"] is True
+    assert status["provider"] == "deepseek"
+    assert status["model"] == "deepseek-reasoner"
+    assert status["base_url"] == "https://example.test/chat/completions"
+    assert status["api_key_present"] is True
+    assert status["api_key_source"] == "env"
+    assert "deepseek-secret" not in str(status)
+    assert isinstance(client, DeepSeekClient)
+    assert getattr(client, "provider") == "deepseek"
+    assert getattr(client, "model") == "deepseek-reasoner"
+    assert getattr(client, "max_tokens") == 222
+
+
+def test_llm_config_status_reports_missing_deepseek_api_key(monkeypatch) -> None:
+    monkeypatch.setenv("NINO_LLM_PROVIDER", "deepseek")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("NINO_DEEPSEEK_API_KEY", raising=False)
+
+    status = llm_config_status()
+
+    assert status["enabled"] is False
+    assert status["provider"] == "deepseek"
+    assert status["missing"] == ["DEEPSEEK_API_KEY"]
+    assert build_configured_llm() is None
 
 
 def test_llm_config_status_reports_invalid_numeric_settings(monkeypatch) -> None:
