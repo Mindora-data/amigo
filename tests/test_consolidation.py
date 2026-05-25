@@ -52,3 +52,32 @@ def test_consolidation_is_idempotent_per_episode() -> None:
     assert len(out1["cold_memory_updates"]) == 1
     assert len(out2["cold_memory_updates"]) == 0
     assert len(cold.list_for_agent("a1")) == 1
+
+
+def test_tick_auto_consolidates_high_confidence_preference() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+
+    out = runtime.tick(
+        "agent-c",
+        {"intent": "chat", "text": "prefiero trabajar por sprints claros", "salience": 0.8, "confidence": 0.95},
+    )
+
+    facts = runtime.cold_store.list_for_agent("agent-c")
+    assert out["auto_consolidated_count"] == 1
+    assert out["auto_consolidation"]["cold_memory_updates"][0]["value"] == "trabajar por sprints claros"
+    assert facts[0].key == "preference"
+    assert facts[0].value == "trabajar por sprints claros"
+    assert "auto_memory_consolidation" in out["reason_trace"]
+
+
+def test_tick_does_not_auto_consolidate_low_confidence_preference() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+
+    out = runtime.tick(
+        "agent-c",
+        {"intent": "chat", "text": "prefiero noches", "salience": 0.8, "confidence": 0.7},
+    )
+
+    assert out["auto_consolidated_count"] == 0
+    assert out["auto_consolidation"]["cold_memory_updates"] == []
+    assert runtime.cold_store.list_for_agent("agent-c") == []

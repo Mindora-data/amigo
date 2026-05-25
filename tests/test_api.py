@@ -166,7 +166,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     mode = _request(app, "GET", "/operations/mode")
     claude = _request(app, "GET", "/operations/claude")
     _request(app, "POST", "/operations/backup", {})
-    _request(
+    tick = _request(
         app,
         "POST",
         "/agents/nino/tick",
@@ -188,7 +188,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
         app,
         "POST",
         "/agents/api-agent/tick",
-        {"intent": "music", "text": "me gusta piano", "salience": 0.9},
+        {"intent": "music", "text": "me gusta piano", "salience": 0.9, "confidence": 0.95},
     )
     state = _request(app, "GET", "/agents/api-agent/state")
     episodes = _request(app, "GET", "/agents/api-agent/episodes")
@@ -397,6 +397,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert tick["nino_context"]["response_source"] == "policy"
     assert tick["nino_context"]["llm_provider"] is None
     assert isinstance(tick["nino_context"]["memory_candidates"], list)
+    assert tick["auto_consolidated_count"] == 1
+    assert tick["auto_consolidation"]["cold_memory_updates"][0]["key"] == "preference"
     assert state["tick"] == 1
     assert len(episodes["episodes"]) == 1
     assert episodes["episodes"][0]["text"] == "me gusta piano"
@@ -675,7 +677,7 @@ def test_http_api_exposes_relation_state(tmp_path) -> None:
 def test_http_api_exposes_self_and_world_models(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 
-    _request(
+    tick = _request(
         app,
         "POST",
         "/agents/api-agent/tick",
@@ -805,7 +807,7 @@ def test_http_api_internal_cycle_consolidates_memory(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
 
-    _request(
+    tick = _request(
         app,
         "POST",
         "/agents/api-agent/tick",
@@ -829,7 +831,8 @@ def test_http_api_internal_cycle_consolidates_memory(tmp_path) -> None:
         {"query_intent": "preference piano", "time_scope": "long"},
     )
 
-    assert cycle["consolidated_count"] == 1
+    assert tick["auto_consolidated_count"] == 1
+    assert cycle["consolidated_count"] == 0
     assert any(candidate["fact_id"].startswith("cold::") for candidate in memory["memory_candidates"])
 
 

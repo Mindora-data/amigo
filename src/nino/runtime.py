@@ -60,6 +60,14 @@ def _nino_context_summary(
     }
 
 
+def _should_auto_consolidate(percept_frame: dict[str, Any]) -> bool:
+    text = str(percept_frame.get("text", "")).strip()
+    if not text:
+        return False
+    confidence = _clamp01(float(percept_frame.get("confidence", 0.8)))
+    return confidence >= 0.9
+
+
 class InMemoryStateStore:
     def __init__(self) -> None:
         self._states: dict[str, AgentState] = {}
@@ -1391,17 +1399,28 @@ class NinoRuntime:
                 llm_error = exc.__class__.__name__
 
         now = datetime.now(timezone.utc)
-        self.episode_store.append(
-            Episode(
-                episode_id=str(uuid4()),
-                agent_id=agent_id,
-                timestamp=now,
-                text=percept_frame.get("text", ""),
-                intent=percept_frame.get("intent", "unknown"),
-                salience=_clamp01(float(percept_frame.get("salience", 0.5))),
-                confidence=_clamp01(float(percept_frame.get("confidence", 0.8))),
-            )
+        episode = Episode(
+            episode_id=str(uuid4()),
+            agent_id=agent_id,
+            timestamp=now,
+            text=percept_frame.get("text", ""),
+            intent=percept_frame.get("intent", "unknown"),
+            salience=_clamp01(float(percept_frame.get("salience", 0.5))),
+            confidence=_clamp01(float(percept_frame.get("confidence", 0.8))),
         )
+        self.episode_store.append(episode)
+
+        auto_consolidation = {"cold_memory_updates": [], "contradictions": []}
+        if _should_auto_consolidate(percept_frame):
+            auto_consolidation = self.consolidator.consolidate(
+                agent_id=agent_id,
+                episodes=[episode],
+                since=now - timedelta(seconds=1),
+                until=now + timedelta(seconds=1),
+                min_confidence=0.9,
+            )
+            if auto_consolidation["cold_memory_updates"] or auto_consolidation["contradictions"]:
+                decision.reason_trace = [*decision.reason_trace, "auto_memory_consolidation"]
 
         state.tick += 1
         state.updated_at = now
@@ -1436,6 +1455,7 @@ class NinoRuntime:
                 "reason_trace": decision.reason_trace,
                 "llm_error": llm_error,
                 "retrieved_memory_count": len(retrieved.memory_candidates),
+                "auto_consolidated_count": len(auto_consolidation["cold_memory_updates"]),
             },
         )
         _regulate_drives(state, percept_frame)
@@ -1450,6 +1470,8 @@ class NinoRuntime:
             "confidence": decision.confidence,
             "reason_trace": decision.reason_trace,
             "retrieved_memory_count": len(retrieved.memory_candidates),
+            "auto_consolidated_count": len(auto_consolidation["cold_memory_updates"]),
+            "auto_consolidation": auto_consolidation,
             "maturity": state.cognitive_time["maturity"],
             "active_goals": list(state.active_goals),
             "llm_provider": "claude" if self.llm_client is not None else None,
