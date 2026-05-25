@@ -235,6 +235,14 @@ APP_HTML = """<!doctype html>
           <button id="facts" class="secondary">Memoria fría</button>
         </div>
         <div class="row">
+          <select id="factStatusFilter" aria-label="estado memoria fría">
+            <option value="all">Todas</option>
+            <option value="active">Activas</option>
+            <option value="inactive">Inactivas</option>
+          </select>
+          <input id="factKeyFilter" placeholder="clave" aria-label="clave memoria fría">
+        </div>
+        <div class="row">
           <input id="memoryQuery" value="sprints" aria-label="buscar memoria">
           <select id="memoryTypeFilter" aria-label="filtro tipo memoria">
             <option value="all">Todo</option>
@@ -1014,11 +1022,20 @@ APP_HTML = """<!doctype html>
       print($("memory"), out);
     }
     async function loadFacts() {
-      const out = await api(agentPath("/memory/facts?status=all"));
+      const params = new URLSearchParams();
+      params.set("status", $("factStatusFilter").value || "all");
+      const key = $("factKeyFilter").value.trim();
+      if (key) params.set("key", key);
+      const out = await api(agentPath(`/memory/facts?${params.toString()}`));
       clearList($("memoryList"));
       if (out.fact_counts) {
         const counts = out.fact_counts;
-        addListItem($("memoryList"), `Memoria fría: ${counts.total}`, `activa ${counts.active} · inactiva ${counts.inactive}`);
+        const visible = out.visible_fact_counts || counts;
+        addListItem(
+          $("memoryList"),
+          `Memoria fría: ${out.visible_facts ?? out.facts.length}/${counts.total}`,
+          `activa ${visible.active}/${counts.active} · inactiva ${visible.inactive}/${counts.inactive} · clave ${out.key_filter || "todas"} · estado ${out.status_filter || "all"}`
+        );
       }
       out.facts.forEach((fact) => {
         const status = fact.valid_to ? "inactiva" : "activa";
@@ -1062,6 +1079,10 @@ APP_HTML = """<!doctype html>
     }
     $("episodes").onclick = loadEpisodes;
     $("facts").onclick = loadFacts;
+    $("factStatusFilter").onchange = loadFacts;
+    $("factKeyFilter").onkeydown = (event) => {
+      if (event.key === "Enter") loadFacts();
+    };
     $("memorySearch").onclick = loadMemorySearch;
     $("decayMemory").onclick = async () => {
       const factor = Number($("decayFactor").value);

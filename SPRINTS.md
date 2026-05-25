@@ -363,6 +363,7 @@ Auditoria final de producto 100% local:
 84. Hecho inicial: la memoria autonoma consolida acuerdos de trabajo e instrucciones operativas claras (`sprint tras sprint`, `no pares`, `no pidas permisos`) sin que el usuario tenga que decir `recuerda`.
 85. Hecho inicial: acuerdos de trabajo y expectativas del usuario no se invalidan entre si como hechos singleton; pueden coexistir como contexto activo si son distintos.
 86. Hecho inicial: recuperacion semantica y respuestas de memoria incluyen `working_agreement` y `user_expectation`, para que NIÑO pueda usar esos acuerdos al responder sobre continuidad/contexto.
-87. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y añadir controles UI para filtrar hechos frios por estado/clave.
+87. Hecho inicial: `/app` permite filtrar memoria fria por estado (`Todas`/`Activas`/`Inactivas`) y por clave, reutilizando los filtros del endpoint y mostrando visibles/totales.
+88. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas con memoria fria activa para detectar cuándo NIÑO suena demasiado a Claude directo.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

@@ -160,7 +160,13 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert "memoria reciente".encode("utf-8") in body
     assert "memoria ${type}".encode("utf-8") in body
     assert "memoria fría ${status}".encode("utf-8") in body
-    assert "Memoria fría: ${counts.total}".encode("utf-8") in body
+    assert "Memoria fría: ${out.visible_facts".encode("utf-8") in body
+    assert b"visible_fact_counts" in body
+    assert b"factStatusFilter" in body
+    assert b"factKeyFilter" in body
+    assert b"URLSearchParams" in body
+    assert "clave ${out.key_filter".encode("utf-8") in body
+    assert "estado ${out.status_filter".encode("utf-8") in body
     assert "memoria NIÑO".encode("utf-8") in body
     assert b"memoryTypeFilter" in body
     assert b"memory_type_filter" in body
