@@ -1036,21 +1036,16 @@ APP_HTML = """<!doctype html>
     }
     async function loadMemorySearch() {
       const query = $("memoryQuery").value || "";
-      const out = await api(agentPath("/memory/search"), {method: "POST", body: JSON.stringify({query_intent: query, time_scope: "long"})});
-      clearList($("memoryList"));
       const filter = $("memoryTypeFilter").value || "all";
-      const candidates = out.memory_candidates.filter((candidate) => {
-        const isCold = candidate.fact_id && candidate.fact_id.startsWith("cold::");
-        if (filter === "cold") return isCold;
-        if (filter === "hot") return !isCold;
-        return true;
-      });
+      const out = await api(agentPath("/memory/search"), {method: "POST", body: JSON.stringify({query_intent: query, time_scope: "long", memory_type_filter: filter})});
+      clearList($("memoryList"));
+      const candidates = out.memory_candidates;
       candidates.forEach((candidate) => {
         const type = candidate.fact_id && candidate.fact_id.startsWith("cold::") ? "fría" : "reciente";
         const source = candidate.source_episode_id ? ` · origen ${candidate.source_episode_id.slice(0, 8)}` : "";
         addListItem($("memoryList"), candidate.statement, `memoria ${type} · score ${fmt(candidate.score)} · confidence ${fmt(candidate.confidence)}${source}`);
       });
-      print($("memory"), {...out, visible_candidates: candidates.length, memory_type_filter: filter});
+      print($("memory"), out);
     }
     $("episodes").onclick = loadEpisodes;
     $("facts").onclick = loadFacts;
@@ -2324,12 +2319,23 @@ class NinoService:
         return self.runtime.run_next_task(agent_id)
 
     def search_memory(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.retrieve_memory(agent_id, {
+        out = self.retrieve_memory(agent_id, {
             "query_intent": payload.get("query_intent", payload.get("query", "")),
             "time_scope": payload.get("time_scope", "long"),
             "self_state": payload.get("self_state", {}),
             "relation_state": payload.get("relation_state", {}),
         })
+        memory_type_filter = str(payload.get("memory_type_filter", "all"))
+        if memory_type_filter in {"cold", "hot"}:
+            candidates = []
+            for candidate in out.get("memory_candidates", []):
+                is_cold = str(candidate.get("fact_id", "")).startswith("cold::")
+                if (memory_type_filter == "cold" and is_cold) or (memory_type_filter == "hot" and not is_cold):
+                    candidates.append(candidate)
+            out["memory_candidates"] = candidates
+        out["memory_type_filter"] = memory_type_filter
+        out["visible_candidates"] = len(out.get("memory_candidates", []))
+        return out
 
     def reset_agent(self, agent_id: str) -> dict[str, Any]:
         return self.runtime.reset_agent(agent_id)

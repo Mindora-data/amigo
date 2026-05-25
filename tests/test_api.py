@@ -764,11 +764,15 @@ def test_http_api_inbox_delivery_memory_search_and_snapshot(tmp_path) -> None:
     marked = _request(app, "POST", f"/agents/api-agent/proactivity/inbox/{item_id}/delivered", {})
     cleared = _request(app, "POST", "/agents/api-agent/proactivity/inbox/clear-delivered", {})
     search = _request(app, "POST", "/agents/api-agent/memory/search", {"query": "música"})
+    hot_search = _request(app, "POST", "/agents/api-agent/memory/search", {"query": "música", "memory_type_filter": "hot"})
     snapshot = _request(app, "GET", "/development/snapshot")
 
     assert marked["updated"] is True
     assert cleared["cleared"] == 1
     assert search["memory_candidates"]
+    assert hot_search["memory_type_filter"] == "hot"
+    assert hot_search["visible_candidates"] == len(hot_search["memory_candidates"])
+    assert all(not candidate["fact_id"].startswith("cold::") for candidate in hot_search["memory_candidates"])
     assert snapshot["snapshot"]["agent_count"] == 1
 
 
