@@ -40,6 +40,9 @@ def _nino_context_summary(
 ) -> dict[str, Any]:
     memory_candidates = [
         {
+            "fact_id": candidate.fact_id,
+            "source_episode_id": candidate.source_episode_id,
+            "memory_type": "cold" if candidate.fact_id.startswith("cold::") else "hot",
             "statement": candidate.statement,
             "score": round(candidate.score, 4),
             "confidence": round(candidate.confidence, 4),

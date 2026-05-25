@@ -43,6 +43,19 @@ def test_tick_uses_configured_llm_response() -> None:
     assert "Usa al menos un recuerdo" in llm.prompts[-1]["system"]
 
 
+def test_tick_context_memory_candidates_include_origin_fields() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+    runtime.tick("agent-llm", {"intent": "chat", "text": "prefiero sprints", "salience": 0.9, "confidence": 0.95})
+
+    out = runtime.tick("agent-llm", {"intent": "question", "text": "prefiero sprints"})
+
+    candidate = out["nino_context"]["memory_candidates"][0]
+    assert candidate["fact_id"]
+    assert candidate["source_episode_id"]
+    assert candidate["memory_type"] in {"hot", "cold"}
+
+
 def test_llm_prompt_keeps_internal_context_passive_for_plain_chat() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

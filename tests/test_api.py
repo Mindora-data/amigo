@@ -397,6 +397,11 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert tick["nino_context"]["response_source"] == "policy"
     assert tick["nino_context"]["llm_provider"] is None
     assert isinstance(tick["nino_context"]["memory_candidates"], list)
+    if tick["nino_context"]["memory_candidates"]:
+        candidate = tick["nino_context"]["memory_candidates"][0]
+        assert "fact_id" in candidate
+        assert "source_episode_id" in candidate
+        assert candidate["memory_type"] in {"hot", "cold"}
     assert tick["auto_consolidated_count"] == 1
     assert tick["auto_consolidation"]["cold_memory_updates"][0]["key"] == "preference"
     assert state["tick"] == 1
