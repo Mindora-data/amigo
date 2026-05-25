@@ -160,6 +160,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert "memoria NIÑO".encode("utf-8") in body
     assert b"memoryTypeFilter" in body
     assert b"memory_type_filter" in body
+    assert b"memory_type_counts" in body
+    assert b"visible_memory_type_counts" in body
+    assert "Resultados: ${out.visible_candidates".encode("utf-8") in body
     assert "consolidada: ${labels.join".encode("utf-8") in body
     assert "origen ${candidate.source_episode_id.slice(0, 8)}".encode("utf-8") in body
     assert "origen ${fact.source_episode_id.slice(0, 8)}".encode("utf-8") in body
@@ -770,9 +773,12 @@ def test_http_api_inbox_delivery_memory_search_and_snapshot(tmp_path) -> None:
     assert marked["updated"] is True
     assert cleared["cleared"] == 1
     assert search["memory_candidates"]
+    assert search["memory_type_counts"]["total"] == len(search["memory_candidates"])
+    assert search["visible_memory_type_counts"] == search["memory_type_counts"]
+    assert all(candidate["memory_type"] in {"cold", "hot"} for candidate in search["memory_candidates"])
     assert hot_search["memory_type_filter"] == "hot"
     assert hot_search["visible_candidates"] == len(hot_search["memory_candidates"])
-    assert all(not candidate["fact_id"].startswith("cold::") for candidate in hot_search["memory_candidates"])
+    assert all(candidate["memory_type"] == "hot" for candidate in hot_search["memory_candidates"])
     assert snapshot["snapshot"]["agent_count"] == 1
 
 
@@ -853,6 +859,7 @@ def test_http_api_internal_cycle_consolidates_memory(tmp_path) -> None:
     assert tick["auto_consolidated_count"] == 1
     assert cycle["consolidated_count"] == 0
     assert any(candidate["fact_id"].startswith("cold::") for candidate in memory["memory_candidates"])
+    assert any(candidate["memory_type"] == "cold" for candidate in memory["memory_candidates"])
 
 
 def test_http_api_internal_dream_creates_reflection(tmp_path) -> None:

@@ -1040,8 +1040,17 @@ APP_HTML = """<!doctype html>
       const out = await api(agentPath("/memory/search"), {method: "POST", body: JSON.stringify({query_intent: query, time_scope: "long", memory_type_filter: filter})});
       clearList($("memoryList"));
       const candidates = out.memory_candidates;
+      if (out.memory_type_counts) {
+        const counts = out.memory_type_counts;
+        const visible = out.visible_memory_type_counts || counts;
+        addListItem(
+          $("memoryList"),
+          `Resultados: ${out.visible_candidates ?? candidates.length}/${counts.total}`,
+          `fría ${visible.cold}/${counts.cold} · reciente ${visible.hot}/${counts.hot} · filtro ${out.memory_type_filter || "all"}`
+        );
+      }
       candidates.forEach((candidate) => {
-        const type = candidate.fact_id && candidate.fact_id.startsWith("cold::") ? "fría" : "reciente";
+        const type = candidate.memory_type === "cold" ? "fría" : "reciente";
         const source = candidate.source_episode_id ? ` · origen ${candidate.source_episode_id.slice(0, 8)}` : "";
         addListItem($("memoryList"), candidate.statement, `memoria ${type} · score ${fmt(candidate.score)} · confidence ${fmt(candidate.confidence)}${source}`);
       });
@@ -1289,6 +1298,30 @@ def _json_default(value: Any) -> Any:
 
 def _to_jsonable(value: Any) -> Any:
     return json.loads(json.dumps(value, default=_json_default))
+
+
+def _memory_type_for_candidate(candidate: dict[str, Any]) -> str:
+    return "cold" if str(candidate.get("fact_id", "")).startswith("cold::") else "hot"
+
+
+def _memory_type_counts(candidates: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {"cold": 0, "hot": 0, "total": 0}
+    for candidate in candidates:
+        memory_type = str(candidate.get("memory_type") or _memory_type_for_candidate(candidate))
+        if memory_type not in {"cold", "hot"}:
+            memory_type = "hot"
+        counts[memory_type] += 1
+        counts["total"] += 1
+    return counts
+
+
+def _annotate_memory_response(payload: dict[str, Any]) -> dict[str, Any]:
+    candidates = payload.get("memory_candidates", [])
+    if isinstance(candidates, list):
+        for candidate in candidates:
+            if isinstance(candidate, dict):
+                candidate["memory_type"] = _memory_type_for_candidate(candidate)
+    return payload
 
 
 def _attach_current_report_summary(report: dict[str, Any]) -> None:
@@ -2326,15 +2359,17 @@ class NinoService:
             "relation_state": payload.get("relation_state", {}),
         })
         memory_type_filter = str(payload.get("memory_type_filter", "all"))
+        all_candidates = list(out.get("memory_candidates", []))
+        out["memory_type_counts"] = _memory_type_counts(all_candidates)
         if memory_type_filter in {"cold", "hot"}:
             candidates = []
-            for candidate in out.get("memory_candidates", []):
-                is_cold = str(candidate.get("fact_id", "")).startswith("cold::")
-                if (memory_type_filter == "cold" and is_cold) or (memory_type_filter == "hot" and not is_cold):
+            for candidate in all_candidates:
+                if candidate.get("memory_type") == memory_type_filter:
                     candidates.append(candidate)
             out["memory_candidates"] = candidates
         out["memory_type_filter"] = memory_type_filter
         out["visible_candidates"] = len(out.get("memory_candidates", []))
+        out["visible_memory_type_counts"] = _memory_type_counts(out.get("memory_candidates", []))
         return out
 
     def reset_agent(self, agent_id: str) -> dict[str, Any]:
@@ -2347,7 +2382,7 @@ class NinoService:
             relation_state=dict(payload.get("relation_state", {})),
             time_scope=payload.get("time_scope", "recent"),
         )
-        return _to_jsonable(self.runtime.retrieve_memory(agent_id, req))
+        return _annotate_memory_response(_to_jsonable(self.runtime.retrieve_memory(agent_id, req)))
 
     def consolidate(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         raw_episodes = payload.get("episodes")

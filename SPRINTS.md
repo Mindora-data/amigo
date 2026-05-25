@@ -344,6 +344,9 @@ Auditoria final de producto 100% local:
 65. Hecho inicial: `/app` añade una entrada `memoria NIÑO` cuando una respuesta autoconsolida hechos, mostrando las claves/valores guardados en ese turno.
 66. Hecho inicial: `/app` añade filtro `Todo`/`Fria`/`Reciente` en la busqueda de memoria, mostrando tambien `visible_candidates` y `memory_type_filter` en la salida cruda.
 67. Hecho inicial: `POST /agents/{agent_id}/memory/search` acepta `memory_type_filter` (`all`/`cold`/`hot`) y devuelve `visible_candidates`, por lo que UI y clientes externos comparten el mismo filtro.
-68. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y exponer conteos cold/hot en la respuesta de busqueda.
+68. Hecho inicial: `POST /agents/{agent_id}/memory/search` devuelve `memory_type_counts` y `visible_memory_type_counts` con totales `cold`/`hot`/`total` antes y despues del filtro aplicado.
+69. Hecho inicial: `/app` muestra una fila resumen de resultados de memoria con visibles/totales y desglose fria/reciente segun el filtro activo.
+70. Hecho inicial: `memory/retrieve` y `memory/search` anotan cada candidato con `memory_type` (`cold`/`hot`) para que clientes externos no dependan de parsear `fact_id`.
+71. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y añadir filtros de memoria en CLI o scripts si aparece uso externo recurrente.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
