@@ -663,6 +663,7 @@ for candidate in payload.get("memory_candidates", []):
 memory_facts() {
   local agent="nino"
   local status_filter="active"
+  local key_filter=""
   local json_output=false
 
   while [[ $# -gt 0 ]]; do
@@ -675,12 +676,16 @@ memory_facts() {
         status_filter="${2:-}"
         shift 2
         ;;
+      --key)
+        key_filter="${2:-}"
+        shift 2
+        ;;
       --json)
         json_output=true
         shift
         ;;
       --help|-h)
-        echo "Usage: scripts/ninoctl memory-facts [--agent nino] [--status active|inactive|all] [--json]"
+        echo "Usage: scripts/ninoctl memory-facts [--agent nino] [--status active|inactive|all] [--key preference] [--json]"
         return 0
         ;;
       *)
@@ -691,7 +696,7 @@ memory_facts() {
   done
 
   if [[ -z "$agent" || ( "$status_filter" != "active" && "$status_filter" != "inactive" && "$status_filter" != "all" ) ]]; then
-    echo "Usage: scripts/ninoctl memory-facts [--agent nino] [--status active|inactive|all] [--json]" >&2
+    echo "Usage: scripts/ninoctl memory-facts [--agent nino] [--status active|inactive|all] [--key preference] [--json]" >&2
     return 2
   fi
 
@@ -707,13 +712,26 @@ import sys
 
 payload = json.load(sys.stdin)
 status_filter = sys.argv[1]
+key_filter = sys.argv[2]
 facts = payload.get("facts", [])
+counts = payload.get("fact_counts", {})
+total_count = counts.get("total", len(facts))
+active_count = counts.get("active", 0)
+inactive_count = counts.get("inactive", 0)
 if status_filter == "active":
     facts = [fact for fact in facts if not fact.get("valid_to")]
 elif status_filter == "inactive":
     facts = [fact for fact in facts if fact.get("valid_to")]
+if key_filter:
+    facts = [fact for fact in facts if fact.get("key") == key_filter]
 
-print(f"cold memory facts: {len(facts)} ({status_filter})")
+print(
+    f"cold memory facts: {len(facts)} "
+    f"({status_filter}, total {total_count}, "
+    f"active {active_count}, inactive {inactive_count})"
+)
+if key_filter:
+    print(f"key filter: {key_filter}")
 for fact in facts:
     status = "inactive" if fact.get("valid_to") else "active"
     source = fact.get("source_episode_id", "")
@@ -722,7 +740,7 @@ for fact in facts:
     value = fact.get("value", "")
     print(f"- [{status}] {key}: {value}")
     print(f"  confidence={confidence:.3f} source={source}")
-' "$status_filter" <<< "$response"
+' "$status_filter" "$key_filter" <<< "$response"
 }
 
 command="${1:-}"

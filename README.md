@@ -73,13 +73,15 @@ scripts/ninoctl memory-search --agent nino --type cold "donde vivo"
 scripts/ninoctl memory-search --type hot --scope recent "que hablamos"
 scripts/ninoctl memory-search --type cold --json "proyecto"
 scripts/ninoctl memory-facts --agent nino --status active
+scripts/ninoctl memory-facts --agent nino --status active --key preference
 scripts/ninoctl memory-facts --agent nino --status all --json
 ```
 
 `--type` accepts `all`, `cold` or `hot`. The default output is a readable
 summary with hot/cold counts, score, confidence and source episode. Use `--json`
 for automation. `memory-facts` lists cold memory directly and filters by
-`active`, `inactive` or `all`.
+`active`, `inactive` or `all`; `--key` narrows results to a fact key such as
+`preference` or `user_location`.
 
 When NIÑO is running as the launchd service, `scripts/ninoctl status` reports
 the launchd PID/state and `scripts/ninoctl logs` reads the launchd log if there

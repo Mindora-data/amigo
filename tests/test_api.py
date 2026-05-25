@@ -157,6 +157,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert "memoria reciente".encode("utf-8") in body
     assert "memoria ${type}".encode("utf-8") in body
     assert "memoria fría ${status}".encode("utf-8") in body
+    assert "Memoria fría: ${counts.total}".encode("utf-8") in body
     assert "memoria NIÑO".encode("utf-8") in body
     assert b"memoryTypeFilter" in body
     assert b"memory_type_filter" in body
@@ -938,6 +939,10 @@ def test_http_api_lists_and_deletes_memory_items(tmp_path) -> None:
     deleted_episode = _request(app, "DELETE", f"/agents/api-agent/episodes/{episode_id}")
     deleted_fact = _request(app, "DELETE", f"/agents/api-agent/memory/facts/{fact_id}")
 
+    assert facts["fact_counts"]["total"] == 1
+    assert facts["fact_counts"]["active"] == 1
+    assert facts["fact_counts"]["inactive"] == 0
+    assert facts["fact_counts"]["active_by_key"]["preference"] == 1
     assert deleted_episode["deleted"] is True
     assert deleted_fact["deleted"] is True
     assert _request(app, "GET", "/agents/api-agent/episodes")["episodes"] == []

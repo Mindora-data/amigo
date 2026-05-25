@@ -352,6 +352,11 @@ Auditoria final de producto 100% local:
 73. Hecho inicial: `README.md` documenta ejemplos de `scripts/ninoctl memory-search`, incluyendo filtros `--type`, `--scope` y salida `--json` para automatizacion.
 74. Hecho inicial: `scripts/ninoctl memory-facts` lista memoria fria con `--agent`, `--status active|inactive|all` y `--json`, permitiendo inspeccion rapida de hechos persistidos sin busqueda semantica.
 75. Hecho inicial: `README.md` documenta `memory-facts` junto a `memory-search` para operacion local de memoria fria activa.
-76. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y añadir conteos de memoria fria activa/inactiva al endpoint de hechos si se necesita en clientes externos.
+76. Hecho inicial: `GET /agents/{agent_id}/memory/facts` devuelve `fact_counts` con totales active/inactive/total y desglose `active_by_key`/`inactive_by_key`.
+77. Hecho inicial: `/app` muestra una fila resumen de memoria fria con total, activas e inactivas antes del listado de hechos.
+78. Hecho inicial: `scripts/ninoctl memory-facts` imprime resumen con conteos active/inactive/total usando `fact_counts` del endpoint.
+79. Hecho inicial: `scripts/ninoctl memory-facts` acepta `--key <clave>` para inspeccionar rapidamente preferencias, ubicacion, proyecto u otra familia de hechos frios.
+80. Hecho inicial: `README.md` documenta `memory-facts --key` y explica filtros por estado y clave.
+81. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y exponer filtros de hechos frios por estado/clave en API si clientes externos lo necesitan.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

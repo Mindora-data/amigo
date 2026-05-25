@@ -1016,6 +1016,10 @@ APP_HTML = """<!doctype html>
     async function loadFacts() {
       const out = await api(agentPath("/memory/facts"));
       clearList($("memoryList"));
+      if (out.fact_counts) {
+        const counts = out.fact_counts;
+        addListItem($("memoryList"), `Memoria fría: ${counts.total}`, `activa ${counts.active} · inactiva ${counts.inactive}`);
+      }
       out.facts.forEach((fact) => {
         const status = fact.valid_to ? "inactiva" : "activa";
         const origin = fact.source_episode_id ? ` · origen ${fact.source_episode_id.slice(0, 8)}` : "";
@@ -1322,6 +1326,19 @@ def _annotate_memory_response(payload: dict[str, Any]) -> dict[str, Any]:
             if isinstance(candidate, dict):
                 candidate["memory_type"] = _memory_type_for_candidate(candidate)
     return payload
+
+
+def _cold_fact_counts(facts: list[Any]) -> dict[str, Any]:
+    counts: dict[str, Any] = {"active": 0, "inactive": 0, "total": 0, "active_by_key": {}, "inactive_by_key": {}}
+    for fact in facts:
+        key = str(getattr(fact, "key", "") or "")
+        active = getattr(fact, "valid_to", None) is None
+        status = "active" if active else "inactive"
+        counts[status] += 1
+        counts["total"] += 1
+        bucket = counts[f"{status}_by_key"]
+        bucket[key] = int(bucket.get(key, 0)) + 1
+    return counts
 
 
 def _attach_current_report_summary(report: dict[str, Any]) -> None:
@@ -2256,7 +2273,7 @@ class NinoService:
 
     def list_memory_facts(self, agent_id: str) -> dict[str, Any]:
         facts = self.runtime.cold_store.list_for_agent(agent_id)
-        return {"facts": _to_jsonable(facts)}
+        return {"facts": _to_jsonable(facts), "fact_counts": _cold_fact_counts(facts)}
 
     def delete_episode(self, agent_id: str, episode_id: str) -> dict[str, Any]:
         return self.runtime.delete_episode(agent_id, episode_id)
