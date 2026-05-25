@@ -160,6 +160,10 @@ def _memory_fact_phrase(key: str, value: str) -> str | None:
         return f"tu proyecto se llama {value}"
     if key == "current_project_focus":
         return f"estamos trabajando en {value}"
+    if key == "working_agreement":
+        return f"nuestro acuerdo de trabajo es {value}"
+    if key == "user_expectation":
+        return f"esperas que {value}"
     return None
 
 

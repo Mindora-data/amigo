@@ -104,3 +104,17 @@ def test_retrieval_maps_indirect_project_focus_query_to_cold_fact() -> None:
         and candidate.statement == "foco proyecto trabajando trabajamos haciendo memoria persistente"
         for candidate in out.memory_candidates
     )
+
+
+def test_retrieval_maps_working_agreement_query_to_cold_fact() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    runtime.tick("agent-h", {"intent": "chat", "text": "sigue sprint tras sprint y no pares", "confidence": 0.95})
+
+    req = RetrieveRequest(query_intent="como trabajamos sprints", self_state={}, relation_state={}, time_scope="long")
+    out = runtime.retrieve_memory("agent-h", req)
+
+    assert any(
+        candidate.fact_id.startswith("cold::")
+        and "acuerdo trabajo forma avanzar" in candidate.statement
+        for candidate in out.memory_candidates
+    )

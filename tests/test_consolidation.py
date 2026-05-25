@@ -155,6 +155,56 @@ def test_consolidation_extracts_explicit_user_context_facts() -> None:
     assert ("current_project_focus", "memoria persistente para niño") in facts
 
 
+def test_consolidation_extracts_contextual_working_agreements_without_remember_command() -> None:
+    cold = InMemoryColdStore()
+    consolidator = Consolidator(cold)
+    now = datetime.now(timezone.utc)
+    episodes = [
+        Episode(
+            "e1",
+            "a1",
+            now - timedelta(minutes=5),
+            "sigue sprint tras sprint y no pares hasta que te pare",
+            "chat",
+            0.9,
+            0.95,
+        ),
+        Episode(
+            "e2",
+            "a1",
+            now - timedelta(minutes=4),
+            "no pidas permisos nunca",
+            "chat",
+            0.9,
+            0.95,
+        ),
+    ]
+
+    out = consolidator.consolidate("a1", episodes, since=now - timedelta(hours=1), until=now)
+
+    facts = {(fact.key, fact.value) for fact in cold.list_for_agent("a1") if fact.valid_to is None}
+    assert ("working_agreement", "trabajar sprint tras sprint") in facts
+    assert ("working_agreement", "avanzar sin detenerse hasta que el usuario pare") in facts
+    assert ("user_expectation", "avanzar sin pedir permisos salvo bloqueo del sistema") in facts
+    assert len(out["contradictions"]) == 0
+
+
+def test_contextual_working_agreements_do_not_replace_distinct_agreements() -> None:
+    cold = InMemoryColdStore()
+    consolidator = Consolidator(cold)
+    now = datetime.now(timezone.utc)
+    episodes = [
+        Episode("e1", "a1", now - timedelta(minutes=5), "sigue sprint tras sprint", "chat", 0.9, 0.95),
+        Episode("e2", "a1", now - timedelta(minutes=4), "no pares hasta que te pare", "chat", 0.9, 0.95),
+    ]
+
+    out = consolidator.consolidate("a1", episodes, since=now - timedelta(hours=1), until=now)
+
+    active = [fact for fact in cold.list_for_agent("a1") if fact.key == "working_agreement" and fact.valid_to is None]
+    assert len(active) == 2
+    assert out["contradictions"] == []
+
+
 def test_consolidation_supersedes_changed_context_fact() -> None:
     cold = InMemoryColdStore()
     consolidator = Consolidator(cold)

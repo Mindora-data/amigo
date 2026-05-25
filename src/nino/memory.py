@@ -58,6 +58,7 @@ SYNONYMS = {
     "musica": "música",
     "musical": "música",
     "pianista": "piano",
+    "sprints": "sprint",
     "donde": "ubicacion",
     "direccion": "ubicacion",
     "ciudad": "ubicacion",
@@ -83,6 +84,8 @@ FACT_KEY_TERMS = {
     "project_name": "proyecto nombre",
     "current_project_focus": "foco proyecto trabajando trabajamos haciendo",
     "preference": "preferencia gusto interesa",
+    "working_agreement": "acuerdo trabajo forma avanzar sprint sprints continuidad",
+    "user_expectation": "expectativa instruccion usuario permisos autonomia",
 }
 
 def _without_accents(value: str) -> str:

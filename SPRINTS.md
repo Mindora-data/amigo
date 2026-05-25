@@ -360,6 +360,9 @@ Auditoria final de producto 100% local:
 81. Hecho inicial: `GET /agents/{agent_id}/memory/facts` acepta filtros query `status=active|inactive|all` y `key=<clave>`, devolviendo `visible_facts`, `visible_fact_counts`, `status_filter` y `key_filter`.
 82. Hecho inicial: `/app` carga memoria fria con `status=all` explicitamente para conservar la vista completa mientras el endpoint queda filtrable para clientes externos.
 83. Hecho inicial: `scripts/ninoctl memory-facts` delega los filtros `--status` y `--key` al endpoint, evitando filtrar solo en cliente.
-84. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y añadir controles UI para filtrar hechos frios por estado/clave.
+84. Hecho inicial: la memoria autonoma consolida acuerdos de trabajo e instrucciones operativas claras (`sprint tras sprint`, `no pares`, `no pidas permisos`) sin que el usuario tenga que decir `recuerda`.
+85. Hecho inicial: acuerdos de trabajo y expectativas del usuario no se invalidan entre si como hechos singleton; pueden coexistir como contexto activo si son distintos.
+86. Hecho inicial: recuperacion semantica y respuestas de memoria incluyen `working_agreement` y `user_expectation`, para que NIÑO pueda usar esos acuerdos al responder sobre continuidad/contexto.
+87. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y añadir controles UI para filtrar hechos frios por estado/clave.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

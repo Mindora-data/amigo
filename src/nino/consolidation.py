@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import hashlib
 import re
 
 from .memory import Episode
@@ -25,6 +26,10 @@ FACT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "current_project_focus",
         re.compile(r"\b(?:estoy|estamos)\s+trabajando en\s+(?P<value>[^.?!\n\r,;]{1,160})", re.IGNORECASE),
+    ),
+    (
+        "user_expectation",
+        re.compile(r"\b(?:quiero que|necesito que|tienes que|debes)\s+(?P<value>[^.?!\n\r,;]{1,160})", re.IGNORECASE),
     ),
 )
 
@@ -99,6 +104,36 @@ def _preferences_conflict(old_value: str, new_value: str) -> bool:
     return bool(old & new) and old_value != new_value
 
 
+SINGLETON_FACT_KEYS = {"user_name", "user_role", "user_location", "user_study", "project_name", "current_project_focus"}
+
+
+def _facts_conflict(key: str, old_value: str, new_value: str) -> bool:
+    if old_value == new_value:
+        return False
+    if key == "preference":
+        return _preferences_conflict(old_value, new_value)
+    return key in SINGLETON_FACT_KEYS
+
+
+def _contextual_memory_facts(text: str) -> list[tuple[str, str]]:
+    plain = text.lower()
+    facts: list[tuple[str, str]] = []
+    if "no pares" in plain or "no te pares" in plain or "no te frenes" in plain:
+        facts.append(("working_agreement", "avanzar sin detenerse hasta que el usuario pare"))
+    if "sprint tras sprint" in plain or "siguiente sprint" in plain:
+        facts.append(("working_agreement", "trabajar sprint tras sprint"))
+    if "sin pedir permisos" in plain or "no pidas permisos" in plain:
+        facts.append(("user_expectation", "avanzar sin pedir permisos salvo bloqueo del sistema"))
+    return facts
+
+
+def _cold_fact_id(episode_id: str, key: str, value: str) -> str:
+    if key == "preference":
+        return f"cold::{episode_id}"
+    digest = hashlib.sha1(value.encode("utf-8")).hexdigest()[:10]
+    return f"cold::{episode_id}::{key}::{digest}"
+
+
 def _extract_memory_facts(text: str) -> list[tuple[str, str]]:
     facts: list[tuple[str, str]] = []
     preference = PREFERENCE_RE.search(text)
@@ -113,6 +148,7 @@ def _extract_memory_facts(text: str) -> list[tuple[str, str]]:
         value = _clean_fact_value(match.group("value"))
         if value:
             facts.append((key, value))
+    facts.extend(_contextual_memory_facts(text))
     return facts
 
 
@@ -151,7 +187,7 @@ class Consolidator:
                 continue
 
             for key, value in extracted:
-                new_fact_id = f"cold::{ep.episode_id}" if key == "preference" else f"cold::{ep.episode_id}::{key}"
+                new_fact_id = _cold_fact_id(ep.episode_id, key, value)
 
                 # idempotencia por episodio consolidado
                 if new_fact_id in fact_ids:
@@ -159,8 +195,7 @@ class Consolidator:
 
                 active = [f for f in facts if f.key == key and f.valid_to is None]
                 for old in active:
-                    conflicts = _preferences_conflict(old.value, value) if key == "preference" else old.value != value
-                    if old.value != value and conflicts:
+                    if _facts_conflict(key, old.value, value):
                         old.valid_to = ep.timestamp
                         self.cold_store.upsert(old)
                         contradictions.append(
