@@ -236,6 +236,11 @@ APP_HTML = """<!doctype html>
         </div>
         <div class="row">
           <input id="memoryQuery" value="sprints" aria-label="buscar memoria">
+          <select id="memoryTypeFilter" aria-label="filtro tipo memoria">
+            <option value="all">Todo</option>
+            <option value="cold">Fría</option>
+            <option value="hot">Reciente</option>
+          </select>
           <button id="memorySearch" class="secondary">Buscar</button>
         </div>
         <div class="row">
@@ -1033,12 +1038,19 @@ APP_HTML = """<!doctype html>
       const query = $("memoryQuery").value || "";
       const out = await api(agentPath("/memory/search"), {method: "POST", body: JSON.stringify({query_intent: query, time_scope: "long"})});
       clearList($("memoryList"));
-      out.memory_candidates.forEach((candidate) => {
+      const filter = $("memoryTypeFilter").value || "all";
+      const candidates = out.memory_candidates.filter((candidate) => {
+        const isCold = candidate.fact_id && candidate.fact_id.startsWith("cold::");
+        if (filter === "cold") return isCold;
+        if (filter === "hot") return !isCold;
+        return true;
+      });
+      candidates.forEach((candidate) => {
         const type = candidate.fact_id && candidate.fact_id.startsWith("cold::") ? "fría" : "reciente";
         const source = candidate.source_episode_id ? ` · origen ${candidate.source_episode_id.slice(0, 8)}` : "";
         addListItem($("memoryList"), candidate.statement, `memoria ${type} · score ${fmt(candidate.score)} · confidence ${fmt(candidate.confidence)}${source}`);
       });
-      print($("memory"), out);
+      print($("memory"), {...out, visible_candidates: candidates.length, memory_type_filter: filter});
     }
     $("episodes").onclick = loadEpisodes;
     $("facts").onclick = loadFacts;
