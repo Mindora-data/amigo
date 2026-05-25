@@ -1005,7 +1005,9 @@ APP_HTML = """<!doctype html>
       const out = await api(agentPath("/memory/facts"));
       clearList($("memoryList"));
       out.facts.forEach((fact) => {
-        const item = addListItem($("memoryList"), `${fact.key}: ${fact.value}`, `confidence ${fact.confidence}`);
+        const status = fact.valid_to ? "inactiva" : "activa";
+        const origin = fact.source_episode_id ? ` · origen ${fact.source_episode_id.slice(0, 8)}` : "";
+        const item = addListItem($("memoryList"), `${fact.key}: ${fact.value}`, `memoria fría ${status} · confidence ${fact.confidence}${origin}`);
         const button = document.createElement("button");
         button.className = "danger";
         button.textContent = "Eliminar hecho";

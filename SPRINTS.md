@@ -340,6 +340,7 @@ Auditoria final de producto 100% local:
 61. Hecho inicial: `nino_context.memory_candidates` expone `fact_id`, `source_episode_id` y `memory_type` (`hot`/`cold`) para distinguir memoria reciente de hechos persistidos en API/UI.
 62. Hecho inicial: `/app` agrupa el contexto de NIÑO en `memoria fría` y `memoria reciente`, usando `memory_type` para separar hechos persistidos de episodios calientes.
 63. Hecho inicial: la busqueda de memoria en `/app` muestra `memoria fria`/`memoria reciente`, score, confidence y origen corto para rastrear cada candidato recuperado.
-64. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y mejorar la vista de memoria fria con validez activa/inactiva y origen.
+64. Hecho inicial: la vista de memoria fria en `/app` muestra estado `activa`/`inactiva`, confidence y origen corto del episodio fuente para auditar recuerdos persistidos.
+65. Siguiente: evaluar respuestas reales de voz propia en conversaciones largas y añadir una señal visible cuando una respuesta consolida memoria automáticamente.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

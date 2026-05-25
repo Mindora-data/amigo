@@ -156,7 +156,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert "memoria fría".encode("utf-8") in body
     assert "memoria reciente".encode("utf-8") in body
     assert "memoria ${type}".encode("utf-8") in body
+    assert "memoria fría ${status}".encode("utf-8") in body
     assert "origen ${candidate.source_episode_id.slice(0, 8)}".encode("utf-8") in body
+    assert "origen ${fact.source_episode_id.slice(0, 8)}".encode("utf-8") in body
     assert b'parts.join("\\n")' in body
     assert b'parts.join("\n")' not in body
 
