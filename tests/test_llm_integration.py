@@ -86,6 +86,16 @@ def test_llm_prompt_keeps_internal_context_passive_for_plain_chat() -> None:
     assert "sin explicar tus mecanismos internos" in llm.prompts[-1]["system"]
 
 
+def test_llm_prompt_activates_continuity_for_temporal_memory_question() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick("agent-llm", {"intent": "question", "text": "que hablamos hace dos semanas?"})
+
+    assert "Modo continuidad: activo" in llm.prompts[-1]["user"]
+    assert "Usa al menos un recuerdo" in llm.prompts[-1]["system"]
+
+
 def test_conversation_persists_user_and_assistant_turns_without_extra_episodes() -> None:
     llm = FakeLLM("Te respondo usando memoria persistente.")
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

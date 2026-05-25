@@ -229,6 +229,12 @@ def _asks_about_continuity(text: str, intent: str) -> bool:
         "qué sabes",
         "que recuerdas",
         "qué recuerdas",
+        "semana pasada",
+        "mes pasado",
+        "antes de ayer",
+        "anteayer",
+        "hace ",
+        "ayer",
         "diferencia",
         "claude directo",
     )

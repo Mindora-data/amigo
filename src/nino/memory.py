@@ -77,6 +77,10 @@ SYNONYMS = {
     "haciendo": "foco",
     "ayer": "tiempo",
     "hoy": "tiempo",
+    "antes": "tiempo",
+    "mes": "tiempo",
+    "semanas": "tiempo",
+    "dias": "tiempo",
     "semana": "tiempo",
     "pasada": "tiempo",
 }
@@ -132,16 +136,55 @@ def _recency_score(ts: datetime, now: datetime, scope: str) -> float:
         horizon = 24.0 * 365
     return _clamp01(1.0 - (age_hours / horizon))
 
+NUMBER_WORDS = {
+    "un": 1,
+    "una": 1,
+    "uno": 1,
+    "dos": 2,
+    "tres": 3,
+    "cuatro": 4,
+    "cinco": 5,
+    "seis": 6,
+    "siete": 7,
+    "ocho": 8,
+    "nueve": 9,
+    "diez": 10,
+}
+
+def _number_from_text(raw: str) -> int | None:
+    raw = _without_accents(raw)
+    if raw.isdigit():
+        return int(raw)
+    return NUMBER_WORDS.get(raw)
+
+def _day_window(day: datetime) -> tuple[datetime, datetime]:
+    start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start, start + timedelta(days=1)
+
 def _temporal_window(query: str, now: datetime) -> tuple[datetime, datetime] | None:
     plain = _without_accents(query)
+    if "antes de ayer" in plain or "anteayer" in plain:
+        return _day_window(now - timedelta(days=2))
+    match = re.search(r"hace\s+(\d+|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+dias?", plain)
+    if match:
+        days = _number_from_text(match.group(1))
+        if days is not None:
+            return _day_window(now - timedelta(days=days))
+    match = re.search(r"hace\s+(\d+|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+semanas?", plain)
+    if match:
+        weeks = _number_from_text(match.group(1))
+        if weeks is not None:
+            end = now - timedelta(days=7 * weeks)
+            start = end - timedelta(days=7)
+            return start, end
+    if "mes pasado" in plain:
+        return now - timedelta(days=60), now - timedelta(days=30)
     if "semana pasada" in plain:
         return now - timedelta(days=14), now - timedelta(days=7)
     if "ayer" in plain:
-        start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        return start, start + timedelta(days=1)
+        return _day_window(now - timedelta(days=1))
     if "hoy" in plain:
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        return start, start + timedelta(days=1)
+        return _day_window(now)
     return None
 
 class MemoryRetriever:

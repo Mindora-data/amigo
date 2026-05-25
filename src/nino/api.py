@@ -1528,7 +1528,7 @@ USER_HTML = """<!doctype html>
     async function loadConversation() {
       const out = await api(agentPath("/conversation"));
       $("messages").replaceChildren();
-      (out.conversation || []).forEach((entry) => {
+      (out.turns || out.conversation || []).forEach((entry) => {
         const role = entry.role === "user" ? "user" : "nino";
         addMessage(role, entry.text || entry.content || "");
       });
@@ -1609,7 +1609,11 @@ USER_HTML = """<!doctype html>
     }
     $("loginView").addEventListener("submit", loginUser);
     $("composer").addEventListener("submit", sendText);
-    $("logoutButton").onclick = () => {
+    $("logoutButton").onclick = async () => {
+      const token = localStorage.getItem(STORAGE_SESSION);
+      if (token) {
+        await api("/session/logout", {method: "POST", body: "{}", headers: {"x-nino-session": token}}).catch(() => {});
+      }
       localStorage.removeItem(STORAGE_USER);
       localStorage.removeItem(STORAGE_SESSION);
       stopInboxPolling();
@@ -1671,6 +1675,8 @@ API_ENDPOINTS = [
     "POST /operations/backup",
     "POST /operations/restart",
     "POST /session/login",
+    "GET /session/status",
+    "POST /session/logout",
     "GET /agents",
     "GET /users/{user_id}/agents",
     "POST /users/{user_id}/agents/{agent_id}/tick",
@@ -1973,6 +1979,25 @@ class NinoService:
             "session_token": session_token,
             "privacy": "private_user_scope",
         }
+
+    def session_status(self, payload: dict[str, Any]) -> dict[str, Any]:
+        token = str(payload.get("_session_token", "")).strip()
+        session = self.sessions.get(token)
+        if not session:
+            return {"ok": False, "authenticated": False}
+        return {
+            "ok": True,
+            "authenticated": True,
+            "user_id": session["user_id"],
+            "agent_id": session["agent_id"],
+            "created_at": session["created_at"],
+            "privacy": "private_user_scope",
+        }
+
+    def logout(self, payload: dict[str, Any]) -> dict[str, Any]:
+        token = str(payload.get("_session_token", "")).strip()
+        removed = self.sessions.pop(token, None) is not None if token else False
+        return {"ok": True, "logged_out": removed}
 
     def authorize_user_scope(self, user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         required = os.environ.get("NINO_REQUIRE_SESSION", "").strip().lower() in {"1", "true", "yes", "on"}
@@ -3301,6 +3326,10 @@ class NinoHttpApp:
         parts = [unquote(part) for part in path.split("/") if part]
         if method == "POST" and parts == ["session", "login"]:
             return "200 OK", self.service.login(payload)
+        if method == "GET" and parts == ["session", "status"]:
+            return "200 OK", self.service.session_status(payload)
+        if method == "POST" and parts == ["session", "logout"]:
+            return "200 OK", self.service.logout(payload)
         if method == "GET" and len(parts) == 2 and parts[0] == "users" and parts[1]:
             auth = self.service.authorize_user_scope(parts[1], payload)
             if not auth["ok"]:

@@ -233,9 +233,11 @@ def test_http_api_serves_minimal_user_app(tmp_path) -> None:
     assert b"chatView" in body
     assert b"voiceButton" in body
     assert b"/session/login" in body
+    assert b"/session/logout" in body
     assert b"nino_session_token" in body
     assert b"x-nino-session" in body
     assert b"/users/${encodeURIComponent(currentUserId())}/agents/${encodeURIComponent(AGENT_ID)}" in body
+    assert b"out.turns || out.conversation" in body
     assert b"/conversation" in body
     assert b"/tick" in body
     assert b"SpeechRecognition" in body
@@ -334,6 +336,9 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "POST /operations/final-audit" in root["endpoints"]
     assert "GET /operations/logs" in root["endpoints"]
     assert "POST /operations/restart" in root["endpoints"]
+    assert "POST /session/login" in root["endpoints"]
+    assert "GET /session/status" in root["endpoints"]
+    assert "POST /session/logout" in root["endpoints"]
     assert "POST /agents/{agent_id}/tasks/run-next" in root["endpoints"]
     assert "GET /agents/{agent_id}/temporal-events" in root["endpoints"]
     assert "PATCH /agents/{agent_id}/temporal-events/{event_id}" in root["endpoints"]
@@ -366,6 +371,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "/operations/final-audit" in openapi["paths"]
     assert "/operations/logs" in openapi["paths"]
     assert "/operations/restart" in openapi["paths"]
+    assert "/session/status" in openapi["paths"]
+    assert "/session/logout" in openapi["paths"]
     assert health == {"ok": True, "service": "nino"}
     assert mode["local_first"] is True
     assert mode["network_required_for_core"] is False
@@ -576,6 +583,7 @@ def test_http_api_can_require_session_token_for_user_scoped_routes(tmp_path, mon
     app = create_app(tmp_path / "nino.db")
 
     login = _request(app, "POST", "/session/login", {"user_id": "Ana", "agent_id": "nino"})
+    session = _request(app, "GET", "/session/status", headers={"X-Nino-Session": login["session_token"]})
     missing_status, missing = _request_status(app, "GET", "/users/ana/agents/nino/conversation")
     wrong_status, wrong = _request_status(
         app,
@@ -589,12 +597,24 @@ def test_http_api_can_require_session_token_for_user_scoped_routes(tmp_path, mon
         "/users/ana/agents/nino/conversation",
         headers={"X-Nino-Session": login["session_token"]},
     )
+    logout = _request(app, "POST", "/session/logout", {}, headers={"X-Nino-Session": login["session_token"]})
+    logged_out_status, logged_out = _request_status(
+        app,
+        "GET",
+        "/users/ana/agents/nino/conversation",
+        headers={"X-Nino-Session": login["session_token"]},
+    )
 
+    assert session["authenticated"] is True
+    assert session["user_id"] == "ana"
     assert missing_status.startswith("401")
     assert missing["error"] == "session_required"
     assert wrong_status.startswith("401")
     assert wrong["error"] == "session_user_mismatch"
     assert ok["turns"] == []
+    assert logout["logged_out"] is True
+    assert logged_out_status.startswith("401")
+    assert logged_out["error"] == "session_required"
 
 
 def test_http_api_tick_accepts_time_context_and_records_temporal_event(tmp_path) -> None:

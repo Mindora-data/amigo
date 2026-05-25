@@ -56,6 +56,48 @@ def test_retrieval_understands_last_week_temporal_query() -> None:
     assert out.memory_candidates
     assert out.memory_candidates[0].source_episode_id == "old"
 
+
+def test_retrieval_understands_before_yesterday_temporal_query() -> None:
+    store = InMemoryEpisodeStore()
+    now = datetime.now(timezone.utc)
+    store.append(Episode("target", "a1", now - timedelta(days=2, hours=1), "fuimos al medico", "chat", 0.8, 0.9))
+    store.append(Episode("wrong", "a1", now - timedelta(days=1), "compré pan", "chat", 0.8, 0.9))
+
+    retriever = MemoryRetriever(store)
+    req = RetrieveRequest(query_intent="que te dije antes de ayer", self_state={}, relation_state={}, time_scope="long")
+    out = retriever.retrieve(agent_id="a1", request=req, top_k=3)
+
+    assert out.memory_candidates
+    assert out.memory_candidates[0].source_episode_id == "target"
+
+
+def test_retrieval_understands_last_month_temporal_query() -> None:
+    store = InMemoryEpisodeStore()
+    now = datetime.now(timezone.utc)
+    store.append(Episode("target", "a1", now - timedelta(days=45), "cerramos el sprint de memoria", "chat", 0.8, 0.9))
+    store.append(Episode("recent", "a1", now - timedelta(days=3), "compré pan", "chat", 0.8, 0.9))
+
+    retriever = MemoryRetriever(store)
+    req = RetrieveRequest(query_intent="que hablamos el mes pasado", self_state={}, relation_state={}, time_scope="long")
+    out = retriever.retrieve(agent_id="a1", request=req, top_k=3)
+
+    assert out.memory_candidates
+    assert out.memory_candidates[0].source_episode_id == "target"
+
+
+def test_retrieval_understands_n_weeks_ago_temporal_query() -> None:
+    store = InMemoryEpisodeStore()
+    now = datetime.now(timezone.utc)
+    store.append(Episode("target", "a1", now - timedelta(days=17), "probamos voz en el chat", "chat", 0.8, 0.9))
+    store.append(Episode("wrong", "a1", now - timedelta(days=4), "compré pan", "chat", 0.8, 0.9))
+
+    retriever = MemoryRetriever(store)
+    req = RetrieveRequest(query_intent="que hicimos hace dos semanas", self_state={}, relation_state={}, time_scope="long")
+    out = retriever.retrieve(agent_id="a1", request=req, top_k=3)
+
+    assert out.memory_candidates
+    assert out.memory_candidates[0].source_episode_id == "target"
+
 def test_retrieval_normalizes_accents_and_basic_synonyms() -> None:
     store = InMemoryEpisodeStore()
     now = datetime.now(timezone.utc)

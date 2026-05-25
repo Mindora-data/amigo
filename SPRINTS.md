@@ -402,6 +402,12 @@ Auditoria final de producto 100% local:
 123. Hecho inicial: la UI final `/user` consulta discretamente el inbox proactivo, muestra avisos pendientes como mensajes de NIÑO y los marca entregados sin añadir paneles internos.
 124. Hecho inicial: `/session/login` devuelve `session_token` y las UIs lo guardan/envián como `X-Nino-Session`.
 125. Hecho inicial: si `NINO_REQUIRE_SESSION=true`, las rutas `/users/{user_id}/...` rechazan peticiones sin sesión o con sesión de otro usuario.
-126. Siguiente: añadir gestión mínima de cuenta/sesión en UI final sin convertirla en panel de configuración.
+126. Hecho inicial: `GET /session/status` y `POST /session/logout` permiten comprobar y cerrar sesión activa; `/user` llama logout antes de limpiar almacenamiento local.
+127. Hecho inicial: `/user` vuelve a pintar historial usando `turns` del endpoint de conversación, corrigiendo la carga de conversaciones previas.
+128. Hecho inicial: la recuperación temporal entiende `antes de ayer`/`anteayer` y prioriza episodios de ese día.
+129. Hecho inicial: la recuperación temporal entiende `el mes pasado` como ventana aproximada de 30 a 60 días.
+130. Hecho inicial: la recuperación temporal entiende `hace N días` y `hace N semanas`, incluyendo números en texto como `dos`.
+131. Hecho inicial: el prompt LLM activa modo continuidad ante preguntas temporales (`hace`, `ayer`, `mes pasado`, `semana pasada`) aunque el usuario no diga `recuerda`.
+132. Siguiente: añadir señales de “no encontré memoria de esa fecha” para evitar respuestas ambiguas cuando la ventana temporal no devuelve candidatos.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
