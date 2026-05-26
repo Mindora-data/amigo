@@ -79,10 +79,49 @@ def test_persistent_runtime_restores_proactivity_settings_and_send_history(tmp_p
     assert "daily_frequency_cap" in second.reason_trace
 
 
+def test_persistent_runtime_restores_proactive_candidates_after_restart(tmp_path) -> None:
+    db_path = tmp_path / "nino.db"
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime = create_persistent_runtime(db_path)
+    runtime.configure_proactivity(
+        "agent-db",
+        ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=0),
+    )
+    runtime.proactive_candidate_store.add(
+        "agent-db",
+        {
+            "kind": "followup",
+            "topic": "entrevista",
+            "earliest_at": now.isoformat(),
+            "expires_at": (now + timedelta(days=1)).isoformat(),
+            "created_at": (now - timedelta(days=1)).isoformat(),
+            "weight": 3,
+        },
+    )
+
+    restarted = create_persistent_runtime(db_path)
+    out = restarted.evaluate_proactivity("agent-db", now=now)
+    pending = restarted.proactive_candidate_store.pending("agent-db", now)
+
+    assert out.should_send is True
+    assert out.action is not None
+    assert out.action["payload"]["source"] == "proactive_candidate"
+    assert pending == []
+
+
 def test_persistent_runtime_reset_agent_deletes_state_episodes_and_cold_memory(tmp_path) -> None:
     db_path = tmp_path / "nino.db"
     runtime = create_persistent_runtime(db_path)
     runtime.tick("agent-db", {"intent": "chat", "text": "me gusta piano", "salience": 0.9})
+    runtime.proactive_candidate_store.add(
+        "agent-db",
+        {
+            "kind": "followup",
+            "topic": "entrevista",
+            "earliest_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
     episodes = runtime.episode_store.list_for_agent("agent-db")
     runtime.consolidate(ConsolidationRequest(agent_id="agent-db", episodes=episodes))
 
@@ -92,6 +131,7 @@ def test_persistent_runtime_reset_agent_deletes_state_episodes_and_cold_memory(t
 
     assert deleted["episodes"] == 1
     assert deleted["cold_memory"] == 1
+    assert deleted["proactive_candidates"] == 1
     assert state.tick == 0
     assert restarted.episode_store.list_for_agent("agent-db") == []
     assert restarted.cold_store.list_for_agent("agent-db") == []

@@ -251,6 +251,33 @@ Criterios de salida:
 - Cada accion autonoma queda registrada y explicada.
 - El usuario puede apagar o limitar cualquier capacidad.
 
+## Sprint 9 - Proactividad humana
+
+Estado: hecho inicial.
+
+Objetivo: ampliar la proactividad más allá de alarmas explícitas, con seguimientos y check-ins que respetan límites duros de intrusión.
+
+Hecho:
+
+- Candidatos proactivos persistentes en tabla `proactive_candidate`, con índice por usuario, estado y fecha.
+- Seguimientos como candidatos separados de la entrega real: `followup` no implica mensaje hasta pasar por reglas.
+- Extracción híbrida de seguimientos con LLM en JSON estricto y fallo seguro a silencio si el JSON no es válido.
+- Filtro barato previo para no llamar al LLM extractor en mensajes sin señales temporales/futuras.
+- Decisión de entrega en Python con cuatro cestas: horario 9-22, tope diario 1, cooldown 6 horas y receptividad.
+- Caducidad de candidatos vencidos antes de evaluar entregas.
+- Check-ins por inactividad con umbral alto de 7 días y retroceso exponencial si el usuario no reacciona.
+- Redacción proactiva breve que hereda la ética de amigo y bloquea culpa/reproche/emoción humana fingida.
+- Reacción del usuario: un mensaje posterior marca el último proactivo entregado como reaccionado.
+- Aislamiento por usuario en candidatos proactivos.
+- Reset de agente borra también candidatos proactivos.
+
+Criterios de salida:
+
+- Las alarmas temporales confirmadas mantienen prioridad sobre estos límites.
+- La lógica decide cuándo hablar; el LLM solo extrae candidatos y redacta mensajes ya aprobados.
+- Si hay duda, JSON inválido, candidato caducado, baja receptividad o fuera de horario, amigo calla.
+- Tests cubren límites, caducidad, check-in, aislamiento, persistencia y entrega de candidato.
+
 ## Proxima tarea recomendada
 
 Auditoria final de producto 100% local:

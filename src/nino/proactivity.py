@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
+import json
+import re
 from typing import Any
+from uuid import uuid4
 
 from .contracts import ProactivityResponse, ProactivitySettings
+from .llm import AMIGO_ETHICS, LLMClient
 from .memory import Episode, InMemoryEpisodeStore
 
 SENSITIVE_TERMS = {
@@ -19,6 +23,125 @@ SENSITIVE_TERMS = {
     "depresion",
     "ansiedad",
 }
+
+FOLLOWUP_EXTRACTION_SYSTEM = """Extraes posibles seguimientos de un mensaje.
+Un seguimiento es un evento futuro concreto sobre el que tendría sentido preguntar después
+(una cita, examen, viaje, decisión, algo con carga personal).
+NO incluyas tareas que el usuario ya pidió recordar explícitamente.
+Devuelve SOLO un array JSON, sin texto ni markdown. Vacío si no hay nada:
+[{"topic": "<resumen breve>", "when_iso": "<fecha estimada o null>", "weight": <1-3>}]
+weight: 1 trivial, 2 normal, 3 claramente importante para la persona."""
+
+FOLLOWUP_DAILY_CAP = 1
+FOLLOWUP_COOLDOWN_HOURS = 6
+FOLLOWUP_ACTIVE_HOURS_START = 9
+FOLLOWUP_ACTIVE_HOURS_END = 22
+CHECKIN_BASE_THRESHOLD_DAYS = 7
+
+
+class InMemoryProactiveCandidateStore:
+    def __init__(self) -> None:
+        self._items: list[dict[str, Any]] = []
+
+    def add(self, user_id: str, candidate: dict[str, Any]) -> dict[str, Any]:
+        item = {
+            "id": str(candidate.get("id") or uuid4()),
+            "user_id": user_id,
+            "kind": str(candidate.get("kind", "followup")),
+            "source_ref": candidate.get("source_ref"),
+            "topic": str(candidate.get("topic", ""))[:120],
+            "earliest_at": str(candidate.get("earliest_at")),
+            "expires_at": candidate.get("expires_at"),
+            "status": str(candidate.get("status", "pending")),
+            "attempts": int(candidate.get("attempts", 0)),
+            "weight": max(1, min(3, int(candidate.get("weight", 2)))),
+            "created_at": str(candidate.get("created_at") or datetime.now(timezone.utc).isoformat()),
+            "delivered_at": candidate.get("delivered_at"),
+            "user_reacted": candidate.get("user_reacted"),
+        }
+        self._items.append(item)
+        return dict(item)
+
+    def pending(self, user_id: str, now: datetime) -> list[dict[str, Any]]:
+        rows = []
+        for item in self._items:
+            if item.get("user_id") != user_id or item.get("status") != "pending":
+                continue
+            earliest = _parse_dt(item.get("earliest_at"))
+            expires = _parse_dt(item.get("expires_at"))
+            if earliest is None or earliest > now:
+                continue
+            if expires is not None and expires < now:
+                continue
+            rows.append(dict(item))
+        rows.sort(key=lambda item: (-int(item.get("weight", 2)), str(item.get("earliest_at")), str(item.get("id"))))
+        return rows
+
+    def expire_stale(self, user_id: str, now: datetime) -> int:
+        count = 0
+        for item in self._items:
+            expires = _parse_dt(item.get("expires_at"))
+            if item.get("user_id") == user_id and item.get("status") == "pending" and expires is not None and expires < now:
+                item["status"] = "expired"
+                count += 1
+        return count
+
+    def mark_delivered(self, candidate_id: str, now: datetime) -> dict[str, Any] | None:
+        for item in self._items:
+            if str(item.get("id")) == str(candidate_id):
+                item["status"] = "delivered"
+                item["delivered_at"] = now.isoformat()
+                item["attempts"] = int(item.get("attempts", 0)) + 1
+                item["user_reacted"] = 0
+                return dict(item)
+        return None
+
+    def recent_delivered(self, user_id: str, limit: int = 2) -> list[dict[str, Any]]:
+        rows = [
+            dict(item)
+            for item in self._items
+            if item.get("user_id") == user_id and item.get("status") == "delivered" and item.get("delivered_at")
+        ]
+        rows.sort(key=lambda item: str(item.get("delivered_at")), reverse=True)
+        return rows[:limit]
+
+    def count_delivered_since(self, user_id: str, since: datetime) -> int:
+        count = 0
+        for item in self._items:
+            delivered_at = _parse_dt(item.get("delivered_at"))
+            if item.get("user_id") == user_id and item.get("status") == "delivered" and delivered_at and delivered_at >= since:
+                count += 1
+        return count
+
+    def last_delivered_at(self, user_id: str) -> datetime | None:
+        delivered = [_parse_dt(item.get("delivered_at")) for item in self._items if item.get("user_id") == user_id]
+        values = [value for value in delivered if value is not None]
+        return max(values) if values else None
+
+    def mark_latest_delivered_reacted(self, user_id: str, now: datetime) -> bool:
+        rows = [
+            item
+            for item in self._items
+            if item.get("user_id") == user_id and item.get("status") == "delivered" and item.get("user_reacted") == 0
+        ]
+        rows.sort(key=lambda item: str(item.get("delivered_at")), reverse=True)
+        if not rows:
+            return False
+        rows[0]["user_reacted"] = 1
+        rows[0]["reacted_at"] = now.isoformat()
+        return True
+
+    def has_recent_checkin_candidate(self, user_id: str, since: datetime) -> bool:
+        for item in self._items:
+            created_at = _parse_dt(item.get("created_at"))
+            if item.get("user_id") == user_id and item.get("kind") == "checkin" and created_at and created_at >= since:
+                return True
+        return False
+
+    def delete_for_agent(self, user_id: str) -> int:
+        before = len(self._items)
+        self._items = [item for item in self._items if item.get("user_id") != user_id]
+        return before - len(self._items)
 
 
 def default_proactivity_state() -> dict[str, Any]:
@@ -145,6 +268,151 @@ def _parse_dt(value: Any) -> datetime | None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed
 
+def _parse_candidate_when(value: Any, now: datetime) -> datetime | None:
+    if value in {None, "", "null"}:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=now.tzinfo or timezone.utc)
+    return parsed
+
+def extract_followups(user_text: str, now: datetime, llm: LLMClient | None) -> list[dict[str, Any]]:
+    if llm is None or not user_text.strip():
+        return []
+    plain = user_text.lower()
+    if not any(
+        marker in plain
+        for marker in (
+            "mañana", "manana", "pasado mañana", "la semana", "el lunes", "el martes",
+            "el miércoles", "el miercoles", "el jueves", "el viernes", "el sábado",
+            "el sabado", "el domingo", "tengo", "voy a", "entrevista", "examen",
+            "viaje", "cita", "reunión", "reunion",
+        )
+    ):
+        return []
+    if re.search(r"\b(recuerdame|recuérdame|avisame|avísame|recordatorio|alarma)\b", user_text, re.IGNORECASE):
+        return []
+    prompt = {
+        "system": FOLLOWUP_EXTRACTION_SYSTEM,
+        "user": f"Ahora: {now.isoformat()}\nMensaje del usuario:\n{user_text}",
+    }
+    try:
+        raw = llm.complete(prompt)
+        items = json.loads(str(raw).strip())
+    except (AttributeError, TypeError, ValueError, json.JSONDecodeError):
+        return []
+    if not isinstance(items, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict) or not str(item.get("topic", "")).strip():
+            continue
+        when = _parse_candidate_when(item.get("when_iso"), now)
+        earliest = when + timedelta(hours=3) if when else now + timedelta(days=1)
+        try:
+            weight = int(item.get("weight", 2))
+        except (TypeError, ValueError):
+            weight = 2
+        out.append(
+            {
+                "kind": "followup",
+                "topic": str(item["topic"]).strip()[:120],
+                "earliest_at": earliest.isoformat(),
+                "expires_at": (earliest + timedelta(days=3)).isoformat(),
+                "weight": max(1, min(3, weight)),
+                "created_at": now.isoformat(),
+            }
+        )
+    return out
+
+def should_deliver_candidate(
+    store: InMemoryProactiveCandidateStore,
+    user_id: str,
+    now_local: datetime,
+    *,
+    daily_cap: int = FOLLOWUP_DAILY_CAP,
+    cooldown_hours: int = FOLLOWUP_COOLDOWN_HOURS,
+    active_hours_start: int = FOLLOWUP_ACTIVE_HOURS_START,
+    active_hours_end: int = FOLLOWUP_ACTIVE_HOURS_END,
+) -> tuple[bool, str]:
+    if not (active_hours_start <= now_local.hour < active_hours_end):
+        return False, "outside_human_proactivity_hours"
+    start_day = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    if store.count_delivered_since(user_id, start_day) >= daily_cap:
+        return False, "human_proactivity_daily_cap"
+    last = store.last_delivered_at(user_id)
+    if last is not None and now_local - last < timedelta(hours=cooldown_hours):
+        return False, "human_proactivity_cooldown"
+    recent = store.recent_delivered(user_id, limit=2)
+    if len(recent) == 2 and all(int(item.get("user_reacted") or 0) == 0 for item in recent):
+        return False, "human_proactivity_low_receptivity"
+    return True, "human_proactivity_allowed"
+
+def redact_proactive(candidate: dict[str, Any], llm: LLMClient | None = None) -> str:
+    topic = str(candidate.get("topic", "eso que me contaste")).strip()[:120]
+    kind = str(candidate.get("kind", "followup"))
+    fallback = (
+        "Pasaba por aquí. No hace falta que respondas ahora; seguimos cuando te apetezca."
+        if kind == "checkin"
+        else f"Me acordé de {topic}. Si te apetece, cuéntame cómo fue."
+    )
+    if llm is None:
+        return fallback
+    prompt = {
+        "system": (
+            f"{AMIGO_ETHICS}\n"
+            "Redacta un único mensaje proactivo muy breve en español. Sin culpa, sin reproche, "
+            "sin decir que echas de menos al usuario, sin fingir emoción humana. "
+            "Para check-ins, no hagas una pregunta que obligue a responder."
+        ),
+        "user": f"Tipo: {kind}\nTema: {topic}",
+    }
+    try:
+        text = llm.complete(prompt).strip()
+    except Exception:
+        return fallback
+    if not text:
+        return fallback
+    blocked = ("te echo de menos", "me preocupa no saber", "por qué no", "porque no")
+    if any(marker in text.lower() for marker in blocked):
+        return fallback
+    return text[:220]
+
+def ensure_checkin_candidate(
+    store: InMemoryProactiveCandidateStore,
+    user_id: str,
+    relation_state: dict[str, Any],
+    now: datetime,
+) -> dict[str, Any] | None:
+    last_interaction = _parse_dt(relation_state.get("last_interaction_at"))
+    if last_interaction is None:
+        return None
+    ignored = [
+        item
+        for item in store.recent_delivered(user_id, limit=3)
+        if item.get("kind") == "checkin" and int(item.get("user_reacted") or 0) == 0
+    ]
+    threshold_days = CHECKIN_BASE_THRESHOLD_DAYS * (2 ** len(ignored))
+    threshold = timedelta(days=threshold_days)
+    if now - last_interaction < threshold:
+        return None
+    if store.has_recent_checkin_candidate(user_id, now - threshold):
+        return None
+    return store.add(
+        user_id,
+        {
+            "kind": "checkin",
+            "topic": "abrir una puerta tranquila tras varios días sin hablar",
+            "earliest_at": now.isoformat(),
+            "expires_at": (now + timedelta(days=2)).isoformat(),
+            "weight": 1,
+            "created_at": now.isoformat(),
+        },
+    )
+
 def _due_temporal_event(relation_state: dict[str, Any], now: datetime) -> dict[str, Any] | None:
     events = [event for event in relation_state.get("temporal_events", []) if isinstance(event, dict)]
     due: list[tuple[datetime, dict[str, Any]]] = []
@@ -211,8 +479,15 @@ def _top_global_concept(global_model: dict[str, Any]) -> str | None:
 
 
 class ProactivityEngine:
-    def __init__(self, episode_store: InMemoryEpisodeStore) -> None:
+    def __init__(
+        self,
+        episode_store: InMemoryEpisodeStore,
+        candidate_store: InMemoryProactiveCandidateStore | None = None,
+        llm_client: LLMClient | None = None,
+    ) -> None:
         self.episode_store = episode_store
+        self.candidate_store = candidate_store or InMemoryProactiveCandidateStore()
+        self.llm_client = llm_client
 
     def evaluate(
         self,
@@ -265,6 +540,31 @@ class ProactivityEngine:
                 },
                 reason_trace=reason_trace,
             )
+
+        self.candidate_store.expire_stale(agent_id, now)
+        ensure_checkin_candidate(self.candidate_store, agent_id, relation_state, now)
+        allowed, candidate_reason = should_deliver_candidate(self.candidate_store, agent_id, now)
+        if allowed:
+            proactive_candidate = next(iter(self.candidate_store.pending(agent_id, now)), None)
+            if proactive_candidate is not None:
+                reason_trace.extend(["human_proactivity", proactive_candidate.get("kind", "candidate")])
+                message = redact_proactive(proactive_candidate, self.llm_client)
+                return ProactivityResponse(
+                    should_send=True,
+                    action={
+                        "type": "external_message",
+                        "payload": {
+                            "text": message,
+                            "source": "proactive_candidate",
+                            "proactive_candidate_id": proactive_candidate.get("id"),
+                            "kind": proactive_candidate.get("kind"),
+                            "topic": proactive_candidate.get("topic"),
+                        },
+                    },
+                    reason_trace=reason_trace,
+                )
+        else:
+            reason_trace.append(candidate_reason)
 
         sent_at = _parse_sent_at(list(proactivity.get("sent_at", [])))
         recent_sent = [sent for sent in sent_at if sent >= now - timedelta(hours=24)]

@@ -8,6 +8,7 @@ import sqlite3
 from .consolidation import MemoryFact
 from .contracts import AgentState
 from .memory import Episode
+from .proactivity import InMemoryProactiveCandidateStore
 from .runtime import NinoRuntime
 
 DEFAULT_COGNITIVE_TIME_JSON = '{"age_ticks": 0.0, "experience_mass": 0.0, "maturity": 0.0}'
@@ -348,6 +349,191 @@ class SQLiteGlobalModelStore:
         self.conn.commit()
 
 
+class SQLiteProactiveCandidateStore(InMemoryProactiveCandidateStore):
+    def __init__(self, path: str | Path) -> None:
+        self.conn = _connect(path)
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS proactive_candidate (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                source_ref TEXT,
+                topic TEXT NOT NULL,
+                earliest_at TEXT NOT NULL,
+                expires_at TEXT,
+                status TEXT NOT NULL,
+                attempts INTEGER DEFAULT 0,
+                weight INTEGER DEFAULT 2,
+                created_at TEXT NOT NULL,
+                delivered_at TEXT,
+                user_reacted INTEGER
+            )
+            """
+        )
+        self.conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_proactive_pending
+            ON proactive_candidate (user_id, status, earliest_at)
+            """
+        )
+        self.conn.commit()
+
+    def add(self, user_id: str, candidate: dict[str, object]) -> dict[str, object]:
+        item = {
+            "id": str(candidate.get("id") or ""),
+            "user_id": user_id,
+            "kind": str(candidate.get("kind", "followup")),
+            "source_ref": candidate.get("source_ref"),
+            "topic": str(candidate.get("topic", ""))[:120],
+            "earliest_at": str(candidate.get("earliest_at")),
+            "expires_at": candidate.get("expires_at"),
+            "status": str(candidate.get("status", "pending")),
+            "attempts": int(candidate.get("attempts", 0)),
+            "weight": max(1, min(3, int(candidate.get("weight", 2)))),
+            "created_at": str(candidate.get("created_at") or datetime.now().isoformat()),
+            "delivered_at": candidate.get("delivered_at"),
+            "user_reacted": candidate.get("user_reacted"),
+        }
+        if not item["id"]:
+            from uuid import uuid4
+            item["id"] = str(uuid4())
+        self.conn.execute(
+            """
+            INSERT INTO proactive_candidate (
+                id, user_id, kind, source_ref, topic, earliest_at, expires_at,
+                status, attempts, weight, created_at, delivered_at, user_reacted
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                item["id"], item["user_id"], item["kind"], item["source_ref"], item["topic"],
+                item["earliest_at"], item["expires_at"], item["status"], item["attempts"],
+                item["weight"], item["created_at"], item["delivered_at"], item["user_reacted"],
+            ),
+        )
+        self.conn.commit()
+        return dict(item)
+
+    def _row_to_item(self, row: sqlite3.Row) -> dict[str, object]:
+        return {
+            "id": row["id"],
+            "user_id": row["user_id"],
+            "kind": row["kind"],
+            "source_ref": row["source_ref"],
+            "topic": row["topic"],
+            "earliest_at": row["earliest_at"],
+            "expires_at": row["expires_at"],
+            "status": row["status"],
+            "attempts": int(row["attempts"]),
+            "weight": int(row["weight"]),
+            "created_at": row["created_at"],
+            "delivered_at": row["delivered_at"],
+            "user_reacted": row["user_reacted"],
+        }
+
+    def pending(self, user_id: str, now: datetime) -> list[dict[str, object]]:
+        rows = self.conn.execute(
+            """
+            SELECT * FROM proactive_candidate
+            WHERE user_id = ? AND status = 'pending' AND earliest_at <= ?
+              AND (expires_at IS NULL OR expires_at >= ?)
+            ORDER BY weight DESC, earliest_at ASC, id ASC
+            """,
+            (user_id, now.isoformat(), now.isoformat()),
+        ).fetchall()
+        return [self._row_to_item(row) for row in rows]
+
+    def expire_stale(self, user_id: str, now: datetime) -> int:
+        cursor = self.conn.execute(
+            """
+            UPDATE proactive_candidate
+            SET status = 'expired'
+            WHERE user_id = ? AND status = 'pending' AND expires_at IS NOT NULL AND expires_at < ?
+            """,
+            (user_id, now.isoformat()),
+        )
+        self.conn.commit()
+        return cursor.rowcount
+
+    def mark_delivered(self, candidate_id: str, now: datetime) -> dict[str, object] | None:
+        self.conn.execute(
+            """
+            UPDATE proactive_candidate
+            SET status = 'delivered', delivered_at = ?, attempts = attempts + 1, user_reacted = 0
+            WHERE id = ?
+            """,
+            (now.isoformat(), candidate_id),
+        )
+        self.conn.commit()
+        row = self.conn.execute("SELECT * FROM proactive_candidate WHERE id = ?", (candidate_id,)).fetchone()
+        return self._row_to_item(row) if row else None
+
+    def recent_delivered(self, user_id: str, limit: int = 2) -> list[dict[str, object]]:
+        rows = self.conn.execute(
+            """
+            SELECT * FROM proactive_candidate
+            WHERE user_id = ? AND status = 'delivered' AND delivered_at IS NOT NULL
+            ORDER BY delivered_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        ).fetchall()
+        return [self._row_to_item(row) for row in rows]
+
+    def count_delivered_since(self, user_id: str, since: datetime) -> int:
+        row = self.conn.execute(
+            """
+            SELECT COUNT(*) AS count FROM proactive_candidate
+            WHERE user_id = ? AND status = 'delivered' AND delivered_at >= ?
+            """,
+            (user_id, since.isoformat()),
+        ).fetchone()
+        return int(row["count"]) if row else 0
+
+    def last_delivered_at(self, user_id: str) -> datetime | None:
+        row = self.conn.execute(
+            """
+            SELECT delivered_at FROM proactive_candidate
+            WHERE user_id = ? AND status = 'delivered' AND delivered_at IS NOT NULL
+            ORDER BY delivered_at DESC LIMIT 1
+            """,
+            (user_id,),
+        ).fetchone()
+        return datetime.fromisoformat(row["delivered_at"]) if row else None
+
+    def mark_latest_delivered_reacted(self, user_id: str, now: datetime) -> bool:
+        row = self.conn.execute(
+            """
+            SELECT id FROM proactive_candidate
+            WHERE user_id = ? AND status = 'delivered' AND user_reacted = 0
+            ORDER BY delivered_at DESC LIMIT 1
+            """,
+            (user_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        self.conn.execute("UPDATE proactive_candidate SET user_reacted = 1 WHERE id = ?", (row["id"],))
+        self.conn.commit()
+        return True
+
+    def has_recent_checkin_candidate(self, user_id: str, since: datetime) -> bool:
+        row = self.conn.execute(
+            """
+            SELECT 1 FROM proactive_candidate
+            WHERE user_id = ? AND kind = 'checkin' AND created_at >= ?
+            LIMIT 1
+            """,
+            (user_id, since.isoformat()),
+        ).fetchone()
+        return row is not None
+
+    def delete_for_agent(self, user_id: str) -> int:
+        cursor = self.conn.execute("DELETE FROM proactive_candidate WHERE user_id = ?", (user_id,))
+        self.conn.commit()
+        return cursor.rowcount
+
+
 def create_persistent_runtime(path: str | Path) -> NinoRuntime:
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -356,4 +542,5 @@ def create_persistent_runtime(path: str | Path) -> NinoRuntime:
         episode_store=SQLiteEpisodeStore(db_path),
         cold_store=SQLiteColdStore(db_path),
         global_model_store=SQLiteGlobalModelStore(db_path),
+        proactive_candidate_store=SQLiteProactiveCandidateStore(db_path),
     )

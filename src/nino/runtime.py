@@ -22,9 +22,11 @@ from .contracts import (
 from .llm import LLMClient, build_configured_llm, build_nino_prompt
 from .memory import Episode, InMemoryEpisodeStore, MemoryRetriever
 from .proactivity import (
+    InMemoryProactiveCandidateStore,
     ProactivityEngine,
     configure_proactivity_state,
     default_proactivity_state,
+    extract_followups,
     mark_temporal_event_reminded,
     record_proactive_send,
 )
@@ -1006,6 +1008,7 @@ class NinoRuntime:
         episode_store: InMemoryEpisodeStore | None = None,
         cold_store: InMemoryColdStore | None = None,
         global_model_store: InMemoryGlobalModelStore | None = None,
+        proactive_candidate_store: InMemoryProactiveCandidateStore | None = None,
         llm_client: LLMClient | None = None,
     ) -> None:
         self.state_store = state_store
@@ -1014,8 +1017,13 @@ class NinoRuntime:
         self.global_model_store = global_model_store or InMemoryGlobalModelStore()
         self.retriever = MemoryRetriever(self.episode_store, self.cold_store)
         self.consolidator = Consolidator(self.cold_store)
-        self.proactivity = ProactivityEngine(self.episode_store)
+        self.proactive_candidate_store = proactive_candidate_store or InMemoryProactiveCandidateStore()
         self.llm_client = llm_client if llm_client is not None else build_configured_llm()
+        self.proactivity = ProactivityEngine(
+            self.episode_store,
+            candidate_store=self.proactive_candidate_store,
+            llm_client=self.llm_client,
+        )
 
     def _llm_provider(self) -> str | None:
         if self.llm_client is None:
@@ -1179,7 +1187,11 @@ class NinoRuntime:
             if result.action is not None:
                 self.enqueue_proactive_action(agent_id, result.action, now=sent_at)
                 state = self.load_or_init_state(agent_id)
-                event_id = result.action.get("payload", {}).get("temporal_event_id")
+                payload = result.action.get("payload", {})
+                candidate_id = payload.get("proactive_candidate_id")
+                if candidate_id:
+                    self.proactive_candidate_store.mark_delivered(str(candidate_id), sent_at)
+                event_id = payload.get("temporal_event_id")
                 if event_id:
                     state.relation_state = mark_temporal_event_reminded(
                         state.relation_state,
@@ -1200,6 +1212,8 @@ class NinoRuntime:
             deleted["episodes"] = self.episode_store.delete_for_agent(agent_id)
         if hasattr(self.cold_store, "delete_for_agent"):
             deleted["cold_memory"] = self.cold_store.delete_for_agent(agent_id)
+        if hasattr(self.proactive_candidate_store, "delete_for_agent"):
+            deleted["proactive_candidates"] = self.proactive_candidate_store.delete_for_agent(agent_id)
         return deleted
 
     def list_agents(self) -> list[str]:
@@ -2089,6 +2103,8 @@ class NinoRuntime:
         intent = str(percept_frame.get("intent", "unknown"))
         text = str(percept_frame.get("text", ""))
         now = _now_from_percept(percept_frame)
+        if text.strip() and not intent.startswith("onboarding:"):
+            self.proactive_candidate_store.mark_latest_delivered_reacted(agent_id, now)
         new_temporal_events = _extract_temporal_events(text, now)
         reminder_confirmation = _reminder_confirmation_from_text(text)
         query_intent = text.strip() or intent
@@ -2188,6 +2204,10 @@ class NinoRuntime:
             confidence=_clamp01(float(percept_frame.get("confidence", 0.8))),
         )
         self.episode_store.append(episode)
+        if text.strip():
+            for candidate in extract_followups(text, now, self.llm_client):
+                candidate["source_ref"] = episode.episode_id
+                self.proactive_candidate_store.add(agent_id, candidate)
 
         auto_consolidation = {"cold_memory_updates": [], "contradictions": []}
         if _should_auto_consolidate(percept_frame):
