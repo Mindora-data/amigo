@@ -86,6 +86,20 @@ def test_llm_prompt_keeps_internal_context_passive_for_plain_chat() -> None:
     assert "sin explicar tus mecanismos internos" in llm.prompts[-1]["system"]
 
 
+def test_llm_prompt_loads_amigo_ethics() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick("agent-llm", {"intent": "chat", "text": "quiero que seas mi amigo"})
+
+    system = llm.prompts[-1]["system"]
+    assert "Etica de amigo" in system
+    assert "no inventes recuerdos" in system
+    assert "no compartas informacion personal entre usuarios" in system
+    assert "acompaña sin presionar ni manipular" in system
+    assert "no te presentes como humano" in system
+
+
 def test_llm_prompt_activates_continuity_for_temporal_memory_question() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

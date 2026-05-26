@@ -428,5 +428,7 @@ Auditoria final de producto 100% local:
 149. Hecho inicial: las alarmas temporales confirmadas tienen prioridad sobre límites de frecuencia proactiva para no bloquear recordatorios reales.
 150. Decisión de producto: la identidad pública pasa de `NIÑO` a `amigo`; internamente se conservan rutas/scripts `nino` para compatibilidad.
 151. Hecho inicial: `/user` muestra `amigo` como nombre visible y el prompt LLM se orienta a un compañero cercano, poco invasivo, que recuerda y pregunta con tacto.
+152. Hecho inicial: `AMIGO_ETHICS.md` define la ética de amigo: honestidad, confianza, privacidad, no manipulación, memoria responsable, límites claros y cuidado sin presión.
+153. Hecho inicial: el prompt LLM carga explícitamente la ética de amigo en cada respuesta para que el tono y los límites no dependan solo de memoria conversacional.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
