@@ -1030,7 +1030,7 @@ class NinoRuntime:
         affect = self_model.get("affect_state", {})
 
         summary_parts = [
-            f"Soy NIÑO en etapa {self_model.get('identity_stage', 'early_childhood')}.",
+            f"Soy amigo en etapa {self_model.get('identity_stage', 'early_childhood')}.",
             f"He vivido {int(state.cognitive_time.get('age_ticks', 0))} ticks con {name}.",
         ]
         if preferences:
@@ -1238,7 +1238,7 @@ class NinoRuntime:
         }
         prompt = {
             "system": "Responde solo con una frase breve en español.",
-            "user": f"Di que {provider or 'el LLM'} esta conectado a NIÑO.",
+            "user": f"Di que {provider or 'el LLM'} esta conectado a amigo.",
         }
         try:
             text = client.complete(prompt)
@@ -1425,7 +1425,7 @@ class NinoRuntime:
             return PolicyResponse(
                 chosen_action={
                     "type": "external_message",
-                    "payload": {"text": "Perfecto, te aviso media hora antes."},
+                    "payload": {"text": "Claro, te doy un toque media hora antes."},
                 },
                 confidence=0.74,
                 reason_trace=["context_policy", "reminder_confirmed"],
@@ -1435,7 +1435,7 @@ class NinoRuntime:
             return PolicyResponse(
                 chosen_action={
                     "type": "external_message",
-                    "payload": {"text": "De acuerdo, lo recordaré sin alarma."},
+                    "payload": {"text": "Vale, me lo quedo apuntado sin avisarte."},
                 },
                 confidence=0.72,
                 reason_trace=["context_policy", "reminder_declined"],
@@ -1446,7 +1446,7 @@ class NinoRuntime:
             return PolicyResponse(
                 chosen_action={
                     "type": "external_message",
-                    "payload": {"text": f"Lo guardo: {event_text}. ¿Quieres que te lo recuerde media hora antes?"},
+                    "payload": {"text": f"Me lo apunto: {event_text}. ¿Quieres que te dé un toque media hora antes?"},
                 },
                 confidence=0.72,
                 reason_trace=["context_policy", "reminder_offer"],
@@ -1457,7 +1457,7 @@ class NinoRuntime:
             greeting = f"Estoy aquí, {name}." if name else "Estoy aquí."
             action = {
                 "type": "external_message",
-                "payload": {"text": f"{greeting} Sigamos construyendo memoria juntos."},
+                "payload": {"text": f"{greeting} ¿Qué tal vas?"},
             }
             return PolicyResponse(
                 chosen_action=action,
@@ -1537,8 +1537,8 @@ class NinoRuntime:
             )[:3]
             concept_text = ", ".join(key for key, _ in concepts) if concepts else "pocas cosas todavía"
             text_out = (
-                f"Soy NIÑO, una mente persistente en etapa {stage}. "
-                f"Estoy aprendiendo de nuestra continuidad; ahora mi mundo gira alrededor de {concept_text}."
+                f"Soy amigo, una compañía con memoria en etapa {stage}. "
+                f"Estoy aprendiendo de nuestra continuidad; ahora presto atención a {concept_text}."
             )
             if maturity is not None:
                 text_out += f" Mi madurez cognitiva estimada es {maturity:.3f}."

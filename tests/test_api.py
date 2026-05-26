@@ -79,7 +79,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     content_type, body = _raw_request(app, "GET", "/app")
 
     assert content_type.startswith("text/html")
-    assert b"<title>NI" in body
+    assert b"<title>amigo</title>" in body
     assert b"/internal/cycle" in body
     assert b"Salud" in body
     assert b"Perfil" in body
@@ -194,7 +194,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"renderCompletionAudit" in body
     assert b"Auditor" in body
     assert b"addContextEntry" in body
-    assert "contexto NIÑO".encode("utf-8") in body
+    assert "contexto amigo".encode("utf-8") in body
     assert "memoria fría".encode("utf-8") in body
     assert "memoria reciente".encode("utf-8") in body
     assert "memoria ${type}".encode("utf-8") in body
@@ -206,7 +206,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"URLSearchParams" in body
     assert "clave ${out.key_filter".encode("utf-8") in body
     assert "estado ${out.status_filter".encode("utf-8") in body
-    assert "memoria NIÑO".encode("utf-8") in body
+    assert "memoria amigo".encode("utf-8") in body
     assert b"memoryTypeFilter" in body
     assert b"memory_type_filter" in body
     assert b"memory_type_counts" in body
@@ -229,6 +229,9 @@ def test_http_api_serves_minimal_user_app(tmp_path) -> None:
     assert chat_content_type.startswith("text/html")
     assert chat_body == body
     assert b"minimalUserApp" in body
+    assert b"<title>amigo</title>" in body
+    assert b"<h1>amigo</h1>" in body
+    assert "amigo está pensando".encode("utf-8") in body
     assert b"loginView" in body
     assert b"chatView" in body
     assert b"voiceButton" in body
@@ -736,14 +739,14 @@ def test_http_api_proactivity_reminds_dentist_event_at_local_time(tmp_path) -> N
         {"now": "2026-05-26T10:30:00+02:00"},
     )
 
-    assert "¿Quieres que te lo recuerde media hora antes?" in first["action"]["payload"]["text"]
+    assert "¿Quieres que te dé un toque media hora antes?" in first["action"]["payload"]["text"]
     assert early["should_send"] is False
-    assert confirmed["action"]["payload"]["text"] == "Perfecto, te aviso media hora antes."
+    assert confirmed["action"]["payload"]["text"] == "Claro, te doy un toque media hora antes."
     assert scheduled["should_send"] is False
     assert "temporal_alarm_scheduled" in scheduled["reason_trace"]
     assert out["should_send"] is True
     assert out["action"]["payload"]["due_at"] == "2026-05-26T11:00:00+02:00"
-    assert out["action"]["payload"]["text"] == "Te aviso: tienes pendiente hoy tengo dentista a las 11."
+    assert out["action"]["payload"]["text"] == "Oye, acuérdate: hoy tengo dentista a las 11."
     assert "hoy tengo dentista a las 11" in out["action"]["payload"]["text"]
 
 
@@ -1158,7 +1161,7 @@ def test_http_api_exposes_narrative(tmp_path) -> None:
 
     assert narrative["narrative"]["known_user"] == "Pablo"
     assert "piano" in narrative["narrative"]["preferences"]
-    assert "Soy NIÑO" in narrative["narrative"]["summary"]
+    assert "Soy amigo" in narrative["narrative"]["summary"]
 
 
 def test_http_api_exports_imports_and_reports_metrics(tmp_path) -> None:

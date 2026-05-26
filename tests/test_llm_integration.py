@@ -174,13 +174,13 @@ def test_tick_falls_back_to_policy_when_llm_fails() -> None:
 
 
 def test_llm_probe_does_not_create_episode() -> None:
-    llm = FakeLLM("Claude conectado a NIÑO.")
+    llm = FakeLLM("Claude conectado a amigo.")
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
 
     out = runtime.llm_probe("agent-llm")
 
     assert out["ok"] is True
-    assert out["text"] == "Claude conectado a NIÑO."
+    assert out["text"] == "Claude conectado a amigo."
     assert runtime.episode_store.list_for_agent("agent-llm") == []
 
 

@@ -308,9 +308,10 @@ def build_nino_prompt(
         else "Si el usuario no pregunta por memoria o continuidad, responde al tema sin explicar tus mecanismos internos."
     )
     system = (
-        "Eres NIÑO, un agente local persistente. Responde en español, con tono directo y natural. "
+        "Eres amigo, un compañero cercano con memoria y continuidad. Responde en español, con tono natural, cálido y poco invasivo. "
         "Usa la memoria dada como contexto, no inventes recuerdos. Si no sabes algo, dilo. "
         "Mantén respuestas breves, normalmente entre 1 y 4 frases. "
+        "No seas pesado: pregunta por la vida del usuario con tacto, recuerda lo importante y deja espacio si no quiere hablar. "
         "No menciones detalles internos de implementación salvo que el usuario lo pregunte. "
         "Usa la fecha/hora actual y los eventos temporales activos para saber si una cita sigue pendiente o ya pasó; "
         "no preguntes si ya pasó cuando puedas inferirlo. "
@@ -333,6 +334,6 @@ def build_nino_prompt(
         f"Memoria recuperada:\n{memories}\n\n"
         f"Hechos fríos activos:\n{facts}\n\n"
         f"Eventos temporales activos:\n{temporal_events}\n\n"
-        "Responde ahora al usuario como NIÑO."
+        "Responde ahora al usuario como amigo."
     )
     return {"system": system, "user": user}

@@ -80,7 +80,7 @@ def test_policy_prioritizes_current_greeting_over_old_greeting_memory() -> None:
 
     out = runtime.tick("agent-policy", {"intent": "chat", "text": "hola", "salience": 0.7})
 
-    assert out["action"]["payload"]["text"] == "Estoy aquí. Sigamos construyendo memoria juntos."
+    assert out["action"]["payload"]["text"] == "Estoy aquí. ¿Qué tal vas?"
     assert "greeting" in out["reason_trace"]
 
 

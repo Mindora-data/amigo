@@ -41,4 +41,4 @@ def test_build_narrative_summarizes_identity_relation_and_dreams(tmp_path) -> No
     assert "piano" in narrative["preferences"]
     assert "piano" in narrative["dominant_concepts"]
     assert narrative["dream_reflection_count"] == 1
-    assert "Soy NIÑO" in narrative["summary"]
+    assert "Soy amigo" in narrative["summary"]

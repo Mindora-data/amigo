@@ -415,16 +415,18 @@ Auditoria final de producto 100% local:
 136. Hecho inicial: `/user` muestra `No encuentro recuerdos guardados de esa fecha.` como mensaje normal si una respuesta no trae texto pero `nino_context.temporal_miss` está activo.
 137. Estado final local: producto listo en `http://127.0.0.1:8000/user` para usuario y `http://127.0.0.1:8000/app` para operación interna; Vercel queda como validación externa pendiente.
 138. Hecho inicial: `/user` activa proactividad para la sesión de usuario, evalúa continuidad al entrar y muestra avisos pendientes como conversación inicial.
-139. Hecho inicial: si no hay historial ni aviso pendiente, `/user` inicia con `Estoy aquí. ¿Qué tal vas hoy?` para que NIÑO abra la conversación.
+139. Hecho inicial: si no hay historial ni aviso pendiente, `/user` inicia con `Estoy aquí. ¿Qué tal vas hoy?` para que amigo abra la conversación.
 140. Hecho inicial: `/user` envía la fecha/hora local del navegador en cada turno y al evaluar proactividad, conservando zona horaria para expresiones como `hoy a las 11`.
 141. Hecho inicial: el parser de eventos temporales reconoce citas implícitas de salud como `dentista`, `médico`, `doctor` y `consulta` aunque el usuario no escriba la palabra `cita`.
 142. Hecho inicial: el prompt LLM recibe fecha/hora actual y eventos temporales activos, con instrucción de no preguntar si una cita ya pasó cuando puede inferirlo.
-143. Hecho inicial: los avisos proactivos de eventos temporales se entregan como aviso directo (`Te aviso...`) en vez de volver a pedir confirmación.
+143. Hecho inicial: los avisos proactivos de eventos temporales se entregan como toque cercano (`Oye, acuérdate...`) en vez de volver a pedir confirmación.
 144. Hecho inicial: frases declarativas con `hoy`/`ayer` ya no se tratan como consultas de memoria temporal si el usuario no está preguntando qué ocurrió.
-145. Hecho inicial: las citas con hora se guardan como evento y NIÑO pregunta si el usuario quiere alarma media hora antes, sin activar el aviso automáticamente.
+145. Hecho inicial: las citas con hora se guardan como evento y amigo pregunta si el usuario quiere un toque media hora antes, sin activar el aviso automáticamente.
 146. Hecho inicial: una respuesta afirmativa (`sí`, `vale`, `recuérdamelo`, `avísame`) confirma la alarma a 30 minutos; una negativa la deja recordada sin alarma.
 147. Hecho inicial: la proactividad no envía avisos de eventos con alarma pendiente de confirmar y usa `lead_time_hours=0.5` para alarmas confirmadas.
 148. Hecho inicial: si ya hay una alarma temporal confirmada y aún no toca, NIÑO no envía un mensaje proactivo genérico que pueda parecer un aviso anticipado.
 149. Hecho inicial: las alarmas temporales confirmadas tienen prioridad sobre límites de frecuencia proactiva para no bloquear recordatorios reales.
+150. Decisión de producto: la identidad pública pasa de `NIÑO` a `amigo`; internamente se conservan rutas/scripts `nino` para compatibilidad.
+151. Hecho inicial: `/user` muestra `amigo` como nombre visible y el prompt LLM se orienta a un compañero cercano, poco invasivo, que recuerda y pregunta con tacto.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

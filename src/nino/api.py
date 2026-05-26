@@ -30,7 +30,7 @@ APP_HTML = """<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NIÑO</title>
+  <title>amigo</title>
   <style>
     :root {
       color-scheme: light;
@@ -171,7 +171,7 @@ APP_HTML = """<!doctype html>
   <main>
     <section>
       <div class="topbar">
-        <h1>NIÑO</h1>
+        <h1>amigo</h1>
         <div>
           <label for="userId">Usuario</label>
           <div class="userLogin">
@@ -194,7 +194,7 @@ APP_HTML = """<!doctype html>
       <div id="log" class="log"></div>
       <div class="composer">
         <input id="intent" value="chat" aria-label="intent">
-        <textarea id="text" rows="2" placeholder="Escribe algo para NIÑO"></textarea>
+        <textarea id="text" rows="2" placeholder="Escribe algo para amigo"></textarea>
         <button id="send">Enviar</button>
       </div>
       <div id="status" class="status"></div>
@@ -514,7 +514,7 @@ APP_HTML = """<!doctype html>
       if (context.temporal_miss) parts.push("memoria temporal: sin resultados");
       if (coldMemories.length) parts.push(`memoria fría: ${coldMemories.join(" · ")}`);
       if (hotMemories.length) parts.push(`memoria reciente: ${hotMemories.join(" · ")}`);
-      addEntry("contexto NIÑO", parts.join("\\n"));
+      addEntry("contexto amigo", parts.join("\\n"));
     };
     const addEmptyConversation = () => {
       const item = document.createElement("div");
@@ -772,7 +772,7 @@ APP_HTML = """<!doctype html>
         const item = addListItem(target, backup.name || backup.path, `${size} · ${backup.modified_at || ""}`);
         const command = document.createElement("div");
         command.className = "muted";
-        command.textContent = `Restaurar con NIÑO parado: scripts/ninoctl restore ${backup.path}`;
+        command.textContent = `Restaurar con amigo parado: scripts/ninoctl restore ${backup.path}`;
         item.appendChild(command);
       });
     }
@@ -803,7 +803,7 @@ APP_HTML = """<!doctype html>
       $("send").disabled = true;
       try {
         addEntry("usuario", payload.text);
-        status("NIÑO está pensando...");
+        status("amigo está pensando...");
         const out = await api(agentPath("/tick"), {method: "POST", body: JSON.stringify(payload)});
         $("text").value = "";
         print($("state"), out);
@@ -813,10 +813,10 @@ APP_HTML = """<!doctype html>
             .slice(0, 3)
             .map((fact) => `${fact.key}: ${fact.value}`)
             .filter(Boolean);
-          addEntry("memoria NIÑO", labels.length ? `consolidada: ${labels.join(" · ")}` : `consolidados ${out.auto_consolidated_count} hechos`);
+          addEntry("memoria amigo", labels.length ? `consolidada: ${labels.join(" · ")}` : `consolidados ${out.auto_consolidated_count} hechos`);
         }
         addContextEntry(out.nino_context);
-        status(out.llm_error ? `NIÑO respondió con reglas locales: ${out.llm_error}` : "NIÑO respondió.");
+        status(out.llm_error ? `amigo respondió con reglas locales: ${out.llm_error}` : "amigo respondió.");
         await loadConversation();
         await refreshState();
         await loadMemorySearch();
@@ -989,7 +989,7 @@ APP_HTML = """<!doctype html>
     $("mode").onclick = async () => print($("state"), await api("/operations/mode"));
     $("logs").onclick = async () => print($("backupsOut"), await api("/operations/logs"));
     $("restartService").onclick = async () => {
-      if (!confirm("Reiniciar el servicio persistente de NIÑO? La UI puede tardar unos segundos en responder.")) return;
+      if (!confirm("Reiniciar el servicio persistente de amigo? La UI puede tardar unos segundos en responder.")) return;
       const out = await api("/operations/restart", {method: "POST", body: JSON.stringify({confirm: true})});
       print($("backupsOut"), out);
       status(out.ok ? "Reinicio programado. Esperando al servicio..." : `Reinicio no programado: ${out.error || "bloqueado"}`);
@@ -1349,7 +1349,7 @@ USER_HTML = """<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NIÑO</title>
+  <title>amigo</title>
   <style>
     :root {
       color-scheme: light;
@@ -1451,7 +1451,7 @@ USER_HTML = """<!doctype html>
 <body>
   <main id="minimalUserApp">
     <header>
-      <h1>NIÑO</h1>
+      <h1>amigo</h1>
       <button id="logoutButton" class="secondary" hidden>Salir</button>
     </header>
     <form id="loginView" class="login">
@@ -1552,7 +1552,7 @@ USER_HTML = """<!doctype html>
       $("text").value = "";
       addMessage("user", text);
       $("sendButton").disabled = true;
-      setStatus("NIÑO está pensando");
+      setStatus("amigo está pensando");
       try {
         const out = await api(agentPath("/tick"), {
           method: "POST",
@@ -1925,7 +1925,7 @@ def _openapi_document() -> dict[str, Any]:
         paths.setdefault(path, {})[method.lower()] = operation
     return {
         "openapi": "3.1.0",
-        "info": {"title": "NIÑO Local API", "version": "0.8.0"},
+        "info": {"title": "amigo Local API", "version": "0.8.0"},
         "paths": paths,
     }
 

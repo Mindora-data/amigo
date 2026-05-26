@@ -44,7 +44,7 @@ def test_policy_answers_self_model_question() -> None:
 
     out = runtime.tick("agent-cog", {"intent": "question", "text": "quien eres?"})
 
-    assert "Soy NIÑO" in out["action"]["payload"]["text"]
+    assert "Soy amigo" in out["action"]["payload"]["text"]
     assert "piano" in out["action"]["payload"]["text"]
     assert "self_model_query" in out["reason_trace"]
 
