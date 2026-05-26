@@ -1495,6 +1495,16 @@ USER_HTML = """<!doctype html>
       if (!res.ok) throw new Error(data.error || res.statusText);
       return data;
     }
+    function localNowIso() {
+      const now = new Date();
+      const offsetMinutes = -now.getTimezoneOffset();
+      const sign = offsetMinutes >= 0 ? "+" : "-";
+      const abs = Math.abs(offsetMinutes);
+      const hours = String(Math.floor(abs / 60)).padStart(2, "0");
+      const minutes = String(abs % 60).padStart(2, "0");
+      const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, -1);
+      return `${local}${sign}${hours}:${minutes}`;
+    }
     function setStatus(text) {
       $("status").textContent = text || "";
     }
@@ -1546,7 +1556,7 @@ USER_HTML = """<!doctype html>
       try {
         const out = await api(agentPath("/tick"), {
           method: "POST",
-          body: JSON.stringify({intent: "chat", text, salience: 0.7, confidence: 0.8}),
+          body: JSON.stringify({intent: "chat", text, salience: 0.7, confidence: 0.8, now: localNowIso()}),
         });
         const reply = out.action && out.action.payload ? out.action.payload.text : "";
         if (reply) {
@@ -1607,7 +1617,7 @@ USER_HTML = """<!doctype html>
         method: "POST",
         body: JSON.stringify({consent: "allowed", max_messages_per_day: 3, min_hours_between: 1})
       });
-      await api(agentPath("/proactivity/evaluate"), {method: "POST", body: "{}"}).catch(() => {});
+      await api(agentPath("/proactivity/evaluate"), {method: "POST", body: JSON.stringify({now: localNowIso()})}).catch(() => {});
       await loadProactiveInbox();
       if ($("messages").children.length === 0) {
         addMessage("nino", "Estoy aquí. ¿Qué tal vas hoy?");

@@ -244,6 +244,8 @@ def test_http_api_serves_minimal_user_app(tmp_path) -> None:
     assert b"webkitSpeechRecognition" in body
     assert b"speechSynthesis" in body
     assert b"SpeechSynthesisUtterance" in body
+    assert b"localNowIso" in body
+    assert b"now: localNowIso()" in body
     assert b"loadProactiveInbox" in body
     assert b"startProactiveConversation" in body
     assert b"/proactivity/configure" in body
@@ -660,6 +662,62 @@ def test_http_api_temporal_event_accepts_weekday_and_exact_time(tmp_path) -> Non
     assert relation["relation_state"]["temporal_events"][0]["kind"] == "reunion"
     assert relation["relation_state"]["temporal_events"][0]["due_at"] == "2026-05-28T17:30:00+00:00"
     assert relation["relation_state"]["temporal_events"][0]["lead_time_hours"] == 24
+
+
+def test_http_api_temporal_event_accepts_dentist_with_browser_local_time(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {
+            "intent": "chat",
+            "text": "hoy tengo dentista a las 11",
+            "salience": 0.9,
+            "confidence": 0.95,
+            "now": "2026-05-26T09:30:00+02:00",
+        },
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+    event = relation["relation_state"]["temporal_events"][0]
+
+    assert event["kind"] == "dentista"
+    assert event["due_at"] == "2026-05-26T11:00:00+02:00"
+    assert event["next_due_at"] == "2026-05-26T11:00:00+02:00"
+
+
+def test_http_api_proactivity_reminds_dentist_event_at_local_time(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/proactivity/configure",
+        {"consent": "allowed", "max_messages_per_day": 3, "min_hours_between": 0},
+    )
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {
+            "intent": "chat",
+            "text": "hoy tengo dentista a las 11",
+            "salience": 0.9,
+            "confidence": 0.95,
+            "now": "2026-05-26T09:30:00+02:00",
+        },
+    )
+
+    out = _request(
+        app,
+        "POST",
+        "/agents/api-agent/proactivity/evaluate",
+        {"now": "2026-05-26T10:15:00+02:00"},
+    )
+
+    assert out["should_send"] is True
+    assert out["action"]["payload"]["due_at"] == "2026-05-26T11:00:00+02:00"
+    assert "hoy tengo dentista a las 11" in out["action"]["payload"]["text"]
 
 
 def test_http_api_temporal_event_accepts_weekly_recurrence(tmp_path) -> None:

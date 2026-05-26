@@ -108,6 +108,36 @@ def test_llm_prompt_marks_temporal_memory_miss() -> None:
     assert "no hay recuerdos recuperados" in llm.prompts[-1]["system"]
 
 
+def test_llm_prompt_includes_current_time_and_temporal_events() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick(
+        "agent-llm",
+        {
+            "intent": "chat",
+            "text": "hoy tengo dentista a las 11",
+            "salience": 0.9,
+            "confidence": 0.95,
+            "now": "2026-05-26T09:30:00+02:00",
+        },
+    )
+    runtime.tick(
+        "agent-llm",
+        {
+            "intent": "chat",
+            "text": "se paso la tristeza. hoy estoy super alegre",
+            "now": "2026-05-26T09:45:00+02:00",
+        },
+    )
+
+    assert "Fecha/hora actual: 2026-05-26T09:45:00+02:00" in llm.prompts[-1]["user"]
+    assert "Eventos temporales activos:" in llm.prompts[-1]["user"]
+    assert "dentista" in llm.prompts[-1]["user"]
+    assert "2026-05-26T11:00:00+02:00" in llm.prompts[-1]["user"]
+    assert "no preguntes si ya pasó" in llm.prompts[-1]["system"]
+
+
 def test_conversation_persists_user_and_assistant_turns_without_extra_episodes() -> None:
     llm = FakeLLM("Te respondo usando memoria persistente.")
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

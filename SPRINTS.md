@@ -416,5 +416,8 @@ Auditoria final de producto 100% local:
 137. Estado final local: producto listo en `http://127.0.0.1:8000/user` para usuario y `http://127.0.0.1:8000/app` para operación interna; Vercel queda como validación externa pendiente.
 138. Hecho inicial: `/user` activa proactividad para la sesión de usuario, evalúa continuidad al entrar y muestra avisos pendientes como conversación inicial.
 139. Hecho inicial: si no hay historial ni aviso pendiente, `/user` inicia con `Estoy aquí. ¿Qué tal vas hoy?` para que NIÑO abra la conversación.
+140. Hecho inicial: `/user` envía la fecha/hora local del navegador en cada turno y al evaluar proactividad, conservando zona horaria para expresiones como `hoy a las 11`.
+141. Hecho inicial: el parser de eventos temporales reconoce citas implícitas de salud como `dentista`, `médico`, `doctor` y `consulta` aunque el usuario no escriba la palabra `cita`.
+142. Hecho inicial: el prompt LLM recibe fecha/hora actual y eventos temporales activos, con instrucción de no preguntar si una cita ya pasó cuando puede inferirlo.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

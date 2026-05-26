@@ -276,14 +276,25 @@ def _recurrence_from_text(text: str) -> dict[str, Any]:
 
 def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
     plain = _without_accents(text)
-    if not any(word in plain for word in ("cita", "examen", "reunion", "reunión", "llamada", "quedada")):
+    event_words = (
+        "cita",
+        "examen",
+        "reunion",
+        "llamada",
+        "quedada",
+        "dentista",
+        "medico",
+        "doctor",
+        "consulta",
+    )
+    if not any(word in plain for word in event_words):
         return []
     due_at = _due_at_from_text(text, now)
     if due_at is None:
         return []
     recurrence = _recurrence_from_text(text)
     kind = "event"
-    for candidate in ("cita", "examen", "reunion", "llamada", "quedada"):
+    for candidate in event_words:
         if candidate in plain:
             kind = candidate
             break
@@ -1708,6 +1719,7 @@ class NinoRuntime:
                     temporal_window=llm_retrieved.temporal_window,
                     recent_turns=self.conversation(agent_id)[-8:],
                     cold_facts=self.cold_store.list_for_agent(agent_id),
+                    current_time=now.isoformat(),
                 )
                 llm_text = self.llm_client.complete(prompt)
                 if llm_text:

@@ -256,6 +256,7 @@ def build_nino_prompt(
     temporal_window: dict[str, str] | None = None,
     recent_turns: list[dict[str, Any]] | None = None,
     cold_facts: list[Any] | None = None,
+    current_time: str | None = None,
 ) -> dict[str, str]:
     memories = "\n".join(
         f"- {_redact_context(candidate.statement)} (confidence {candidate.confidence:.2f})"
@@ -272,6 +273,12 @@ def build_nino_prompt(
         for fact in (cold_facts or [])[:8]
         if getattr(fact, "valid_to", None) is None
     ) or "- No active cold facts."
+    temporal_events = "\n".join(
+        f"- {str(event.get('kind', 'evento'))}: {_redact_context(str(event.get('text', '')))} "
+        f"(estado {event.get('status', 'pending')}, vence {event.get('next_due_at') or event.get('due_at')})"
+        for event in relation_state.get("temporal_events", [])[:5]
+        if isinstance(event, dict) and event.get("status", "pending") in {"pending", "reminded"}
+    ) or "- No active temporal events."
     preferences = ", ".join(sorted(relation_state.get("preferences", {}).keys())) or "none"
     concepts = sorted(
         world_model.get("concept_counts", {}).items(),
@@ -304,11 +311,14 @@ def build_nino_prompt(
         "Usa la memoria dada como contexto, no inventes recuerdos. Si no sabes algo, dilo. "
         "Mantén respuestas breves, normalmente entre 1 y 4 frases. "
         "No menciones detalles internos de implementación salvo que el usuario lo pregunte. "
+        "Usa la fecha/hora actual y los eventos temporales activos para saber si una cita sigue pendiente o ya pasó; "
+        "no preguntes si ya pasó cuando puedas inferirlo. "
         f"{continuity_instruction} {temporal_note}"
     )
     user = (
         f"Agente: {agent_id}\n"
         f"Intent: {intent}\n"
+        f"Fecha/hora actual: {current_time or 'unknown'}\n"
         f"Mensaje del usuario: {_redact_context(text)}\n\n"
         f"Modo continuidad: {'activo' if continuity_mode else 'pasivo'}\n"
         f"Consulta temporal: {'sin resultados' if temporal_miss else 'activa' if temporal_query else 'no'}\n"
@@ -319,6 +329,7 @@ def build_nino_prompt(
         f"Últimos turnos:\n{turns}\n\n"
         f"Memoria recuperada:\n{memories}\n\n"
         f"Hechos fríos activos:\n{facts}\n\n"
+        f"Eventos temporales activos:\n{temporal_events}\n\n"
         "Responde ahora al usuario como NIÑO."
     )
     return {"system": system, "user": user}
