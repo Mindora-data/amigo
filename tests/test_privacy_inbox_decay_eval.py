@@ -53,6 +53,21 @@ def test_global_model_persists_without_private_memory(tmp_path) -> None:
     assert "pablo" not in str(global_model).lower()
 
 
+def test_global_model_filters_obvious_places_and_sensitive_context(tmp_path) -> None:
+    runtime = create_persistent_runtime(tmp_path / "nino.db")
+    runtime.tick(
+        "agent-p",
+        {"intent": "chat", "text": "soy Pablo y hoy tengo dentista en Madrid a las 11", "salience": 0.9},
+    )
+
+    rendered = str(runtime.global_model()).lower()
+
+    assert "pablo" not in rendered
+    assert "madrid" not in rendered
+    assert "dentista" not in rendered
+    assert "11" not in rendered
+
+
 def test_proactivity_records_inbox_item(tmp_path) -> None:
     runtime = create_persistent_runtime(tmp_path / "nino.db")
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)

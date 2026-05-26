@@ -9,7 +9,7 @@ from .consolidation import MemoryFact
 from .contracts import AgentState
 from .memory import Episode
 from .proactivity import InMemoryProactiveCandidateStore
-from .runtime import NinoRuntime
+from .runtime import NinoRuntime, _safe_global_concept_counts
 
 DEFAULT_COGNITIVE_TIME_JSON = '{"age_ticks": 0.0, "experience_mass": 0.0, "maturity": 0.0}'
 DEFAULT_SELF_MODEL_JSON = (
@@ -327,6 +327,7 @@ class SQLiteGlobalModelStore:
                 "updated_at": None,
             }
         payload = json.loads(row["payload_json"])
+        payload["concept_counts"] = _safe_global_concept_counts(payload.get("concept_counts", {}))
         payload["pattern_outcomes"] = self._pattern_outcomes()
         return payload
 
@@ -336,7 +337,7 @@ class SQLiteGlobalModelStore:
             "conversation_count": int(model.get("conversation_count", 0)),
             "intent_counts": dict(model.get("intent_counts", {})),
             "tag_counts": dict(model.get("tag_counts", {})),
-            "concept_counts": dict(model.get("concept_counts", {})),
+            "concept_counts": _safe_global_concept_counts(model.get("concept_counts", {})),
             "updated_at": model.get("updated_at"),
         }
         updated_at = str(payload.get("updated_at") or datetime.now().isoformat())

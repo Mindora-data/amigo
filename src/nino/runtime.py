@@ -113,7 +113,7 @@ class InMemoryGlobalModelStore:
             "conversation_count": int(self._model.get("conversation_count", 0)),
             "intent_counts": dict(self._model.get("intent_counts", {})),
             "tag_counts": dict(self._model.get("tag_counts", {})),
-            "concept_counts": dict(self._model.get("concept_counts", {})),
+            "concept_counts": _safe_global_concept_counts(self._model.get("concept_counts", {})),
             "pattern_outcomes": dict(self._model.get("pattern_outcomes", {})),
             "updated_at": self._model.get("updated_at"),
         }
@@ -199,6 +199,9 @@ def _safe_global_tokens(text: str) -> list[str]:
     blocked = {
         "soy", "llamo", "email", "correo", "telefono", "teléfono", "direccion", "dirección",
         "password", "contraseña", "pin", "dni", "pablo", "ana", "bob",
+        "madrid", "barcelona", "dentista", "medico", "médico", "doctor", "salud",
+        "hoy", "mañana", "manana", "ayer", "lunes", "martes", "miercoles", "miércoles",
+        "jueves", "viernes", "sabado", "sábado", "domingo",
     }
     tokens = []
     for token in _tokens_for_model(_redact_text(text)):
@@ -210,13 +213,22 @@ def _safe_global_tokens(text: str) -> list[str]:
         tokens.append(normalized)
     return tokens[:12]
 
+def _safe_global_concept_counts(raw: dict[str, Any] | None) -> dict[str, int]:
+    safe: dict[str, int] = {}
+    for key, count in dict(raw or {}).items():
+        normalized = _without_accents(str(key))
+        if _safe_global_tokens(normalized) != [normalized]:
+            continue
+        safe[normalized] = int(count)
+    return safe
+
 def _update_global_model(model: dict[str, Any], percept_frame: dict[str, Any], now: datetime) -> dict[str, Any]:
     updated = {
         "schema_version": 1,
         "conversation_count": int(model.get("conversation_count", 0)) + 1,
         "intent_counts": dict(model.get("intent_counts", {})),
         "tag_counts": dict(model.get("tag_counts", {})),
-        "concept_counts": dict(model.get("concept_counts", {})),
+        "concept_counts": _safe_global_concept_counts(model.get("concept_counts", {})),
         "pattern_outcomes": dict(model.get("pattern_outcomes", {})),
         "updated_at": now.isoformat(),
     }
