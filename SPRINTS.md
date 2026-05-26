@@ -421,5 +421,8 @@ Auditoria final de producto 100% local:
 142. Hecho inicial: el prompt LLM recibe fecha/hora actual y eventos temporales activos, con instrucción de no preguntar si una cita ya pasó cuando puede inferirlo.
 143. Hecho inicial: los avisos proactivos de eventos temporales se entregan como aviso directo (`Te aviso...`) en vez de volver a pedir confirmación.
 144. Hecho inicial: frases declarativas con `hoy`/`ayer` ya no se tratan como consultas de memoria temporal si el usuario no está preguntando qué ocurrió.
+145. Hecho inicial: las citas con hora se guardan como evento y NIÑO pregunta si el usuario quiere alarma media hora antes, sin activar el aviso automáticamente.
+146. Hecho inicial: una respuesta afirmativa (`sí`, `vale`, `recuérdamelo`, `avísame`) confirma la alarma a 30 minutos; una negativa la deja recordada sin alarma.
+147. Hecho inicial: la proactividad no envía avisos de eventos con alarma pendiente de confirmar y usa `lead_time_hours=0.5` para alarmas confirmadas.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

@@ -274,6 +274,21 @@ def _recurrence_from_text(text: str) -> dict[str, Any]:
                 return {"recurrence": "weekly", "recurrence_interval_days": 7}
     return {"recurrence": None, "recurrence_interval_days": None}
 
+def _reminder_confirmation_from_text(text: str) -> str | None:
+    plain = _without_accents(text)
+    if re.search(r"\b(no|mejor no|sin alarma|no hace falta)\b", plain):
+        return "declined"
+    if re.search(r"\b(si|vale|ok|okay|claro|perfecto|recuerdamelo|avisame)\b", plain):
+        return "confirmed"
+    return None
+
+def _latest_offered_reminder_event(relation_state: dict[str, Any]) -> dict[str, Any] | None:
+    events = [event for event in relation_state.get("temporal_events", []) if isinstance(event, dict)]
+    for event in reversed(events):
+        if event.get("reminder_status") == "offered" and event.get("status") == "pending":
+            return event
+    return None
+
 def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
     plain = _without_accents(text)
     event_words = (
@@ -307,7 +322,9 @@ def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
             "status": "pending",
             "source": "user_statement",
             "created_at": now.isoformat(),
-            "lead_time_hours": 24,
+            "lead_time_hours": 0.5,
+            "reminder_offset_minutes": 30,
+            "reminder_status": "offered",
             "next_due_at": due_at.isoformat(),
             **recurrence,
         }
@@ -423,6 +440,29 @@ def _update_relation_from_percept(
             if event["id"] not in existing_ids:
                 existing.append(event)
         relation["temporal_events"] = existing[-50:]
+    else:
+        reminder_confirmation = _reminder_confirmation_from_text(text)
+        offered_event = _latest_offered_reminder_event(relation)
+        if reminder_confirmation and offered_event is not None:
+            updated = []
+            for raw in relation.get("temporal_events", []):
+                if not isinstance(raw, dict):
+                    updated.append(raw)
+                    continue
+                event = dict(raw)
+                if str(event.get("id")) == str(offered_event.get("id")):
+                    if reminder_confirmation == "confirmed":
+                        event["reminder_status"] = "confirmed"
+                        event["reminder_confirmed_at"] = now.isoformat()
+                        event["lead_time_hours"] = 0.5
+                        event["reminder_offset_minutes"] = 30
+                        event["status"] = "pending"
+                    else:
+                        event["reminder_status"] = "declined"
+                        event["reminder_declined_at"] = now.isoformat()
+                        event["status"] = "no_reminder"
+                updated.append(event)
+            relation["temporal_events"] = updated
 
     return relation
 
@@ -930,7 +970,17 @@ class NinoRuntime:
         events = self.list_temporal_events(agent_id)
         updated = []
         found: dict[str, Any] | None = None
-        allowed = {"text", "due_at", "next_due_at", "status", "lead_time_hours", "recurrence", "recurrence_interval_days"}
+        allowed = {
+            "text",
+            "due_at",
+            "next_due_at",
+            "status",
+            "lead_time_hours",
+            "reminder_offset_minutes",
+            "reminder_status",
+            "recurrence",
+            "recurrence_interval_days",
+        }
         for event in events:
             if str(event.get("id")) == event_id:
                 for key in allowed:
@@ -1366,6 +1416,41 @@ class NinoRuntime:
         world_model = request.world_model
         drives = request.drive_vector
         emotional_tone = _detect_emotional_tone(text)
+        new_temporal_events = [
+            event for event in request.percept_frame.get("new_temporal_events", []) if isinstance(event, dict)
+        ]
+        reminder_confirmation = request.percept_frame.get("reminder_confirmation")
+
+        if reminder_confirmation == "confirmed" and _latest_offered_reminder_event(relation) is not None:
+            return PolicyResponse(
+                chosen_action={
+                    "type": "external_message",
+                    "payload": {"text": "Perfecto, te aviso media hora antes."},
+                },
+                confidence=0.74,
+                reason_trace=["context_policy", "reminder_confirmed"],
+            )
+
+        if reminder_confirmation == "declined" and _latest_offered_reminder_event(relation) is not None:
+            return PolicyResponse(
+                chosen_action={
+                    "type": "external_message",
+                    "payload": {"text": "De acuerdo, lo recordaré sin alarma."},
+                },
+                confidence=0.72,
+                reason_trace=["context_policy", "reminder_declined"],
+            )
+
+        if new_temporal_events:
+            event_text = str(new_temporal_events[0].get("text", "ese evento"))
+            return PolicyResponse(
+                chosen_action={
+                    "type": "external_message",
+                    "payload": {"text": f"Lo guardo: {event_text}. ¿Quieres que te lo recuerde media hora antes?"},
+                },
+                confidence=0.72,
+                reason_trace=["context_policy", "reminder_offer"],
+            )
 
         if intent in {"greeting", "saludo"} or lowered in {"hola", "buenas", "hey"}:
             name = relation.get("user_name")
@@ -1659,6 +1744,8 @@ class NinoRuntime:
         intent = str(percept_frame.get("intent", "unknown"))
         text = str(percept_frame.get("text", ""))
         now = _now_from_percept(percept_frame)
+        new_temporal_events = _extract_temporal_events(text, now)
+        reminder_confirmation = _reminder_confirmation_from_text(text)
         query_intent = text.strip() or intent
         if intent not in GENERIC_INTENTS and text.strip():
             query_intent = f"{intent} {text}".strip()
@@ -1691,6 +1778,8 @@ class NinoRuntime:
                 "temporal_query": retrieved.temporal_query,
                 "temporal_window": retrieved.temporal_window,
                 "temporal_miss": retrieved.temporal_miss,
+                "new_temporal_events": new_temporal_events,
+                "reminder_confirmation": reminder_confirmation,
             },
             drive_vector=state.drive_vector,
             memory_candidates=retrieved.memory_candidates,
@@ -1701,9 +1790,13 @@ class NinoRuntime:
             world_model=state.world_model,
         )
         decision = self.policy_decide(policy_req)
+        force_policy_response = any(
+            marker in decision.reason_trace
+            for marker in ("reminder_offer", "reminder_confirmed", "reminder_declined")
+        )
         llm_error: str | None = None
         llm_provider = self._llm_provider()
-        if self.llm_client is not None and text.strip():
+        if self.llm_client is not None and text.strip() and not force_policy_response:
             try:
                 prompt = build_nino_prompt(
                     agent_id=agent_id,

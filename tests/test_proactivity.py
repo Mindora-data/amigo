@@ -58,8 +58,9 @@ def test_proactivity_prioritizes_temporal_event_reminder() -> None:
             "now": now.isoformat(),
         },
     )
+    runtime.tick("agent-p", {"intent": "chat", "text": "sí, recuérdamelo", "now": (now + timedelta(minutes=1)).isoformat()})
 
-    out = runtime.evaluate_proactivity("agent-p", now=now + timedelta(days=1))
+    out = runtime.evaluate_proactivity("agent-p", now=datetime(2026, 5, 22, 8, 30, tzinfo=timezone.utc))
     state = runtime.load_or_init_state("agent-p")
 
     assert out.should_send is True
@@ -85,8 +86,9 @@ def test_proactivity_reminds_weekday_event_with_exact_time() -> None:
             "now": now.isoformat(),
         },
     )
+    runtime.tick("agent-p", {"intent": "chat", "text": "vale", "now": (now + timedelta(minutes=1)).isoformat()})
 
-    out = runtime.evaluate_proactivity("agent-p", now=datetime(2026, 5, 28, 9, tzinfo=timezone.utc))
+    out = runtime.evaluate_proactivity("agent-p", now=datetime(2026, 5, 28, 17, tzinfo=timezone.utc))
 
     assert out.should_send is True
     assert out.action is not None
@@ -111,8 +113,9 @@ def test_proactivity_reschedules_weekly_recurring_event_after_reminder() -> None
             "now": now.isoformat(),
         },
     )
+    runtime.tick("agent-p", {"intent": "chat", "text": "sí", "now": (now + timedelta(minutes=1)).isoformat()})
 
-    first = runtime.evaluate_proactivity("agent-p", now=datetime(2026, 6, 1, 8, tzinfo=timezone.utc))
+    first = runtime.evaluate_proactivity("agent-p", now=datetime(2026, 6, 1, 8, 30, tzinfo=timezone.utc))
     state = runtime.load_or_init_state("agent-p")
     event = state.relation_state["temporal_events"][0]
 

@@ -150,6 +150,9 @@ def _due_temporal_event(relation_state: dict[str, Any], now: datetime) -> dict[s
     due: list[tuple[datetime, dict[str, Any]]] = []
     for event in events:
         recurrence = event.get("recurrence")
+        reminder_status = event.get("reminder_status")
+        if reminder_status and reminder_status != "confirmed":
+            continue
         if event.get("status") not in {None, "pending", "reminded"}:
             continue
         if event.get("status") == "reminded" and not recurrence:
@@ -275,6 +278,13 @@ class ProactivityEngine:
                 },
                 reason_trace=reason_trace,
             )
+
+        if any(
+            isinstance(event, dict) and event.get("reminder_status") == "offered"
+            for event in relation_state.get("temporal_events", [])
+        ):
+            reason_trace.append("reminder_confirmation_pending")
+            return ProactivityResponse(False, None, reason_trace)
 
         open_question = _latest_open_question(world_model)
         if open_question and not _contains_sensitive_term(str(open_question.get("text", ""))):

@@ -275,7 +275,8 @@ def build_nino_prompt(
     ) or "- No active cold facts."
     temporal_events = "\n".join(
         f"- {str(event.get('kind', 'evento'))}: {_redact_context(str(event.get('text', '')))} "
-        f"(estado {event.get('status', 'pending')}, vence {event.get('next_due_at') or event.get('due_at')})"
+        f"(estado {event.get('status', 'pending')}, alarma {event.get('reminder_status', 'legacy')}, "
+        f"vence {event.get('next_due_at') or event.get('due_at')})"
         for event in relation_state.get("temporal_events", [])[:5]
         if isinstance(event, dict) and event.get("status", "pending") in {"pending", "reminded"}
     ) or "- No active temporal events."
@@ -313,6 +314,8 @@ def build_nino_prompt(
         "No menciones detalles internos de implementación salvo que el usuario lo pregunte. "
         "Usa la fecha/hora actual y los eventos temporales activos para saber si una cita sigue pendiente o ya pasó; "
         "no preguntes si ya pasó cuando puedas inferirlo. "
+        "Si detectas una cita nueva con hora, pregunta si quiere recordatorio media hora antes; "
+        "si la alarma ya está confirmada, no vuelvas a pedir confirmación. "
         f"{continuity_instruction} {temporal_note}"
     )
     user = (
