@@ -412,6 +412,7 @@ Auditoria final de producto 100% local:
 133. Hecho inicial: `nino_context` y `/memory/search` exponen `temporal_miss`/`temporal_visible_miss`, de forma que UI y clientes pueden mostrar que no hubo memoria temporal.
 134. Hecho inicial: el prompt LLM recibe una instrucción explícita para decir que no encontró recuerdos de esa ventana temporal y no inventar eventos.
 135. Hecho inicial: la política local usa `temporal_miss` para responder “no encuentro recuerdos guardados de esa fecha” cuando no hay LLM o el proveedor falla.
-136. Siguiente: enriquecer `/user` para mostrar el estado “sin recuerdos de esa fecha” como mensaje normal sin texto técnico.
+136. Hecho inicial: `/user` muestra `No encuentro recuerdos guardados de esa fecha.` como mensaje normal si una respuesta no trae texto pero `nino_context.temporal_miss` está activo.
+137. Estado final local: producto listo en `http://127.0.0.1:8000/user` para usuario y `http://127.0.0.1:8000/app` para operación interna; Vercel queda como validación externa pendiente.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

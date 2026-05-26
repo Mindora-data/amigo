@@ -247,6 +247,8 @@ def test_http_api_serves_minimal_user_app(tmp_path) -> None:
     assert b"loadProactiveInbox" in body
     assert b"/proactivity/inbox" in body
     assert b"/delivered" in body
+    assert b"temporal_miss" in body
+    assert b"No encuentro recuerdos guardados de esa fecha." in body
     assert b"setInterval" in body
     assert b"/operations/" not in body
     assert b"/memory/facts" not in body

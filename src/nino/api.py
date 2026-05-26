@@ -1551,6 +1551,10 @@ USER_HTML = """<!doctype html>
         if (reply) {
           addMessage("nino", reply);
           speak(reply);
+        } else if (out.nino_context && out.nino_context.temporal_miss) {
+          const miss = "No encuentro recuerdos guardados de esa fecha.";
+          addMessage("nino", miss);
+          speak(miss);
         }
         setStatus("");
       } catch (err) {
