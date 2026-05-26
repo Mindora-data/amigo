@@ -122,7 +122,7 @@ def test_llm_prompt_includes_current_time_and_temporal_events() -> None:
             "now": "2026-05-26T09:30:00+02:00",
         },
     )
-    runtime.tick(
+    out = runtime.tick(
         "agent-llm",
         {
             "intent": "chat",
@@ -131,6 +131,8 @@ def test_llm_prompt_includes_current_time_and_temporal_events() -> None:
         },
     )
 
+    assert out["nino_context"]["temporal_query"] is False
+    assert out["nino_context"]["temporal_miss"] is False
     assert "Fecha/hora actual: 2026-05-26T09:45:00+02:00" in llm.prompts[-1]["user"]
     assert "Eventos temporales activos:" in llm.prompts[-1]["user"]
     assert "dentista" in llm.prompts[-1]["user"]

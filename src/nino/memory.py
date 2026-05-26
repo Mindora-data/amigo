@@ -161,9 +161,25 @@ def _day_window(day: datetime) -> tuple[datetime, datetime]:
     start = day.replace(hour=0, minute=0, second=0, microsecond=0)
     return start, start + timedelta(days=1)
 
+def _looks_like_temporal_recall_query(plain: str) -> bool:
+    return any(
+        marker in plain
+        for marker in (
+            "que ",
+            "qué ",
+            "?",
+            "recuerd",
+            "dije",
+            "dijiste",
+            "hablamos",
+            "hicimos",
+        )
+    )
+
 def _temporal_window(query: str, now: datetime) -> tuple[datetime, datetime] | None:
     plain = _without_accents(query)
-    if "antes de ayer" in plain or "anteayer" in plain:
+    recall_query = _looks_like_temporal_recall_query(plain)
+    if ("antes de ayer" in plain or "anteayer" in plain) and recall_query:
         return _day_window(now - timedelta(days=2))
     match = re.search(r"hace\s+(\d+|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+dias?", plain)
     if match:
@@ -181,9 +197,9 @@ def _temporal_window(query: str, now: datetime) -> tuple[datetime, datetime] | N
         return now - timedelta(days=60), now - timedelta(days=30)
     if "semana pasada" in plain:
         return now - timedelta(days=14), now - timedelta(days=7)
-    if "ayer" in plain:
+    if "ayer" in plain and recall_query:
         return _day_window(now - timedelta(days=1))
-    if "hoy" in plain:
+    if "hoy" in plain and recall_query:
         return _day_window(now)
     return None
 

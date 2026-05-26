@@ -113,6 +113,19 @@ def test_retrieval_marks_temporal_miss_when_window_has_no_memory() -> None:
     assert out.temporal_miss is True
     assert out.memory_candidates == []
 
+
+def test_retrieval_does_not_treat_today_statement_as_temporal_query() -> None:
+    store = InMemoryEpisodeStore()
+    retriever = MemoryRetriever(store)
+    req = RetrieveRequest(query_intent="hoy tengo dentista a las 11", self_state={}, relation_state={}, time_scope="long")
+
+    out = retriever.retrieve(agent_id="a1", request=req, top_k=3)
+
+    assert out.temporal_query is False
+    assert out.temporal_miss is False
+    assert out.temporal_window is None
+
+
 def test_retrieval_normalizes_accents_and_basic_synonyms() -> None:
     store = InMemoryEpisodeStore()
     now = datetime.now(timezone.utc)

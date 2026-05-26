@@ -420,5 +420,6 @@ Auditoria final de producto 100% local:
 141. Hecho inicial: el parser de eventos temporales reconoce citas implícitas de salud como `dentista`, `médico`, `doctor` y `consulta` aunque el usuario no escriba la palabra `cita`.
 142. Hecho inicial: el prompt LLM recibe fecha/hora actual y eventos temporales activos, con instrucción de no preguntar si una cita ya pasó cuando puede inferirlo.
 143. Hecho inicial: los avisos proactivos de eventos temporales se entregan como aviso directo (`Te aviso...`) en vez de volver a pedir confirmación.
+144. Hecho inicial: frases declarativas con `hoy`/`ayer` ya no se tratan como consultas de memoria temporal si el usuario no está preguntando qué ocurrió.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
