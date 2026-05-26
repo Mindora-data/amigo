@@ -118,7 +118,7 @@ class InMemoryProactiveCandidateStore:
         values = [value for value in delivered if value is not None]
         return max(values) if values else None
 
-    def mark_latest_delivered_reacted(self, user_id: str, now: datetime) -> bool:
+    def mark_latest_delivered_reacted(self, user_id: str, now: datetime) -> dict[str, Any] | None:
         rows = [
             item
             for item in self._items
@@ -126,10 +126,10 @@ class InMemoryProactiveCandidateStore:
         ]
         rows.sort(key=lambda item: str(item.get("delivered_at")), reverse=True)
         if not rows:
-            return False
+            return None
         rows[0]["user_reacted"] = 1
         rows[0]["reacted_at"] = now.isoformat()
-        return True
+        return dict(rows[0])
 
     def has_recent_checkin_candidate(self, user_id: str, since: datetime) -> bool:
         for item in self._items:
@@ -386,6 +386,8 @@ def ensure_checkin_candidate(
     user_id: str,
     relation_state: dict[str, Any],
     now: datetime,
+    *,
+    checkin_prior: float = 0.5,
 ) -> dict[str, Any] | None:
     last_interaction = _parse_dt(relation_state.get("last_interaction_at"))
     if last_interaction is None:
@@ -395,7 +397,8 @@ def ensure_checkin_candidate(
         for item in store.recent_delivered(user_id, limit=3)
         if item.get("kind") == "checkin" and int(item.get("user_reacted") or 0) == 0
     ]
-    threshold_days = CHECKIN_BASE_THRESHOLD_DAYS * (2 ** len(ignored))
+    prior_multiplier = 2.0 if checkin_prior < 0.35 else 0.8 if checkin_prior > 0.7 else 1.0
+    threshold_days = int(CHECKIN_BASE_THRESHOLD_DAYS * prior_multiplier * (2 ** len(ignored)))
     threshold = timedelta(days=threshold_days)
     if now - last_interaction < threshold:
         return None
@@ -497,6 +500,7 @@ class ProactivityEngine:
         self_model: dict[str, Any] | None = None,
         world_model: dict[str, Any] | None = None,
         global_model: dict[str, Any] | None = None,
+        checkin_prior: float = 0.5,
         drive_vector: dict[str, float] | None = None,
         active_goals: list[str] | None = None,
     ) -> ProactivityResponse:
@@ -542,7 +546,7 @@ class ProactivityEngine:
             )
 
         self.candidate_store.expire_stale(agent_id, now)
-        ensure_checkin_candidate(self.candidate_store, agent_id, relation_state, now)
+        ensure_checkin_candidate(self.candidate_store, agent_id, relation_state, now, checkin_prior=checkin_prior)
         allowed, candidate_reason = should_deliver_candidate(self.candidate_store, agent_id, now)
         if allowed:
             proactive_candidate = next(iter(self.candidate_store.pending(agent_id, now)), None)

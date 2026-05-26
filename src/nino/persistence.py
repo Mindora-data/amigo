@@ -312,6 +312,7 @@ class SQLiteGlobalModelStore:
             """
         )
         self.conn.commit()
+        self._ensure_pattern_table()
 
     def get(self) -> dict[str, object]:
         row = self.conn.execute("SELECT payload_json FROM global_models WHERE model_id = ?", ("anonymous",)).fetchone()
@@ -322,9 +323,12 @@ class SQLiteGlobalModelStore:
                 "intent_counts": {},
                 "tag_counts": {},
                 "concept_counts": {},
+                "pattern_outcomes": self._pattern_outcomes(),
                 "updated_at": None,
             }
-        return json.loads(row["payload_json"])
+        payload = json.loads(row["payload_json"])
+        payload["pattern_outcomes"] = self._pattern_outcomes()
+        return payload
 
     def put(self, model: dict[str, object]) -> None:
         payload = {
@@ -347,6 +351,77 @@ class SQLiteGlobalModelStore:
             ("anonymous", json.dumps(payload, sort_keys=True), updated_at),
         )
         self.conn.commit()
+
+    def _ensure_pattern_table(self) -> None:
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS global_pattern_outcome (
+                id INTEGER PRIMARY KEY,
+                gesture TEXT NOT NULL,
+                context TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                count INTEGER DEFAULT 1,
+                updated_at TEXT NOT NULL,
+                UNIQUE (gesture, context, outcome)
+            )
+            """
+        )
+        self.conn.commit()
+
+    def _pattern_outcomes(self) -> dict[str, dict[str, object]]:
+        self._ensure_pattern_table()
+        rows = self.conn.execute(
+            "SELECT gesture, context, outcome, count, updated_at FROM global_pattern_outcome ORDER BY gesture, context, outcome"
+        ).fetchall()
+        return {
+            f"{row['gesture']}:{row['context']}:{row['outcome']}": {
+                "gesture": row["gesture"],
+                "context": row["context"],
+                "outcome": row["outcome"],
+                "count": int(row["count"]),
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        }
+
+    def bump_global_pattern(
+        self,
+        gesture: str,
+        context: str,
+        outcome: str,
+        now: datetime | None = None,
+    ) -> None:
+        self._ensure_pattern_table()
+        updated_at = (now or datetime.now()).isoformat()
+        self.conn.execute(
+            """
+            INSERT INTO global_pattern_outcome (gesture, context, outcome, count, updated_at)
+            VALUES (?, ?, ?, 1, ?)
+            ON CONFLICT(gesture, context, outcome) DO UPDATE SET
+                count = count + 1,
+                updated_at = excluded.updated_at
+            """,
+            (gesture, context, outcome, updated_at),
+        )
+        self.conn.commit()
+
+    def global_pattern_stats(self, gesture: str, context: str) -> dict[str, int]:
+        self._ensure_pattern_table()
+        rows = self.conn.execute(
+            """
+            SELECT outcome, count FROM global_pattern_outcome
+            WHERE gesture = ? AND context = ?
+            """,
+            (gesture, context),
+        ).fetchall()
+        stats = {"positive": 0, "ignored": 0, "stop": 0, "total": 0}
+        for row in rows:
+            outcome = str(row["outcome"])
+            count = int(row["count"])
+            if outcome in stats:
+                stats[outcome] += count
+                stats["total"] += count
+        return stats
 
 
 class SQLiteProactiveCandidateStore(InMemoryProactiveCandidateStore):
@@ -502,20 +577,21 @@ class SQLiteProactiveCandidateStore(InMemoryProactiveCandidateStore):
         ).fetchone()
         return datetime.fromisoformat(row["delivered_at"]) if row else None
 
-    def mark_latest_delivered_reacted(self, user_id: str, now: datetime) -> bool:
+    def mark_latest_delivered_reacted(self, user_id: str, now: datetime) -> dict[str, object] | None:
         row = self.conn.execute(
             """
-            SELECT id FROM proactive_candidate
+            SELECT * FROM proactive_candidate
             WHERE user_id = ? AND status = 'delivered' AND user_reacted = 0
             ORDER BY delivered_at DESC LIMIT 1
             """,
             (user_id,),
         ).fetchone()
         if row is None:
-            return False
+            return None
         self.conn.execute("UPDATE proactive_candidate SET user_reacted = 1 WHERE id = ?", (row["id"],))
         self.conn.commit()
-        return True
+        updated = self.conn.execute("SELECT * FROM proactive_candidate WHERE id = ?", (row["id"],)).fetchone()
+        return self._row_to_item(updated) if updated else None
 
     def has_recent_checkin_candidate(self, user_id: str, since: datetime) -> bool:
         row = self.conn.execute(

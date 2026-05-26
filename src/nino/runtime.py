@@ -20,6 +20,7 @@ from .contracts import (
     RetrieveResponse,
 )
 from .llm import LLMClient, build_configured_llm, build_nino_prompt
+from .learning import distill_to_global, pattern_context_for_candidate, starting_prior
 from .memory import Episode, InMemoryEpisodeStore, MemoryRetriever
 from .proactivity import (
     InMemoryProactiveCandidateStore,
@@ -102,6 +103,7 @@ class InMemoryGlobalModelStore:
             "intent_counts": {},
             "tag_counts": {},
             "concept_counts": {},
+            "pattern_outcomes": {},
             "updated_at": None,
         }
 
@@ -112,6 +114,7 @@ class InMemoryGlobalModelStore:
             "intent_counts": dict(self._model.get("intent_counts", {})),
             "tag_counts": dict(self._model.get("tag_counts", {})),
             "concept_counts": dict(self._model.get("concept_counts", {})),
+            "pattern_outcomes": dict(self._model.get("pattern_outcomes", {})),
             "updated_at": self._model.get("updated_at"),
         }
 
@@ -119,8 +122,42 @@ class InMemoryGlobalModelStore:
         self._model = self._sanitize_global_model(model)
 
     def _sanitize_global_model(self, model: dict[str, Any]) -> dict[str, Any]:
-        allowed = {"schema_version", "conversation_count", "intent_counts", "tag_counts", "concept_counts", "updated_at"}
+        allowed = {"schema_version", "conversation_count", "intent_counts", "tag_counts", "concept_counts", "pattern_outcomes", "updated_at"}
         return {key: model[key] for key in allowed if key in model}
+
+    def bump_global_pattern(
+        self,
+        gesture: str,
+        context: str,
+        outcome: str,
+        now: datetime | None = None,
+    ) -> None:
+        now = now or datetime.now(timezone.utc)
+        model = self.get()
+        outcomes = dict(model.get("pattern_outcomes", {}))
+        key = f"{gesture}:{context}:{outcome}"
+        row = dict(outcomes.get(key, {"gesture": gesture, "context": context, "outcome": outcome, "count": 0}))
+        row["count"] = int(row.get("count", 0)) + 1
+        row["updated_at"] = now.isoformat()
+        outcomes[key] = row
+        model["pattern_outcomes"] = outcomes
+        model["updated_at"] = now.isoformat()
+        self.put(model)
+
+    def global_pattern_stats(self, gesture: str, context: str) -> dict[str, int]:
+        outcomes = self.get().get("pattern_outcomes", {})
+        stats = {"positive": 0, "ignored": 0, "stop": 0, "total": 0}
+        if not isinstance(outcomes, dict):
+            return stats
+        for row in outcomes.values():
+            if not isinstance(row, dict) or row.get("gesture") != gesture or row.get("context") != context:
+                continue
+            outcome = str(row.get("outcome"))
+            count = int(row.get("count", 0))
+            if outcome in stats:
+                stats[outcome] += count
+                stats["total"] += count
+        return stats
 
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
@@ -180,6 +217,7 @@ def _update_global_model(model: dict[str, Any], percept_frame: dict[str, Any], n
         "intent_counts": dict(model.get("intent_counts", {})),
         "tag_counts": dict(model.get("tag_counts", {})),
         "concept_counts": dict(model.get("concept_counts", {})),
+        "pattern_outcomes": dict(model.get("pattern_outcomes", {})),
         "updated_at": now.isoformat(),
     }
     intent = str(percept_frame.get("intent", "unknown"))
@@ -1179,6 +1217,7 @@ class NinoRuntime:
             self_model=state.self_model,
             world_model=state.world_model,
             global_model=self.global_model_store.get(),
+            checkin_prior=starting_prior("checkin", "dia_neutro", self.global_model_store),
             drive_vector=state.drive_vector,
             active_goals=state.active_goals,
         )
@@ -2104,7 +2143,14 @@ class NinoRuntime:
         text = str(percept_frame.get("text", ""))
         now = _now_from_percept(percept_frame)
         if text.strip() and not intent.startswith("onboarding:"):
-            self.proactive_candidate_store.mark_latest_delivered_reacted(agent_id, now)
+            reacted = self.proactive_candidate_store.mark_latest_delivered_reacted(agent_id, now)
+            if reacted:
+                gesture = str(reacted.get("kind") or "followup")
+                context = pattern_context_for_candidate(reacted)
+                try:
+                    distill_to_global(gesture, context, "positive", self.global_model_store)
+                except ValueError:
+                    pass
         new_temporal_events = _extract_temporal_events(text, now)
         reminder_confirmation = _reminder_confirmation_from_text(text)
         query_intent = text.strip() or intent

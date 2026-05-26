@@ -278,6 +278,30 @@ Criterios de salida:
 - Si hay duda, JSON inválido, candidato caducado, baja receptividad o fuera de horario, amigo calla.
 - Tests cubren límites, caducidad, check-in, aislamiento, persistencia y entrega de candidato.
 
+## Sprint 10 - Aprendizaje honesto
+
+Estado: hecho inicial.
+
+Objetivo: que amigo aprenda de patrones agregados anónimos sin inventar vida propia ni compartir contenido privado.
+
+Hecho:
+
+- Tabla SQLite `global_pattern_outcome` con agregados `(gesture, context, outcome)` y `UNIQUE`.
+- Vocabulario cerrado para destilado: gestos, contextos y resultados validados estrictamente.
+- `distill_to_global` rechaza cualquier etiqueta fuera de vocabulario; texto libre se trata como bug.
+- `starting_prior` devuelve `0.5` bajo `MIN_SAMPLE=50` y solo mueve el prior con evidencia agregada suficiente.
+- `GET /operations/global-model` incluye `pattern_outcomes` como agregado anónimo, sin `user_id`.
+- Responder a un proactivo marca reacción local y destila un resultado positivo anónimo.
+- El prior global de `checkin/dia_neutro` ajusta el umbral inicial de check-in para amigos nuevos.
+- La relación real del usuario sigue sobreescribiendo el prior al registrar reacción local.
+- Tests de no-fuga verifican que datos personales no aparecen en `global_pattern_outcome`.
+
+Criterios de salida:
+
+- No se guarda texto crudo, nombres, lugares, fechas concretas ni identificadores de usuario en patrones globales.
+- Los patrones globales afectan solo priors iniciales, nunca crean recuerdos ni experiencias fingidas.
+- Tests cubren vocabulario, conteo agregado, muestra mínima, no-fuga, persistencia y efecto de prior.
+
 ## Proxima tarea recomendada
 
 Auditoria final de producto 100% local:
