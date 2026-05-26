@@ -365,3 +365,17 @@ def test_llm_prompt_includes_recent_turns_cold_facts_and_redacts_sensitive_conte
     assert "prefiere revisar sprint 6 con pin [number]" in prompt
     assert "[email]" in prompt
     assert "pablo@example.com" not in prompt
+
+
+def test_llm_prompt_includes_onboarding_profile() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick("agent-llm", {"intent": "onboarding:name", "text": "Pablo"})
+    runtime.tick("agent-llm", {"intent": "onboarding:location", "text": "Madrid"})
+    runtime.tick("agent-llm", {"intent": "chat", "text": "qué sabes de mí?"})
+
+    prompt = llm.prompts[-1]["user"]
+    assert "Perfil inicial del usuario:" in prompt
+    assert "Nombre: Pablo" in prompt
+    assert "Lugar: Madrid" in prompt

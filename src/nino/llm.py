@@ -289,6 +289,13 @@ def build_nino_prompt(
         for event in relation_state.get("temporal_events", [])[:5]
         if isinstance(event, dict) and event.get("status", "pending") in {"pending", "reminded"}
     ) or "- No active temporal events."
+    onboarding = relation_state.get("onboarding", {})
+    onboarding_answers = onboarding.get("answers", {}) if isinstance(onboarding, dict) else {}
+    onboarding_profile = "\n".join(
+        f"- {answer.get('label', key)}: {_redact_context(str(answer.get('value', '')))}"
+        for key, answer in onboarding_answers.items()
+        if isinstance(answer, dict) and answer.get("value")
+    ) or "- No onboarding profile."
     preferences = ", ".join(sorted(relation_state.get("preferences", {}).keys())) or "none"
     concepts = sorted(
         world_model.get("concept_counts", {}).items(),
@@ -344,6 +351,7 @@ def build_nino_prompt(
         f"Memoria recuperada:\n{memories}\n\n"
         f"Hechos fríos activos:\n{facts}\n\n"
         f"Eventos temporales activos:\n{temporal_events}\n\n"
+        f"Perfil inicial del usuario:\n{onboarding_profile}\n\n"
         "Responde ahora al usuario como amigo."
     )
     return {"system": system, "user": user}

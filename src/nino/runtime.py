@@ -218,6 +218,26 @@ WEEKDAY_OFFSETS = {
 
 TIME_RE = re.compile(r"\b(?:a\s+las|a\s+la|las|la)\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\b", re.IGNORECASE)
 
+ONBOARDING_FLOW = [
+    ("name", "¿Cómo te llamas?"),
+    ("location", "¿De dónde eres o dónde vives ahora?"),
+    ("birth", "¿Cuándo naciste o qué edad tienes?"),
+    ("likes", "¿Qué te gusta hacer? Hobbies, música, planes..."),
+    ("important_memory", "¿Hay algo importante que quieres que recuerde de ti?"),
+    ("expectation", "¿Qué esperas de mí como amigo?"),
+]
+
+ONBOARDING_FIELD_LABELS = {
+    "name": "Nombre",
+    "location": "Lugar",
+    "birth": "Edad o nacimiento",
+    "likes": "Gustos",
+    "important_memory": "Importante",
+    "expectation": "Qué espera de amigo",
+}
+
+SKIP_ONBOARDING_RE = re.compile(r"\b(paso|saltar|saltalo|sáltalo|no quiero|prefiero no|luego)\b", re.IGNORECASE)
+
 def _time_from_text(text: str) -> tuple[int, int] | None:
     match = TIME_RE.search(text)
     if not match:
@@ -321,6 +341,22 @@ def _latest_offered_reminder_event(relation_state: dict[str, Any]) -> dict[str, 
         if event.get("reminder_status") == "offered" and event.get("status") == "pending":
             return event
     return None
+
+def _onboarding_next_question(current_key: str) -> str:
+    keys = [key for key, _ in ONBOARDING_FLOW]
+    try:
+        index = keys.index(current_key)
+    except ValueError:
+        return ONBOARDING_FLOW[0][1]
+    next_index = index + 1
+    if next_index >= len(ONBOARDING_FLOW):
+        return "Gracias. Me ayuda a conocerte sin invadir. A partir de aquí vamos hablando normal."
+    return ONBOARDING_FLOW[next_index][1]
+
+def _onboarding_response_text(current_key: str, answer: str) -> str:
+    skipped = bool(SKIP_ONBOARDING_RE.search(answer))
+    prefix = "Vale, lo saltamos." if skipped else "Gracias, me lo apunto."
+    return f"{prefix} {_onboarding_next_question(current_key)}"
 
 def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
     plain = _without_accents(text)
@@ -440,6 +476,7 @@ def _update_relation_from_percept(
     now: datetime,
 ) -> dict[str, Any]:
     relation = dict(relation_state)
+    intent = str(percept_frame.get("intent", "unknown"))
     text = str(percept_frame.get("text", "")).strip()
     relation["interaction_count"] = int(relation.get("interaction_count", 0)) + 1
     relation["last_interaction_at"] = now.isoformat()
@@ -511,6 +548,42 @@ def _update_relation_from_percept(
                         event["status"] = "no_reminder"
                 updated.append(event)
             relation["temporal_events"] = updated
+
+    if intent.startswith("onboarding:"):
+        key = intent.split(":", 1)[1].strip()
+        allowed_keys = {field for field, _ in ONBOARDING_FLOW}
+        if key in allowed_keys:
+            onboarding = dict(relation.get("onboarding", {}))
+            answers = dict(onboarding.get("answers", {}))
+            if not SKIP_ONBOARDING_RE.search(text):
+                answers[key] = {
+                    "label": ONBOARDING_FIELD_LABELS.get(key, key),
+                    "value": text[:240],
+                    "updated_at": now.isoformat(),
+                }
+                if key == "name":
+                    relation["user_name"] = text[:80]
+                    relation["user_name_updated_at"] = now.isoformat()
+                elif key == "location":
+                    relation["user_location"] = text[:160]
+                elif key == "birth":
+                    relation["user_birth_or_age"] = text[:160]
+                elif key == "likes":
+                    preferences = dict(relation.get("preferences", {}))
+                    preferences[text[:80]] = {
+                        "source": "onboarding",
+                        "confidence": 0.82,
+                        "salience": 0.7,
+                        "updated_at": now.isoformat(),
+                    }
+                    relation["preferences"] = preferences
+                elif key == "expectation":
+                    relation["user_expectation"] = text[:240]
+            onboarding["answers"] = answers
+            onboarding["last_key"] = key
+            onboarding["completed"] = key == ONBOARDING_FLOW[-1][0]
+            onboarding["updated_at"] = now.isoformat()
+            relation["onboarding"] = onboarding
 
     return relation
 
@@ -1468,6 +1541,16 @@ class NinoRuntime:
             event for event in request.percept_frame.get("new_temporal_events", []) if isinstance(event, dict)
         ]
         reminder_confirmation = request.percept_frame.get("reminder_confirmation")
+        if intent.startswith("onboarding:"):
+            key = intent.split(":", 1)[1].strip()
+            return PolicyResponse(
+                chosen_action={
+                    "type": "external_message",
+                    "payload": {"text": _onboarding_response_text(key, text)},
+                },
+                confidence=0.72,
+                reason_trace=["context_policy", "onboarding"],
+            )
 
         if reminder_confirmation == "confirmed" and _latest_offered_reminder_event(relation) is not None:
             return PolicyResponse(
@@ -1851,7 +1934,7 @@ class NinoRuntime:
         decision = self.policy_decide(policy_req)
         force_policy_response = any(
             marker in decision.reason_trace
-            for marker in ("reminder_offer", "reminder_confirmed", "reminder_declined", "direct_reminder_created")
+            for marker in ("reminder_offer", "reminder_confirmed", "reminder_declined", "direct_reminder_created", "onboarding")
         )
         llm_error: str | None = None
         llm_provider = self._llm_provider()

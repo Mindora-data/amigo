@@ -1473,10 +1473,20 @@ USER_HTML = """<!doctype html>
     const STORAGE_USER = "nino_user_id";
     const STORAGE_SESSION = "nino_session_token";
     const AGENT_ID = "nino";
+    const ONBOARDING = [
+      {key: "name", question: "¿Cómo te llamas?"},
+      {key: "location", question: "¿De dónde eres o dónde vives ahora?"},
+      {key: "birth", question: "¿Cuándo naciste o qué edad tienes?"},
+      {key: "likes", question: "¿Qué te gusta hacer? Hobbies, música, planes..."},
+      {key: "important_memory", question: "¿Hay algo importante que quieres que recuerde de ti?"},
+      {key: "expectation", question: "¿Qué esperas de mí como amigo?"}
+    ];
     let recognition = null;
     let listening = false;
     let voiceReply = false;
     let inboxTimer = null;
+    let onboardingActive = false;
+    let onboardingStep = 0;
     const deliveredInbox = new Set();
 
     function currentUserId() {
@@ -1484,6 +1494,19 @@ USER_HTML = """<!doctype html>
     }
     function agentPath(path) {
       return `/users/${encodeURIComponent(currentUserId())}/agents/${encodeURIComponent(AGENT_ID)}${path}`;
+    }
+    function onboardingStorageKey() {
+      return `amigo_onboarding_${currentUserId()}`;
+    }
+    function onboardingState() {
+      try {
+        return JSON.parse(localStorage.getItem(onboardingStorageKey()) || "{}");
+      } catch {
+        return {};
+      }
+    }
+    function saveOnboardingState(state) {
+      localStorage.setItem(onboardingStorageKey(), JSON.stringify(state));
     }
     async function api(path, options = {}) {
       const token = localStorage.getItem(STORAGE_SESSION);
@@ -1533,6 +1556,7 @@ USER_HTML = """<!doctype html>
       $("logoutButton").hidden = false;
       await loadConversation();
       await startProactiveConversation();
+      startOnboardingIfNeeded();
       await loadProactiveInbox();
       startInboxPolling();
       $("text").focus();
@@ -1544,6 +1568,31 @@ USER_HTML = """<!doctype html>
         const role = entry.role === "user" ? "user" : "nino";
         addMessage(role, entry.text || entry.content || "");
       });
+      return (out.turns || out.conversation || []).length;
+    }
+    function startOnboardingIfNeeded() {
+      const state = onboardingState();
+      if (state.completed || $("messages").children.length > 0) return;
+      onboardingActive = true;
+      onboardingStep = Number(state.step || 0);
+      addMessage("nino", "Antes de empezar, me gustaría conocerte un poco. Lo que me cuentes queda entre nosotros y lo usaré solo para recordarte mejor, acompañarte mejor y no tratarte como a cualquiera. Puedes saltarte cualquier pregunta.");
+      addMessage("nino", ONBOARDING[onboardingStep].question);
+    }
+    async function sendOnboardingAnswer(text) {
+      const current = ONBOARDING[onboardingStep];
+      const out = await api(agentPath("/tick"), {
+        method: "POST",
+        body: JSON.stringify({intent: `onboarding:${current.key}`, text, salience: 0.7, confidence: 0.9, now: localNowIso()}),
+      });
+      const reply = out.action && out.action.payload ? out.action.payload.text : "";
+      if (reply) addMessage("nino", reply);
+      onboardingStep += 1;
+      if (onboardingStep >= ONBOARDING.length) {
+        onboardingActive = false;
+        saveOnboardingState({completed: true, step: onboardingStep});
+      } else {
+        saveOnboardingState({completed: false, step: onboardingStep});
+      }
     }
     async function sendText(event) {
       event.preventDefault();
@@ -1554,6 +1603,11 @@ USER_HTML = """<!doctype html>
       $("sendButton").disabled = true;
       setStatus("amigo está pensando");
       try {
+        if (onboardingActive) {
+          await sendOnboardingAnswer(text);
+          setStatus("");
+          return;
+        }
         const out = await api(agentPath("/tick"), {
           method: "POST",
           body: JSON.stringify({intent: "chat", text, salience: 0.7, confidence: 0.8, now: localNowIso()}),
@@ -1620,7 +1674,7 @@ USER_HTML = """<!doctype html>
       });
       await api(agentPath("/proactivity/evaluate"), {method: "POST", body: JSON.stringify({now: localNowIso()})}).catch(() => {});
       await loadProactiveInbox();
-      if ($("messages").children.length === 0) {
+      if ($("messages").children.length === 0 && onboardingState().completed) {
         addMessage("nino", "Estoy aquí. ¿Qué tal vas hoy?");
       }
     }

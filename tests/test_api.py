@@ -249,6 +249,11 @@ def test_http_api_serves_minimal_user_app(tmp_path) -> None:
     assert b"SpeechSynthesisUtterance" in body
     assert b"localNowIso" in body
     assert b"now: localNowIso()" in body
+    assert b"ONBOARDING" in body
+    assert "¿Cómo te llamas?".encode("utf-8") in body
+    assert "¿Qué esperas de mí como amigo?".encode("utf-8") in body
+    assert "queda entre nosotros".encode("utf-8") in body
+    assert b"onboarding:${current.key}" in body
     assert b"loadProactiveInbox" in body
     assert b"startProactiveConversation" in body
     assert b"/proactivity/configure" in body
@@ -645,6 +650,31 @@ def test_http_api_tick_accepts_time_context_and_records_temporal_event(tmp_path)
     assert tick["nino_context"]["current_time"] == now
     assert relation["relation_state"]["temporal_events"][0]["text"] == "mañana tengo cita"
     assert relation["relation_state"]["temporal_events"][0]["due_at"] == "2026-05-22T09:00:00+00:00"
+
+
+def test_http_api_onboarding_stores_profile_and_returns_next_question(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    name = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "onboarding:name", "text": "Pablo", "now": "2026-05-26T10:00:00+02:00"},
+    )
+    location = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "onboarding:location", "text": "Madrid", "now": "2026-05-26T10:01:00+02:00"},
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+
+    assert "¿De dónde eres" in name["action"]["payload"]["text"]
+    assert "¿Cuándo naciste" in location["action"]["payload"]["text"]
+    assert relation["relation_state"]["user_name"] == "Pablo"
+    assert relation["relation_state"]["user_location"] == "Madrid"
+    assert relation["relation_state"]["onboarding"]["answers"]["name"]["value"] == "Pablo"
+    assert relation["relation_state"]["onboarding"]["answers"]["location"]["value"] == "Madrid"
 
 
 def test_http_api_temporal_event_accepts_weekday_and_exact_time(tmp_path) -> None:

@@ -432,5 +432,7 @@ Auditoria final de producto 100% local:
 153. Hecho inicial: el prompt LLM carga explícitamente la ética de amigo en cada respuesta para que el tono y los límites no dependan solo de memoria conversacional.
 154. Hecho inicial: `/user` evalúa proactividad en cada polling de inbox para que las alarmas vencidas se creen aunque el scheduler de fondo no haya corrido todavía.
 155. Hecho inicial: amigo entiende recordatorios relativos como `recuérdame en 5 minutos que beba agua`, los confirma directamente y avisa al llegar la hora.
+156. Hecho inicial: `/user` incorpora onboarding conversacional inicial con privacidad explícita y preguntas una a una para conocer al usuario sin formulario pesado.
+157. Hecho inicial: las respuestas de onboarding se guardan en `relation_state.onboarding.answers` y se inyectan en el prompt como `Perfil inicial del usuario`.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
