@@ -717,6 +717,7 @@ def test_http_api_proactivity_reminds_dentist_event_at_local_time(tmp_path) -> N
 
     assert out["should_send"] is True
     assert out["action"]["payload"]["due_at"] == "2026-05-26T11:00:00+02:00"
+    assert out["action"]["payload"]["text"] == "Te aviso: tienes pendiente hoy tengo dentista a las 11."
     assert "hoy tengo dentista a las 11" in out["action"]["payload"]["text"]
 
 

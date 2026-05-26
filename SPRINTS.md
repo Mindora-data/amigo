@@ -419,5 +419,6 @@ Auditoria final de producto 100% local:
 140. Hecho inicial: `/user` envía la fecha/hora local del navegador en cada turno y al evaluar proactividad, conservando zona horaria para expresiones como `hoy a las 11`.
 141. Hecho inicial: el parser de eventos temporales reconoce citas implícitas de salud como `dentista`, `médico`, `doctor` y `consulta` aunque el usuario no escriba la palabra `cita`.
 142. Hecho inicial: el prompt LLM recibe fecha/hora actual y eventos temporales activos, con instrucción de no preguntar si una cita ya pasó cuando puede inferirlo.
+143. Hecho inicial: los avisos proactivos de eventos temporales se entregan como aviso directo (`Te aviso...`) en vez de volver a pedir confirmación.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

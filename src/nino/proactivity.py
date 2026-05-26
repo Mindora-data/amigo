@@ -266,7 +266,7 @@ class ProactivityEngine:
                 action={
                     "type": "external_message",
                     "payload": {
-                        "text": f"Tengo esto marcado en el tiempo: {event_text}. ¿Quieres que lo preparemos o lo revisemos?",
+                        "text": f"Te aviso: tienes pendiente {event_text}.",
                         "source": "relation_state.temporal_events",
                         "temporal_event_id": temporal_event.get("id"),
                         "due_at": temporal_event.get("next_due_at") or temporal_event.get("due_at"),
