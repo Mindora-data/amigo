@@ -100,6 +100,20 @@ def test_llm_prompt_loads_amigo_ethics() -> None:
     assert "no te presentes como humano" in system
 
 
+def test_direct_reminder_creation_does_not_call_llm() -> None:
+    llm = FakeLLM("Respuesta que no debe usarse.")
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    out = runtime.tick(
+        "agent-llm",
+        {"intent": "chat", "text": "recuérdame en 5 minutos que beba agua", "now": "2026-05-26T12:27:00+02:00"},
+    )
+
+    assert out["action"]["payload"]["text"] == "Hecho, te doy un toque a las 12:32: beba agua."
+    assert "direct_reminder_created" in out["reason_trace"]
+    assert llm.prompts == []
+
+
 def test_llm_prompt_activates_continuity_for_temporal_memory_question() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

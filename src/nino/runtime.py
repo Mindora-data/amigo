@@ -1851,7 +1851,7 @@ class NinoRuntime:
         decision = self.policy_decide(policy_req)
         force_policy_response = any(
             marker in decision.reason_trace
-            for marker in ("reminder_offer", "reminder_confirmed", "reminder_declined")
+            for marker in ("reminder_offer", "reminder_confirmed", "reminder_declined", "direct_reminder_created")
         )
         llm_error: str | None = None
         llm_provider = self._llm_provider()
