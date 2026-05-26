@@ -677,6 +677,44 @@ def test_http_api_onboarding_stores_profile_and_returns_next_question(tmp_path) 
     assert relation["relation_state"]["onboarding"]["answers"]["location"]["value"] == "Madrid"
 
 
+def test_http_api_profile_query_and_correction_use_onboarding_profile(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "onboarding:name", "text": "Pablo", "now": "2026-05-26T10:00:00+02:00"},
+    )
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "onboarding:location", "text": "Madrid", "now": "2026-05-26T10:01:00+02:00"},
+    )
+
+    profile = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "chat", "text": "mi perfil", "now": "2026-05-26T10:02:00+02:00"},
+    )
+    correction = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "chat", "text": "corrige mi lugar a Barcelona", "now": "2026-05-26T10:03:00+02:00"},
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+
+    assert "Perfil inicial" in profile["action"]["payload"]["text"] or "perfil inicial" in profile["action"]["payload"]["text"]
+    assert "- Nombre: Pablo" in profile["action"]["payload"]["text"]
+    assert "- Lugar: Madrid" in profile["action"]["payload"]["text"]
+    assert "actualizo lugar" in correction["action"]["payload"]["text"].lower()
+    assert relation["relation_state"]["user_location"] == "Barcelona"
+    assert relation["relation_state"]["onboarding"]["answers"]["location"]["value"] == "Barcelona"
+
+
 def test_http_api_temporal_event_accepts_weekday_and_exact_time(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

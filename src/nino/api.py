@@ -1556,7 +1556,7 @@ USER_HTML = """<!doctype html>
       $("logoutButton").hidden = false;
       await loadConversation();
       await startProactiveConversation();
-      startOnboardingIfNeeded();
+      await startOnboardingIfNeeded();
       await loadProactiveInbox();
       startInboxPolling();
       $("text").focus();
@@ -1570,11 +1570,28 @@ USER_HTML = """<!doctype html>
       });
       return (out.turns || out.conversation || []).length;
     }
-    function startOnboardingIfNeeded() {
+    async function startOnboardingIfNeeded() {
       const state = onboardingState();
       if (state.completed || $("messages").children.length > 0) return;
+      const relation = await api(agentPath("/relation")).catch(() => null);
+      const backendOnboarding = relation && relation.relation_state ? relation.relation_state.onboarding : null;
+      if (backendOnboarding && backendOnboarding.completed) {
+        saveOnboardingState({completed: true, step: ONBOARDING.length});
+        return;
+      }
+      if (backendOnboarding && backendOnboarding.last_key) {
+        const index = ONBOARDING.findIndex((item) => item.key === backendOnboarding.last_key);
+        if (index >= 0 && index + 1 < ONBOARDING.length) {
+          onboardingStep = index + 1;
+          saveOnboardingState({completed: false, step: onboardingStep});
+        }
+      }
       onboardingActive = true;
       onboardingStep = Number(state.step || 0);
+      if (backendOnboarding && backendOnboarding.last_key) {
+        const index = ONBOARDING.findIndex((item) => item.key === backendOnboarding.last_key);
+        if (index >= 0 && index + 1 < ONBOARDING.length) onboardingStep = index + 1;
+      }
       addMessage("nino", "Antes de empezar, me gustaría conocerte un poco. Lo que me cuentes queda entre nosotros y lo usaré solo para recordarte mejor, acompañarte mejor y no tratarte como a cualquiera. Puedes saltarte cualquier pregunta.");
       addMessage("nino", ONBOARDING[onboardingStep].question);
     }

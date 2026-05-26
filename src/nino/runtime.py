@@ -358,6 +358,85 @@ def _onboarding_response_text(current_key: str, answer: str) -> str:
     prefix = "Vale, lo saltamos." if skipped else "Gracias, me lo apunto."
     return f"{prefix} {_onboarding_next_question(current_key)}"
 
+PROFILE_CORRECTION_PATTERNS = {
+    "name": re.compile(
+        r"\b(?:corrige|actualiza|cambia)\s+(?:mi\s+)?nombre\s+(?:a|por|es)\s+(?P<value>.+)$",
+        re.IGNORECASE,
+    ),
+    "location": re.compile(
+        r"\b(?:corrige|actualiza|cambia)\s+(?:mi\s+)?(?:lugar|ubicacion|ubicación|ciudad|donde vivo)\s+(?:a|por|es)\s+(?P<value>.+)$",
+        re.IGNORECASE,
+    ),
+    "birth": re.compile(
+        r"\b(?:corrige|actualiza|cambia)\s+(?:mi\s+)?(?:edad|nacimiento|fecha de nacimiento)\s+(?:a|por|es)\s+(?P<value>.+)$",
+        re.IGNORECASE,
+    ),
+    "likes": re.compile(
+        r"\b(?:corrige|actualiza|cambia)\s+(?:mis\s+)?(?:gustos|hobbies|aficiones)\s+(?:a|por|son)\s+(?P<value>.+)$",
+        re.IGNORECASE,
+    ),
+    "important_memory": re.compile(
+        r"\b(?:corrige|actualiza|cambia)\s+(?:lo\s+)?importante\s+(?:a|por|es)\s+(?P<value>.+)$",
+        re.IGNORECASE,
+    ),
+    "expectation": re.compile(
+        r"\b(?:corrige|actualiza|cambia)\s+(?:lo\s+que\s+espero|mi\s+expectativa)\s+(?:a|por|es)\s+(?P<value>.+)$",
+        re.IGNORECASE,
+    ),
+}
+
+PROFILE_STORAGE_FIELDS = {
+    "name": ("user_name", 80),
+    "location": ("user_location", 160),
+    "birth": ("user_birth_or_age", 160),
+    "expectation": ("user_expectation", 240),
+}
+
+def _profile_correction_from_text(text: str) -> tuple[str, str] | None:
+    for key, pattern in PROFILE_CORRECTION_PATTERNS.items():
+        match = pattern.search(text)
+        if match:
+            value = match.group("value").strip(" .")
+            if value:
+                return key, value[:240]
+    return None
+
+def _onboarding_answers(relation_state: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    onboarding = relation_state.get("onboarding", {})
+    answers = onboarding.get("answers", {}) if isinstance(onboarding, dict) else {}
+    return {key: value for key, value in answers.items() if isinstance(value, dict)}
+
+def _profile_lines(relation_state: dict[str, Any]) -> list[str]:
+    answers = _onboarding_answers(relation_state)
+    lines: list[str] = []
+    for key, _question in ONBOARDING_FLOW:
+        answer = answers.get(key)
+        value = str(answer.get("value", "")).strip() if answer else ""
+        if value:
+            label = ONBOARDING_FIELD_LABELS.get(key, key)
+            lines.append(f"- {label}: {value}")
+    if not lines:
+        name = str(relation_state.get("user_name", "")).strip()
+        location = str(relation_state.get("user_location", "")).strip()
+        expectation = str(relation_state.get("user_expectation", "")).strip()
+        if name:
+            lines.append(f"- Nombre: {name}")
+        if location:
+            lines.append(f"- Lugar: {location}")
+        if expectation:
+            lines.append(f"- Qué espera de amigo: {expectation}")
+    return lines
+
+def _profile_response_text(relation_state: dict[str, Any]) -> str:
+    lines = _profile_lines(relation_state)
+    if not lines:
+        return "Todavía tengo poco perfil tuyo. Podemos completarlo hablando: nombre, lugar, gustos y qué esperas de mí."
+    return (
+        "Esto es lo que tengo de tu perfil inicial:\n"
+        + "\n".join(lines)
+        + "\nSi algo está mal, dímelo así: corrige mi nombre a ..., corrige mi lugar a ... o actualiza mis gustos a ..."
+    )
+
 def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
     plain = _without_accents(text)
     reminder_request = _is_reminder_request(text)
@@ -485,6 +564,36 @@ def _update_relation_from_percept(
     if name:
         relation["user_name"] = name.group("name")
         relation["user_name_updated_at"] = now.isoformat()
+
+    profile_correction = _profile_correction_from_text(text)
+    if profile_correction:
+        key, value = profile_correction
+        onboarding = dict(relation.get("onboarding", {}))
+        answers = dict(onboarding.get("answers", {}))
+        answers[key] = {
+            "label": ONBOARDING_FIELD_LABELS.get(key, key),
+            "value": value,
+            "updated_at": now.isoformat(),
+            "source": "profile_correction",
+        }
+        storage = PROFILE_STORAGE_FIELDS.get(key)
+        if storage:
+            field, limit = storage
+            relation[field] = value[:limit]
+            if key == "name":
+                relation["user_name_updated_at"] = now.isoformat()
+        elif key == "likes":
+            preferences = dict(relation.get("preferences", {}))
+            preferences[value[:80]] = {
+                "source": "profile_correction",
+                "confidence": 0.84,
+                "salience": 0.7,
+                "updated_at": now.isoformat(),
+            }
+            relation["preferences"] = preferences
+        onboarding["answers"] = answers
+        onboarding["updated_at"] = now.isoformat()
+        relation["onboarding"] = onboarding
 
     preference = PREFERENCE_RE.search(text)
     if preference:
@@ -1552,6 +1661,32 @@ class NinoRuntime:
                 reason_trace=["context_policy", "onboarding"],
             )
 
+        profile_correction = _profile_correction_from_text(text)
+        if profile_correction:
+            key, value = profile_correction
+            label = ONBOARDING_FIELD_LABELS.get(key, key).lower()
+            return PolicyResponse(
+                chosen_action={
+                    "type": "external_message",
+                    "payload": {"text": f"Hecho, actualizo {label}: {value}."},
+                },
+                confidence=0.74,
+                reason_trace=["context_policy", "profile_correction"],
+            )
+
+        if (
+            "mi perfil" in plain
+            or "perfil inicial" in plain
+        ):
+            return PolicyResponse(
+                chosen_action={
+                    "type": "external_message",
+                    "payload": {"text": _profile_response_text(relation)},
+                },
+                confidence=0.73,
+                reason_trace=["context_policy", "profile_query"],
+            )
+
         if reminder_confirmation == "confirmed" and _latest_offered_reminder_event(relation) is not None:
             return PolicyResponse(
                 chosen_action={
@@ -1934,7 +2069,15 @@ class NinoRuntime:
         decision = self.policy_decide(policy_req)
         force_policy_response = any(
             marker in decision.reason_trace
-            for marker in ("reminder_offer", "reminder_confirmed", "reminder_declined", "direct_reminder_created", "onboarding")
+            for marker in (
+                "reminder_offer",
+                "reminder_confirmed",
+                "reminder_declined",
+                "direct_reminder_created",
+                "onboarding",
+                "profile_correction",
+                "profile_query",
+            )
         )
         llm_error: str | None = None
         llm_provider = self._llm_provider()

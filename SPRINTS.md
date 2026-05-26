@@ -434,5 +434,7 @@ Auditoria final de producto 100% local:
 155. Hecho inicial: amigo entiende recordatorios relativos como `recuérdame en 5 minutos que beba agua`, los confirma directamente y avisa al llegar la hora.
 156. Hecho inicial: `/user` incorpora onboarding conversacional inicial con privacidad explícita y preguntas una a una para conocer al usuario sin formulario pesado.
 157. Hecho inicial: las respuestas de onboarding se guardan en `relation_state.onboarding.answers` y se inyectan en el prompt como `Perfil inicial del usuario`.
+158. Hecho inicial: amigo responde a `mi perfil` con el perfil inicial guardado y permite corregir campos por chat, por ejemplo `corrige mi lugar a Barcelona`.
+159. Hecho inicial: `/user` sincroniza el onboarding con el estado persistente del backend para no repetir preguntas ya respondidas al cambiar de navegador o sesión.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
