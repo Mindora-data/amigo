@@ -286,6 +286,16 @@ class ProactivityEngine:
             reason_trace.append("reminder_confirmation_pending")
             return ProactivityResponse(False, None, reason_trace)
 
+        for event in relation_state.get("temporal_events", []):
+            if not isinstance(event, dict) or event.get("reminder_status") != "confirmed":
+                continue
+            if event.get("status") != "pending":
+                continue
+            due_at = _parse_dt(event.get("next_due_at") or event.get("due_at"))
+            if due_at is not None and now < due_at:
+                reason_trace.append("temporal_alarm_scheduled")
+                return ProactivityResponse(False, None, reason_trace)
+
         open_question = _latest_open_question(world_model)
         if open_question and not _contains_sensitive_term(str(open_question.get("text", ""))):
             reason_trace.extend(["goal_reduce_uncertainty", "open_question_follow_up"])

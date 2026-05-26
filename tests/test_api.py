@@ -722,6 +722,12 @@ def test_http_api_proactivity_reminds_dentist_event_at_local_time(tmp_path) -> N
         "/agents/api-agent/tick",
         {"intent": "chat", "text": "sí, recuérdamelo", "now": "2026-05-26T09:31:00+02:00"},
     )
+    scheduled = _request(
+        app,
+        "POST",
+        "/agents/api-agent/proactivity/evaluate",
+        {"now": "2026-05-26T10:15:00+02:00"},
+    )
 
     out = _request(
         app,
@@ -733,6 +739,8 @@ def test_http_api_proactivity_reminds_dentist_event_at_local_time(tmp_path) -> N
     assert "¿Quieres que te lo recuerde media hora antes?" in first["action"]["payload"]["text"]
     assert early["should_send"] is False
     assert confirmed["action"]["payload"]["text"] == "Perfecto, te aviso media hora antes."
+    assert scheduled["should_send"] is False
+    assert "temporal_alarm_scheduled" in scheduled["reason_trace"]
     assert out["should_send"] is True
     assert out["action"]["payload"]["due_at"] == "2026-05-26T11:00:00+02:00"
     assert out["action"]["payload"]["text"] == "Te aviso: tienes pendiente hoy tengo dentista a las 11."
