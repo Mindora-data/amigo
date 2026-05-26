@@ -1601,6 +1601,7 @@ USER_HTML = """<!doctype html>
     }
     async function loadProactiveInbox() {
       if ($("chatView").style.display !== "grid") return;
+      await api(agentPath("/proactivity/evaluate"), {method: "POST", body: JSON.stringify({now: localNowIso()})}).catch(() => {});
       const out = await api(agentPath("/proactivity/inbox"));
       for (const item of out.inbox || []) {
         if (item.status === "delivered" || deliveredInbox.has(item.id)) continue;

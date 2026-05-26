@@ -430,5 +430,7 @@ Auditoria final de producto 100% local:
 151. Hecho inicial: `/user` muestra `amigo` como nombre visible y el prompt LLM se orienta a un compañero cercano, poco invasivo, que recuerda y pregunta con tacto.
 152. Hecho inicial: `AMIGO_ETHICS.md` define la ética de amigo: honestidad, confianza, privacidad, no manipulación, memoria responsable, límites claros y cuidado sin presión.
 153. Hecho inicial: el prompt LLM carga explícitamente la ética de amigo en cada respuesta para que el tono y los límites no dependan solo de memoria conversacional.
+154. Hecho inicial: `/user` evalúa proactividad en cada polling de inbox para que las alarmas vencidas se creen aunque el scheduler de fondo no haya corrido todavía.
+155. Hecho inicial: amigo entiende recordatorios relativos como `recuérdame en 5 minutos que beba agua`, los confirma directamente y avisa al llegar la hora.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

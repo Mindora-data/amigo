@@ -253,6 +253,8 @@ def test_http_api_serves_minimal_user_app(tmp_path) -> None:
     assert b"startProactiveConversation" in body
     assert b"/proactivity/configure" in body
     assert b"/proactivity/evaluate" in body
+    assert b"loadProactiveInbox() {\n      if" in body
+    assert b"body: JSON.stringify({now: localNowIso()})" in body
     assert "Estoy aquí. ¿Qué tal vas hoy?".encode("utf-8") in body
     assert b"/proactivity/inbox" in body
     assert b"/delivered" in body
@@ -748,6 +750,52 @@ def test_http_api_proactivity_reminds_dentist_event_at_local_time(tmp_path) -> N
     assert out["action"]["payload"]["due_at"] == "2026-05-26T11:00:00+02:00"
     assert out["action"]["payload"]["text"] == "Oye, acuérdate: hoy tengo dentista a las 11."
     assert "hoy tengo dentista a las 11" in out["action"]["payload"]["text"]
+
+
+def test_http_api_relative_reminder_fires_from_polling_time(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/proactivity/configure",
+        {"consent": "allowed", "max_messages_per_day": 3, "min_hours_between": 1},
+    )
+    created = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {
+            "intent": "chat",
+            "text": "tb recuerdame en 5 minutos que beba agua",
+            "salience": 0.7,
+            "confidence": 0.95,
+            "now": "2026-05-26T12:27:00+02:00",
+        },
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+    event = relation["relation_state"]["temporal_events"][0]
+    early = _request(
+        app,
+        "POST",
+        "/agents/api-agent/proactivity/evaluate",
+        {"now": "2026-05-26T12:31:00+02:00"},
+    )
+    due = _request(
+        app,
+        "POST",
+        "/agents/api-agent/proactivity/evaluate",
+        {"now": "2026-05-26T12:32:00+02:00"},
+    )
+
+    assert created["action"]["payload"]["text"] == "Hecho, te doy un toque a las 12:32: beba agua."
+    assert event["kind"] == "recordatorio"
+    assert event["text"] == "beba agua"
+    assert event["due_at"] == "2026-05-26T12:32:00+02:00"
+    assert event["reminder_status"] == "confirmed"
+    assert early["should_send"] is False
+    assert "temporal_alarm_scheduled" in early["reason_trace"]
+    assert due["should_send"] is True
+    assert due["action"]["payload"]["text"] == "Oye, acuérdate: beba agua."
 
 
 def test_http_api_temporal_event_accepts_weekly_recurrence(tmp_path) -> None:

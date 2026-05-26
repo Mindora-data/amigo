@@ -228,6 +228,39 @@ def _time_from_text(text: str) -> tuple[int, int] | None:
         return None
     return hour, minute
 
+def _is_reminder_request(text: str) -> bool:
+    plain = _without_accents(text)
+    return bool(re.search(r"\b(recuerdame|recordarme|avisame|avisarme|recordatorio|alarma)\b", plain))
+
+def _relative_due_at_from_text(text: str, now: datetime) -> datetime | None:
+    plain = _without_accents(text)
+    match = re.search(r"\ben\s+(\d{1,3})\s+(minuto|minutos|hora|horas)\b", plain)
+    if not match:
+        return None
+    amount = int(match.group(1))
+    unit = match.group(2)
+    if amount <= 0:
+        return None
+    if unit.startswith("minuto"):
+        return now + timedelta(minutes=amount)
+    return now + timedelta(hours=amount)
+
+def _reminder_text_from_request(text: str) -> str:
+    cleaned = text.strip()
+    match = re.search(r"\bque\s+(.+)$", cleaned, re.IGNORECASE)
+    if match:
+        return match.group(1).strip(" .")[:180]
+    plain = re.sub(
+        r"\b(recuerdame|recuérdame|avisame|avísame|recordatorio|alarma)\b",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    plain = re.sub(r"\ben\s+\d{1,3}\s+(minuto|minutos|hora|horas)\b", "", plain, flags=re.IGNORECASE)
+    plain = TIME_RE.sub("", plain)
+    plain = plain.strip(" ,.")
+    return (plain or cleaned)[:180]
+
 def _next_weekday(now: datetime, weekday: int) -> datetime:
     days = (weekday - now.weekday()) % 7
     if days == 0:
@@ -291,6 +324,7 @@ def _latest_offered_reminder_event(relation_state: dict[str, Any]) -> dict[str, 
 
 def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
     plain = _without_accents(text)
+    reminder_request = _is_reminder_request(text)
     event_words = (
         "cita",
         "examen",
@@ -302,29 +336,43 @@ def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
         "doctor",
         "consulta",
     )
-    if not any(word in plain for word in event_words):
+    if not reminder_request and not any(word in plain for word in event_words):
         return []
-    due_at = _due_at_from_text(text, now)
+    due_at = _relative_due_at_from_text(text, now) if reminder_request else None
+    if due_at is None:
+        due_at = _due_at_from_text(text, now)
+    if due_at is None and reminder_request:
+        explicit_time = _time_from_text(text)
+        if explicit_time is not None:
+            hour, minute = explicit_time
+            due_at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if due_at <= now:
+                due_at += timedelta(days=1)
     if due_at is None:
         return []
     recurrence = _recurrence_from_text(text)
-    kind = "event"
-    for candidate in event_words:
-        if candidate in plain:
-            kind = candidate
-            break
+    kind = "recordatorio" if reminder_request else "event"
+    event_text = _reminder_text_from_request(text) if reminder_request else text[:180]
+    reminder_status = "confirmed" if reminder_request else "offered"
+    lead_time_hours = 0 if reminder_request else 0.5
+    reminder_offset_minutes = 0 if reminder_request else 30
+    if not reminder_request:
+        for candidate in event_words:
+            if candidate in plain:
+                kind = candidate
+                break
     return [
         {
             "id": f"{kind}:{due_at.isoformat()}:{abs(hash(text)) % 100000}",
             "kind": kind,
-            "text": text[:180],
+            "text": event_text,
             "due_at": due_at.isoformat(),
             "status": "pending",
             "source": "user_statement",
             "created_at": now.isoformat(),
-            "lead_time_hours": 0.5,
-            "reminder_offset_minutes": 30,
-            "reminder_status": "offered",
+            "lead_time_hours": lead_time_hours,
+            "reminder_offset_minutes": reminder_offset_minutes,
+            "reminder_status": reminder_status,
             "next_due_at": due_at.isoformat(),
             **recurrence,
         }
@@ -1442,7 +1490,18 @@ class NinoRuntime:
             )
 
         if new_temporal_events:
-            event_text = str(new_temporal_events[0].get("text", "ese evento"))
+            event = new_temporal_events[0]
+            event_text = str(event.get("text", "ese evento"))
+            if event.get("reminder_status") == "confirmed":
+                due_at = _parse_datetime(event.get("due_at"))
+                return PolicyResponse(
+                    chosen_action={
+                        "type": "external_message",
+                        "payload": {"text": f"Hecho, te doy un toque a las {due_at.strftime('%H:%M')}: {event_text}."},
+                    },
+                    confidence=0.74,
+                    reason_trace=["context_policy", "direct_reminder_created"],
+                )
             return PolicyResponse(
                 chosen_action={
                     "type": "external_message",

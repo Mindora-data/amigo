@@ -160,7 +160,8 @@ def _due_temporal_event(relation_state: dict[str, Any], now: datetime) -> dict[s
         due_at = _parse_dt(event.get("next_due_at") or event.get("due_at"))
         if due_at is None:
             continue
-        lead_hours = max(0.0, float(event.get("lead_time_hours") or 24))
+        raw_lead_hours = event.get("lead_time_hours")
+        lead_hours = 24.0 if raw_lead_hours is None else max(0.0, float(raw_lead_hours))
         if now - timedelta(hours=6) <= due_at <= now + timedelta(hours=lead_hours):
             due.append((due_at, event))
     if not due:
