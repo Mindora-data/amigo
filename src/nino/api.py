@@ -1522,6 +1522,7 @@ USER_HTML = """<!doctype html>
       $("chatView").style.display = "grid";
       $("logoutButton").hidden = false;
       await loadConversation();
+      await startProactiveConversation();
       await loadProactiveInbox();
       startInboxPolling();
       $("text").focus();
@@ -1599,6 +1600,17 @@ USER_HTML = """<!doctype html>
         addMessage("nino", text);
         speak(text);
         await api(agentPath(`/proactivity/inbox/${encodeURIComponent(item.id)}/delivered`), {method: "POST", body: "{}"});
+      }
+    }
+    async function startProactiveConversation() {
+      await api(agentPath("/proactivity/configure"), {
+        method: "POST",
+        body: JSON.stringify({consent: "allowed", max_messages_per_day: 3, min_hours_between: 1})
+      });
+      await api(agentPath("/proactivity/evaluate"), {method: "POST", body: "{}"}).catch(() => {});
+      await loadProactiveInbox();
+      if ($("messages").children.length === 0) {
+        addMessage("nino", "Estoy aquí. ¿Qué tal vas hoy?");
       }
     }
     function startInboxPolling() {

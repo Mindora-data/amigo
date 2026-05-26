@@ -245,6 +245,10 @@ def test_http_api_serves_minimal_user_app(tmp_path) -> None:
     assert b"speechSynthesis" in body
     assert b"SpeechSynthesisUtterance" in body
     assert b"loadProactiveInbox" in body
+    assert b"startProactiveConversation" in body
+    assert b"/proactivity/configure" in body
+    assert b"/proactivity/evaluate" in body
+    assert "Estoy aquí. ¿Qué tal vas hoy?".encode("utf-8") in body
     assert b"/proactivity/inbox" in body
     assert b"/delivered" in body
     assert b"temporal_miss" in body
