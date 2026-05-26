@@ -436,5 +436,6 @@ Auditoria final de producto 100% local:
 157. Hecho inicial: las respuestas de onboarding se guardan en `relation_state.onboarding.answers` y se inyectan en el prompt como `Perfil inicial del usuario`.
 158. Hecho inicial: amigo responde a `mi perfil` con el perfil inicial guardado y permite corregir campos por chat, por ejemplo `corrige mi lugar a Barcelona`.
 159. Hecho inicial: `/user` sincroniza el onboarding con el estado persistente del backend para no repetir preguntas ya respondidas al cambiar de navegador o sesión.
+160. Hecho inicial: amigo permite borrar datos del perfil por chat con frases como `olvida mi lugar` o `borra mi perfil`, limpiando el estado persistente asociado.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.

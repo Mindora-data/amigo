@@ -392,6 +392,15 @@ PROFILE_STORAGE_FIELDS = {
     "expectation": ("user_expectation", 240),
 }
 
+PROFILE_FORGET_KEYWORDS = {
+    "name": ("nombre", "como me llamo"),
+    "location": ("lugar", "ubicacion", "ubicación", "ciudad", "donde vivo", "de donde soy"),
+    "birth": ("edad", "nacimiento", "fecha de nacimiento"),
+    "likes": ("gustos", "hobbies", "aficiones"),
+    "important_memory": ("importante", "algo importante"),
+    "expectation": ("expectativa", "lo que espero", "que espero de ti"),
+}
+
 def _profile_correction_from_text(text: str) -> tuple[str, str] | None:
     for key, pattern in PROFILE_CORRECTION_PATTERNS.items():
         match = pattern.search(text)
@@ -400,6 +409,49 @@ def _profile_correction_from_text(text: str) -> tuple[str, str] | None:
             if value:
                 return key, value[:240]
     return None
+
+def _profile_forget_from_text(text: str) -> str | None:
+    plain = _without_accents(text)
+    if not re.search(r"\b(borra|borralo|bórralo|elimina|olvida|quita)\b", plain):
+        return None
+    if "mi perfil" in plain or "perfil inicial" in plain or "todo mi perfil" in plain:
+        return "all"
+    for key, keywords in PROFILE_FORGET_KEYWORDS.items():
+        if any(_without_accents(keyword) in plain for keyword in keywords):
+            return key
+    return None
+
+def _forget_profile_field(relation_state: dict[str, Any], key: str) -> dict[str, Any]:
+    relation = dict(relation_state)
+    onboarding = dict(relation.get("onboarding", {}))
+    answers = dict(onboarding.get("answers", {}))
+    answers.pop(key, None)
+    onboarding["answers"] = answers
+    onboarding["completed"] = False
+    relation["onboarding"] = onboarding
+    storage = PROFILE_STORAGE_FIELDS.get(key)
+    if storage:
+        field, _limit = storage
+        relation.pop(field, None)
+        if key == "name":
+            relation.pop("user_name_updated_at", None)
+    if key == "likes":
+        preferences = {
+            pref: data
+            for pref, data in dict(relation.get("preferences", {})).items()
+            if not (isinstance(data, dict) and data.get("source") in {"onboarding", "profile_correction"})
+        }
+        relation["preferences"] = preferences
+    return relation
+
+def _forget_profile(relation_state: dict[str, Any], target: str) -> dict[str, Any]:
+    relation = dict(relation_state)
+    if target == "all":
+        for key, _question in ONBOARDING_FLOW:
+            relation = _forget_profile_field(relation, key)
+        relation.pop("onboarding", None)
+        return relation
+    return _forget_profile_field(relation, target)
 
 def _onboarding_answers(relation_state: dict[str, Any]) -> dict[str, dict[str, Any]]:
     onboarding = relation_state.get("onboarding", {})
@@ -594,6 +646,10 @@ def _update_relation_from_percept(
         onboarding["answers"] = answers
         onboarding["updated_at"] = now.isoformat()
         relation["onboarding"] = onboarding
+
+    profile_forget = _profile_forget_from_text(text)
+    if profile_forget:
+        relation = _forget_profile(relation, profile_forget)
 
     preference = PREFERENCE_RE.search(text)
     if preference:
@@ -1674,6 +1730,18 @@ class NinoRuntime:
                 reason_trace=["context_policy", "profile_correction"],
             )
 
+        profile_forget = _profile_forget_from_text(text)
+        if profile_forget:
+            target = "todo tu perfil inicial" if profile_forget == "all" else ONBOARDING_FIELD_LABELS.get(profile_forget, profile_forget).lower()
+            return PolicyResponse(
+                chosen_action={
+                    "type": "external_message",
+                    "payload": {"text": f"Hecho, olvido {target}."},
+                },
+                confidence=0.76,
+                reason_trace=["context_policy", "profile_forget"],
+            )
+
         if (
             "mi perfil" in plain
             or "perfil inicial" in plain
@@ -2076,6 +2144,7 @@ class NinoRuntime:
                 "direct_reminder_created",
                 "onboarding",
                 "profile_correction",
+                "profile_forget",
                 "profile_query",
             )
         )

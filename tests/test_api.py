@@ -715,6 +715,48 @@ def test_http_api_profile_query_and_correction_use_onboarding_profile(tmp_path) 
     assert relation["relation_state"]["onboarding"]["answers"]["location"]["value"] == "Barcelona"
 
 
+def test_http_api_profile_forget_removes_profile_fields(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "onboarding:name", "text": "Pablo", "now": "2026-05-26T10:00:00+02:00"},
+    )
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "onboarding:location", "text": "Madrid", "now": "2026-05-26T10:01:00+02:00"},
+    )
+
+    forgot_location = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "chat", "text": "olvida mi lugar", "now": "2026-05-26T10:02:00+02:00"},
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+
+    assert "olvido lugar" in forgot_location["action"]["payload"]["text"].lower()
+    assert "user_location" not in relation["relation_state"]
+    assert "location" not in relation["relation_state"]["onboarding"]["answers"]
+    assert relation["relation_state"]["onboarding"]["answers"]["name"]["value"] == "Pablo"
+
+    forgot_all = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "chat", "text": "borra mi perfil", "now": "2026-05-26T10:03:00+02:00"},
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+
+    assert "todo tu perfil inicial" in forgot_all["action"]["payload"]["text"]
+    assert "user_name" not in relation["relation_state"]
+    assert "onboarding" not in relation["relation_state"]
+
+
 def test_http_api_temporal_event_accepts_weekday_and_exact_time(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 
