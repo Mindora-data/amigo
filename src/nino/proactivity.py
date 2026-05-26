@@ -246,20 +246,6 @@ class ProactivityEngine:
             reason_trace.append("outside_active_hours")
             return ProactivityResponse(False, None, reason_trace, _next_active_hour(now, settings))
 
-        sent_at = _parse_sent_at(list(proactivity.get("sent_at", [])))
-        recent_sent = [sent for sent in sent_at if sent >= now - timedelta(hours=24)]
-        if len(recent_sent) >= settings.max_messages_per_day:
-            next_allowed = min(recent_sent) + timedelta(hours=24) if recent_sent else None
-            reason_trace.append("daily_frequency_cap")
-            return ProactivityResponse(False, None, reason_trace, next_allowed)
-
-        if sent_at:
-            last_sent = max(sent_at)
-            next_allowed = last_sent + timedelta(hours=settings.min_hours_between)
-            if now < next_allowed:
-                reason_trace.append("minimum_interval")
-                return ProactivityResponse(False, None, reason_trace, next_allowed)
-
         temporal_event = _due_temporal_event(relation_state, now)
         if temporal_event is not None:
             reason_trace.extend(["temporal_memory", "event_reminder"])
@@ -278,6 +264,20 @@ class ProactivityEngine:
                 },
                 reason_trace=reason_trace,
             )
+
+        sent_at = _parse_sent_at(list(proactivity.get("sent_at", [])))
+        recent_sent = [sent for sent in sent_at if sent >= now - timedelta(hours=24)]
+        if len(recent_sent) >= settings.max_messages_per_day:
+            next_allowed = min(recent_sent) + timedelta(hours=24) if recent_sent else None
+            reason_trace.append("daily_frequency_cap")
+            return ProactivityResponse(False, None, reason_trace, next_allowed)
+
+        if sent_at:
+            last_sent = max(sent_at)
+            next_allowed = last_sent + timedelta(hours=settings.min_hours_between)
+            if now < next_allowed:
+                reason_trace.append("minimum_interval")
+                return ProactivityResponse(False, None, reason_trace, next_allowed)
 
         if any(
             isinstance(event, dict) and event.get("reminder_status") == "offered"

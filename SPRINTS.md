@@ -425,5 +425,6 @@ Auditoria final de producto 100% local:
 146. Hecho inicial: una respuesta afirmativa (`sí`, `vale`, `recuérdamelo`, `avísame`) confirma la alarma a 30 minutos; una negativa la deja recordada sin alarma.
 147. Hecho inicial: la proactividad no envía avisos de eventos con alarma pendiente de confirmar y usa `lead_time_hours=0.5` para alarmas confirmadas.
 148. Hecho inicial: si ya hay una alarma temporal confirmada y aún no toca, NIÑO no envía un mensaje proactivo genérico que pueda parecer un aviso anticipado.
+149. Hecho inicial: las alarmas temporales confirmadas tienen prioridad sobre límites de frecuencia proactiva para no bloquear recordatorios reales.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
