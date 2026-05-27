@@ -63,7 +63,11 @@ def test_global_pattern_outcome_does_not_store_private_text(tmp_path) -> None:
     )
 
     distill_to_global("followup", "evento_con_carga", "positive", runtime.global_model_store)
-    rendered = str(runtime.global_model()["pattern_outcomes"]).lower()
+    outcomes = runtime.global_model()["pattern_outcomes"]
+    rendered = " ".join(
+        f"{item['gesture']} {item['context']} {item['outcome']}"
+        for item in outcomes.values()
+    ).lower()
 
     assert "pablo" not in rendered
     assert "madrid" not in rendered

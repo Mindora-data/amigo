@@ -302,6 +302,23 @@ Criterios de salida:
 - Los patrones globales afectan solo priors iniciales, nunca crean recuerdos ni experiencias fingidas.
 - Tests cubren vocabulario, conteo agregado, muestra mínima, no-fuga, persistencia y efecto de prior.
 
+## Sprint 11 - Intención explícita para recordatorios
+
+Estado: hecho inicial.
+
+Objetivo: impedir que una hora mencionada de pasada se convierta en recordatorio o alarma.
+
+Hecho:
+
+- Los recordatorios requieren verbo explícito de intención: `recuérdame`, `avísame`, `ponme una alarma`, `pon un recordatorio` o `no me dejes olvidar`.
+- Una hora suelta como `a las 18` o `sobre las 6` no crea evento temporal ni recordatorio.
+- Las citas reales con hora, como `tengo dentista a las 11`, quedan como evento `offered` y amigo pregunta si quieres aviso media hora antes.
+- El prompt del LLM prohíbe convertir respuestas breves con hora en recordatorios y limita la recuperación a una disculpa breve sin encadenar `perdona`.
+
+Criterios de salida:
+
+- Tests cubren hora suelta como respuesta, hora suelta aislada, recordatorio explícito, cita con confirmación pendiente y recuperación sin sumisión.
+
 ## Proxima tarea recomendada
 
 Auditoria final de producto 100% local:

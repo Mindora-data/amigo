@@ -114,6 +114,28 @@ def test_direct_reminder_creation_does_not_call_llm() -> None:
     assert llm.prompts == []
 
 
+def test_bare_time_does_not_create_reminder_or_call_llm_action_path() -> None:
+    llm = FakeLLM("No debería convertir esto en recordatorio.")
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    out = runtime.tick("agent-llm", {"intent": "chat", "text": "a las 18", "now": "2026-05-26T10:00:00+02:00"})
+    relation = runtime.load_or_init_state("agent-llm").relation_state
+
+    assert relation.get("temporal_events", []) == []
+    assert "direct_reminder_created" not in out["reason_trace"]
+
+
+def test_llm_prompt_instructs_single_brief_recovery_apology() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick("agent-llm", {"intent": "chat", "text": "no he pedido que me recuerdes nada"})
+
+    system = llm.prompts[-1]["system"]
+    assert "Si malinterpretas al usuario" in system
+    assert "no encadenes disculpas" in system
+
+
 def test_llm_prompt_activates_continuity_for_temporal_memory_question() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

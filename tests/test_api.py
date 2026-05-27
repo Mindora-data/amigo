@@ -780,6 +780,71 @@ def test_http_api_temporal_event_accepts_weekday_and_exact_time(tmp_path) -> Non
     assert relation["relation_state"]["temporal_events"][0]["reminder_status"] == "offered"
 
 
+def test_http_api_bare_time_answer_does_not_create_reminder(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {
+            "intent": "chat",
+            "text": "a las 18",
+            "salience": 0.4,
+            "confidence": 0.9,
+            "now": "2026-05-26T10:00:00+02:00",
+        },
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+
+    assert relation["relation_state"].get("temporal_events", []) == []
+
+
+def test_http_api_bare_time_without_intent_does_not_create_any_event(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {
+            "intent": "chat",
+            "text": "sobre las 6",
+            "salience": 0.4,
+            "confidence": 0.9,
+            "now": "2026-05-26T10:00:00+02:00",
+        },
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+
+    assert relation["relation_state"].get("temporal_events", []) == []
+
+
+def test_http_api_explicit_absolute_reminder_creates_confirmed_reminder(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    tick = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {
+            "intent": "chat",
+            "text": "recuérdame a las 18 que llame a Ana",
+            "salience": 0.9,
+            "confidence": 0.95,
+            "now": "2026-05-26T10:00:00+02:00",
+        },
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+    event = relation["relation_state"]["temporal_events"][0]
+
+    assert event["kind"] == "recordatorio"
+    assert event["text"] == "llame a Ana"
+    assert event["due_at"] == "2026-05-26T18:00:00+02:00"
+    assert event["reminder_status"] == "confirmed"
+    assert "direct_reminder_created" in tick["reason_trace"]
+
+
 def test_http_api_temporal_event_accepts_dentist_with_browser_local_time(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

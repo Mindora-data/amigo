@@ -302,7 +302,12 @@ def _time_from_text(text: str) -> tuple[int, int] | None:
 
 def _is_reminder_request(text: str) -> bool:
     plain = _without_accents(text)
-    return bool(re.search(r"\b(recuerdame|recordarme|avisame|avisarme|recordatorio|alarma)\b", plain))
+    return bool(
+        re.search(
+            r"\b(recuerdame|recordarme|avisame|avisarme|ponme\s+(?:una\s+)?alarma|pon\s+(?:un\s+)?recordatorio|no\s+me\s+dejes\s+olvidar)\b",
+            plain,
+        )
+    )
 
 def _relative_due_at_from_text(text: str, now: datetime) -> datetime | None:
     plain = _without_accents(text)
@@ -323,7 +328,7 @@ def _reminder_text_from_request(text: str) -> str:
     if match:
         return match.group(1).strip(" .")[:180]
     plain = re.sub(
-        r"\b(recuerdame|recuérdame|avisame|avísame|recordatorio|alarma)\b",
+        r"\b(recuerdame|recuérdame|avisame|avísame|ponme\s+(?:una\s+)?alarma|pon\s+(?:un\s+)?recordatorio|no\s+me\s+dejes\s+olvidar)\b",
         "",
         cleaned,
         flags=re.IGNORECASE,
