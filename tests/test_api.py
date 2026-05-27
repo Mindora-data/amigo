@@ -6,8 +6,11 @@ import json
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import pytest
+
 from nino.api import create_app
 from nino.api import create_app_with_runtime
+from nino.auth import hash_password, token_hash
 from nino.autonomy import BackgroundAutonomy
 from nino.persistence import create_persistent_runtime
 
@@ -53,6 +56,29 @@ def _request_status(app, method: str, path: str, payload: dict | None = None, he
         environ[f"HTTP_{key.upper().replace('-', '_')}"] = value
     body = b"".join(app(environ, start_response))
     return captured["status"], json.loads(body.decode("utf-8"))
+
+
+def _request_status_headers(app, method: str, path: str, payload: dict | None = None, headers: dict[str, str] | None = None) -> tuple[str, dict, dict[str, str]]:
+    data = b"" if payload is None else json.dumps(payload).encode("utf-8")
+    captured: dict[str, object] = {}
+    split = urlsplit(path)
+
+    def start_response(status: str, headers_out: list[tuple[str, str]]) -> None:
+        captured["status"] = status
+        captured["headers"] = dict(headers_out)
+
+    environ = {
+        "REQUEST_METHOD": method,
+        "PATH_INFO": split.path,
+        "QUERY_STRING": split.query,
+        "CONTENT_LENGTH": str(len(data)),
+        "wsgi.input": BytesIO(data),
+        "REMOTE_ADDR": "198.51.100.9",
+    }
+    for key, value in (headers or {}).items():
+        environ[f"HTTP_{key.upper().replace('-', '_')}"] = value
+    body = b"".join(app(environ, start_response))
+    return str(captured["status"]), json.loads(body.decode("utf-8")), dict(captured["headers"])
 
 
 def _raw_request(app, method: str, path: str) -> tuple[str, bytes]:
@@ -237,8 +263,10 @@ def test_http_api_serves_minimal_user_app(tmp_path) -> None:
     assert b"voiceButton" in body
     assert b"/session/login" in body
     assert b"/session/logout" in body
-    assert b"nino_session_token" in body
-    assert b"x-nino-session" in body
+    assert b"current-password" in body
+    assert b"credentials: \"same-origin\"" in body
+    assert b"nino_session_token" not in body
+    assert b"x-nino-session" not in body
     assert b"/users/${encodeURIComponent(currentUserId())}/agents/${encodeURIComponent(AGENT_ID)}" in body
     assert b"out.turns || out.conversation" in body
     assert b"/conversation" in body
@@ -633,6 +661,139 @@ def test_http_api_can_require_session_token_for_user_scoped_routes(tmp_path, mon
     assert logout["logged_out"] is True
     assert logged_out_status.startswith("401")
     assert logged_out["error"] == "session_required"
+
+
+def test_prod_refuses_to_start_without_required_sessions(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("NINO_ENV", "prod")
+    monkeypatch.delenv("NINO_REQUIRE_SESSION", raising=False)
+    monkeypatch.setenv("NINO_PASSWORD_HASH", hash_password("correct horse battery staple"))
+
+    with pytest.raises(RuntimeError, match="NINO_REQUIRE_SESSION=true"):
+        create_app(tmp_path / "nino.db")
+
+
+def test_prod_login_requires_password_and_counts_failures(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("NINO_ENV", "prod")
+    monkeypatch.setenv("NINO_REQUIRE_SESSION", "true")
+    monkeypatch.setenv("NINO_PASSWORD_HASH", hash_password("correct horse battery staple"))
+    app = create_app(tmp_path / "nino.db")
+    headers = {"X-Forwarded-Proto": "https"}
+
+    bad_status, bad, _ = _request_status_headers(
+        app,
+        "POST",
+        "/session/login",
+        {"user_id": "Ana", "agent_id": "nino", "password": "wrong"},
+        headers=headers,
+    )
+    for _ in range(4):
+        _request_status_headers(
+            app,
+            "POST",
+            "/session/login",
+            {"user_id": "Ana", "agent_id": "nino", "password": "wrong"},
+            headers=headers,
+        )
+    blocked_status, blocked, _ = _request_status_headers(
+        app,
+        "POST",
+        "/session/login",
+        {"user_id": "Ana", "agent_id": "nino", "password": "correct horse battery staple"},
+        headers=headers,
+    )
+
+    assert bad_status.startswith("401")
+    assert bad["error"] == "bad_credentials"
+    assert blocked_status.startswith("429")
+    assert blocked["error"] == "login_rate_limited"
+    failures = [event for event in app.service.security_audit if event["type"] == "login_failed"]
+    assert failures
+    assert failures[-1]["payload"]["ip"] == "198.51.100.9"
+
+
+def test_prod_login_correct_password_sets_secure_cookie_and_session_valid(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("NINO_ENV", "prod")
+    monkeypatch.setenv("NINO_REQUIRE_SESSION", "true")
+    monkeypatch.setenv("NINO_PASSWORD_HASH", hash_password("correct horse battery staple"))
+    app = create_app(tmp_path / "nino.db")
+
+    status, login, headers = _request_status_headers(
+        app,
+        "POST",
+        "/session/login",
+        {"user_id": "Ana", "agent_id": "nino", "password": "correct horse battery staple"},
+        headers={"X-Forwarded-Proto": "https"},
+    )
+    session = _request(
+        app,
+        "GET",
+        "/session/status",
+        headers={"X-Nino-Session": login["session_token"], "X-Forwarded-Proto": "https"},
+    )
+
+    assert status.startswith("200")
+    assert session["authenticated"] is True
+    assert token_hash(login["session_token"]) in app.service.sessions
+    assert login["session_token"] not in app.service.sessions
+    assert "HttpOnly" in headers["Set-Cookie"]
+    assert "Secure" in headers["Set-Cookie"]
+    assert "SameSite=Strict" in headers["Set-Cookie"]
+    assert any(event["type"] == "login_ok" for event in app.service.security_audit)
+
+
+def test_prod_user_route_requires_session_and_expired_session_is_rejected(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("NINO_ENV", "prod")
+    monkeypatch.setenv("NINO_REQUIRE_SESSION", "true")
+    monkeypatch.setenv("NINO_PASSWORD_HASH", hash_password("correct horse battery staple"))
+    app = create_app(tmp_path / "nino.db")
+    headers = {"X-Forwarded-Proto": "https"}
+    login = _request(app, "POST", "/session/login", {"user_id": "Ana", "agent_id": "nino", "password": "correct horse battery staple"}, headers=headers)
+    missing_status, missing = _request_status(app, "GET", "/users/ana/agents/nino/conversation", headers=headers)
+
+    digest = token_hash(login["session_token"])
+    app.service.sessions[digest]["expires_at"] = "2000-01-01T00:00:00+00:00"
+    expired_status, expired = _request_status(
+        app,
+        "GET",
+        "/users/ana/agents/nino/conversation",
+        headers={"X-Nino-Session": login["session_token"], "X-Forwarded-Proto": "https"},
+    )
+
+    assert missing_status.startswith("401")
+    assert missing["error"] == "session_required"
+    assert expired_status.startswith("401")
+    assert expired["error"] == "session_required"
+    assert any(event["type"] == "session_expired" for event in app.service.security_audit)
+
+
+def test_prod_logout_invalidates_session(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("NINO_ENV", "prod")
+    monkeypatch.setenv("NINO_REQUIRE_SESSION", "true")
+    monkeypatch.setenv("NINO_PASSWORD_HASH", hash_password("correct horse battery staple"))
+    app = create_app(tmp_path / "nino.db")
+    headers = {"X-Forwarded-Proto": "https"}
+    login = _request(app, "POST", "/session/login", {"user_id": "Ana", "agent_id": "nino", "password": "correct horse battery staple"}, headers=headers)
+    logout = _request(app, "POST", "/session/logout", {}, headers={"X-Nino-Session": login["session_token"], "X-Forwarded-Proto": "https"})
+    status, body = _request_status(app, "GET", "/session/status", headers={"X-Nino-Session": login["session_token"], "X-Forwarded-Proto": "https"})
+
+    assert logout["logged_out"] is True
+    assert status.startswith("200")
+    assert body["authenticated"] is False
+
+
+def test_prod_rejects_non_https_and_disables_app(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("NINO_ENV", "prod")
+    monkeypatch.setenv("NINO_REQUIRE_SESSION", "true")
+    monkeypatch.setenv("NINO_PASSWORD_HASH", hash_password("correct horse battery staple"))
+    app = create_app(tmp_path / "nino.db")
+
+    insecure_status, insecure, _ = _request_status_headers(app, "GET", "/health")
+    app_status, app_body, _ = _request_status_headers(app, "GET", "/app", headers={"X-Forwarded-Proto": "https"})
+
+    assert insecure_status.startswith("403")
+    assert insecure["error"] == "https_required"
+    assert app_status.startswith("404")
+    assert app_body["error"] == "app_disabled_in_prod"
 
 
 def test_http_api_tick_accepts_time_context_and_records_temporal_event(tmp_path) -> None:

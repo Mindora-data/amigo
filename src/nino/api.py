@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -10,11 +10,13 @@ import secrets
 import sqlite3
 import subprocess
 import threading
+import time
 from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 
 from .autonomy import BackgroundAutonomy
+from .auth import token_hash, verify_password
 from .claude_live import claude_setup_commands
 from .contracts import ConsolidationRequest, ProactivitySettings, RetrieveRequest
 from .internal_loop import InternalLoop
@@ -23,6 +25,45 @@ from .memory import Episode
 from .persistence import create_persistent_runtime
 from .runtime import NinoRuntime
 from .scheduler import NinoScheduler
+
+SESSION_COOKIE_NAME = "nino_session"
+SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+LOGIN_RATE_LIMIT_ATTEMPTS = 5
+LOGIN_RATE_LIMIT_WINDOW_SECONDS = 10 * 60
+LOGIN_RATE_LIMIT_BLOCK_SECONDS = 15 * 60
+
+
+def _is_prod() -> bool:
+    return os.environ.get("NINO_ENV", "").strip().lower() in {"prod", "production"}
+
+
+def _require_session_enabled() -> bool:
+    return os.environ.get("NINO_REQUIRE_SESSION", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _password_hash() -> str:
+    return os.environ.get("NINO_PASSWORD_HASH", "").strip()
+
+
+def _security_headers() -> list[tuple[str, str]]:
+    headers = [
+        ("X-Content-Type-Options", "nosniff"),
+        ("X-Frame-Options", "DENY"),
+        ("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self'; base-uri 'none'; frame-ancestors 'none'"),
+    ]
+    if _is_prod():
+        headers.append(("Strict-Transport-Security", "max-age=31536000; includeSubDomains"))
+    return headers
+
+
+def _session_cookie(token: str, *, max_age: int = SESSION_TTL_SECONDS) -> str:
+    secure = "; Secure" if _is_prod() else ""
+    return f"{SESSION_COOKIE_NAME}={token}; Max-Age={max_age}; Path=/; HttpOnly; SameSite=Strict{secure}"
+
+
+def _clear_session_cookie() -> str:
+    secure = "; Secure" if _is_prod() else ""
+    return f"{SESSION_COOKIE_NAME}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict{secure}"
 
 
 APP_HTML = """<!doctype html>
@@ -1456,6 +1497,7 @@ USER_HTML = """<!doctype html>
     </header>
     <form id="loginView" class="login">
       <input id="userId" autocomplete="username" placeholder="Usuario" aria-label="Usuario">
+      <input id="password" autocomplete="current-password" placeholder="Contraseña" aria-label="Contraseña" type="password">
       <button id="loginButton" type="submit">Entrar</button>
     </form>
     <section id="chatView" class="chat" aria-live="polite">
@@ -1471,7 +1513,6 @@ USER_HTML = """<!doctype html>
   <script>
     const $ = (id) => document.getElementById(id);
     const STORAGE_USER = "nino_user_id";
-    const STORAGE_SESSION = "nino_session_token";
     const AGENT_ID = "nino";
     const ONBOARDING = [
       {key: "name", question: "¿Cómo te llamas?"},
@@ -1509,11 +1550,8 @@ USER_HTML = """<!doctype html>
       localStorage.setItem(onboardingStorageKey(), JSON.stringify(state));
     }
     async function api(path, options = {}) {
-      const token = localStorage.getItem(STORAGE_SESSION);
-      const sessionHeader = token ? {"x-nino-session": token} : {};
       const headers = {"content-type": "application/json", ...(options.headers || {})};
-      Object.assign(headers, sessionHeader, options.headers || {});
-      const res = await fetch(path, {...options, headers});
+      const res = await fetch(path, {...options, headers, credentials: "same-origin"});
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || res.statusText);
       return data;
@@ -1549,8 +1587,7 @@ USER_HTML = """<!doctype html>
       if (event) event.preventDefault();
       const userId = currentUserId();
       localStorage.setItem(STORAGE_USER, userId);
-      const login = await api("/session/login", {method: "POST", body: JSON.stringify({user_id: userId, agent_id: AGENT_ID})});
-      if (login.session_token) localStorage.setItem(STORAGE_SESSION, login.session_token);
+      const login = await api("/session/login", {method: "POST", body: JSON.stringify({user_id: userId, agent_id: AGENT_ID, password: $("password").value})});
       $("loginView").style.display = "none";
       $("chatView").style.display = "grid";
       $("logoutButton").hidden = false;
@@ -1709,12 +1746,8 @@ USER_HTML = """<!doctype html>
     $("loginView").addEventListener("submit", loginUser);
     $("composer").addEventListener("submit", sendText);
     $("logoutButton").onclick = async () => {
-      const token = localStorage.getItem(STORAGE_SESSION);
-      if (token) {
-        await api("/session/logout", {method: "POST", body: "{}", headers: {"x-nino-session": token}}).catch(() => {});
-      }
+      await api("/session/logout", {method: "POST", body: "{}"}).catch(() => {});
       localStorage.removeItem(STORAGE_USER);
-      localStorage.removeItem(STORAGE_SESSION);
       stopInboxPolling();
       voiceReply = false;
       $("chatView").style.display = "none";
@@ -2029,6 +2062,52 @@ class NinoService:
         self.db_path = Path(db_path) if db_path is not None else None
         self.restart_callback = restart_callback
         self.sessions: dict[str, dict[str, str]] = {}
+        self.login_attempts: dict[str, dict[str, Any]] = {}
+        self.security_audit: list[dict[str, Any]] = []
+
+    def _audit_access(self, event_type: str, payload: dict[str, Any]) -> None:
+        safe_payload = {
+            key: value
+            for key, value in payload.items()
+            if key not in {"password", "session_token", "token", "token_hash"}
+        }
+        self.security_audit.append(
+            {
+                "at": datetime.now(timezone.utc).isoformat(),
+                "type": event_type,
+                "payload": safe_payload,
+            }
+        )
+        self.security_audit = self.security_audit[-200:]
+
+    def _login_blocked(self, ip: str, now: float) -> bool:
+        entry = self.login_attempts.get(ip, {"failures": [], "blocked_until": 0.0})
+        return float(entry.get("blocked_until", 0.0)) > now
+
+    def _record_login_failure(self, ip: str, user_id: str, reason: str, now: float) -> None:
+        entry = self.login_attempts.setdefault(ip, {"failures": [], "blocked_until": 0.0})
+        failures = [stamp for stamp in entry.get("failures", []) if now - float(stamp) <= LOGIN_RATE_LIMIT_WINDOW_SECONDS]
+        failures.append(now)
+        entry["failures"] = failures
+        if len(failures) >= LOGIN_RATE_LIMIT_ATTEMPTS:
+            entry["blocked_until"] = now + LOGIN_RATE_LIMIT_BLOCK_SECONDS
+        self._audit_access("login_failed", {"ip": ip, "user_id": user_id, "reason": reason})
+
+    def _clean_session(self, token: str, now: datetime) -> dict[str, str] | None:
+        if not token:
+            return None
+        digest = token_hash(token)
+        session = self.sessions.get(digest)
+        if not session:
+            return None
+        expires_at = _parse_datetime(session["expires_at"])
+        if expires_at <= now:
+            self.sessions.pop(digest, None)
+            self._audit_access("session_expired", {"user_id": session.get("user_id"), "agent_id": session.get("agent_id")})
+            return None
+        session["last_seen_at"] = now.isoformat()
+        session["expires_at"] = (now + timedelta(seconds=SESSION_TTL_SECONDS)).isoformat()
+        return session
 
     def health(self) -> dict[str, Any]:
         return {"ok": True, "service": "nino"}
@@ -2062,26 +2141,44 @@ class NinoService:
     def login(self, payload: dict[str, Any]) -> dict[str, Any]:
         user_id = _identity_slug(str(payload.get("user_id", "local")), "local")
         agent_id = _identity_slug(str(payload.get("agent_id", "nino")), "nino")
+        ip = str(payload.get("_remote_addr", "unknown"))
+        now_ts = time.time()
+        if self._login_blocked(ip, now_ts):
+            self._audit_access("login_blocked", {"ip": ip, "user_id": user_id})
+            return {"ok": False, "error": "login_rate_limited"}
+        configured_hash = _password_hash()
+        if _is_prod() and not configured_hash:
+            self._record_login_failure(ip, user_id, "password_not_configured", now_ts)
+            return {"ok": False, "error": "password_not_configured"}
+        if configured_hash and not verify_password(str(payload.get("password", "")), configured_hash):
+            self._record_login_failure(ip, user_id, "bad_credentials", now_ts)
+            return {"ok": False, "error": "bad_credentials"}
         scoped_agent_id = _scoped_agent_id(user_id, agent_id)
         session_token = secrets.token_urlsafe(32)
-        self.sessions[session_token] = {
+        now = datetime.now(timezone.utc)
+        self.sessions[token_hash(session_token)] = {
             "user_id": user_id,
             "agent_id": agent_id,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": now.isoformat(),
+            "last_seen_at": now.isoformat(),
+            "expires_at": (now + timedelta(seconds=SESSION_TTL_SECONDS)).isoformat(),
         }
         self.runtime.load_or_init_state(scoped_agent_id)
+        self.login_attempts.pop(ip, None)
+        self._audit_access("login_ok", {"ip": ip, "user_id": user_id, "agent_id": agent_id})
         return {
             "ok": True,
             "user_id": user_id,
             "agent_id": agent_id,
             "scoped_agent_id": scoped_agent_id,
             "session_token": session_token,
+            "expires_in_seconds": SESSION_TTL_SECONDS,
             "privacy": "private_user_scope",
         }
 
     def session_status(self, payload: dict[str, Any]) -> dict[str, Any]:
         token = str(payload.get("_session_token", "")).strip()
-        session = self.sessions.get(token)
+        session = self._clean_session(token, datetime.now(timezone.utc))
         if not session:
             return {"ok": False, "authenticated": False}
         return {
@@ -2090,20 +2187,21 @@ class NinoService:
             "user_id": session["user_id"],
             "agent_id": session["agent_id"],
             "created_at": session["created_at"],
+            "expires_at": session["expires_at"],
             "privacy": "private_user_scope",
         }
 
     def logout(self, payload: dict[str, Any]) -> dict[str, Any]:
         token = str(payload.get("_session_token", "")).strip()
-        removed = self.sessions.pop(token, None) is not None if token else False
+        removed = self.sessions.pop(token_hash(token), None) is not None if token else False
         return {"ok": True, "logged_out": removed}
 
     def authorize_user_scope(self, user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        required = os.environ.get("NINO_REQUIRE_SESSION", "").strip().lower() in {"1", "true", "yes", "on"}
+        required = _require_session_enabled()
         if not required:
             return {"ok": True, "required": False}
         token = str(payload.get("_session_token", "")).strip()
-        session = self.sessions.get(token)
+        session = self._clean_session(token, datetime.now(timezone.utc))
         scoped_user_id = _identity_slug(user_id, "local")
         if not session:
             return {"ok": False, "required": True, "error": "session_required"}
@@ -3217,6 +3315,13 @@ class NinoHttpApp:
     def __call__(self, environ: dict[str, Any], start_response: Any) -> list[bytes]:
         method = environ["REQUEST_METHOD"].upper()
         path = urlparse(environ.get("PATH_INFO", "")).path
+        if _is_prod() and environ.get("HTTP_X_FORWARDED_PROTO", "http").lower() != "https":
+            encoded = json.dumps({"error": "https_required"}).encode("utf-8")
+            start_response(
+                "403 Forbidden",
+                [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(encoded))), *_security_headers()],
+            )
+            return [encoded]
         try:
             if method == "GET" and path in {"/user", "/chat"}:
                 encoded = USER_HTML.encode("utf-8")
@@ -3225,23 +3330,35 @@ class NinoHttpApp:
                     [
                         ("Content-Type", "text/html; charset=utf-8"),
                         ("Content-Length", str(len(encoded))),
+                        *_security_headers(),
                     ],
                 )
                 return [encoded]
             if method == "GET" and path == "/app":
+                if _is_prod():
+                    encoded = json.dumps({"error": "app_disabled_in_prod"}).encode("utf-8")
+                    start_response(
+                        "404 Not Found",
+                        [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(encoded))), *_security_headers()],
+                    )
+                    return [encoded]
                 encoded = APP_HTML.encode("utf-8")
                 start_response(
                     "200 OK",
                     [
                         ("Content-Type", "text/html; charset=utf-8"),
                         ("Content-Length", str(len(encoded))),
+                        *_security_headers(),
                     ],
                 )
                 return [encoded]
             payload = self._read_json(environ)
             session_token = environ.get("HTTP_X_NINO_SESSION", "").strip()
+            if not session_token:
+                session_token = self._cookie_value(environ.get("HTTP_COOKIE", ""), SESSION_COOKIE_NAME)
             if session_token:
                 payload["_session_token"] = session_token
+            payload["_remote_addr"] = environ.get("HTTP_X_FORWARDED_FOR", environ.get("REMOTE_ADDR", "unknown")).split(",")[0].strip()
             if method == "GET":
                 payload = {**self._read_query(environ), **payload}
             status, body = self._route(method, path, payload)
@@ -3253,14 +3370,29 @@ class NinoHttpApp:
             status, body = "500 Internal Server Error", {"error": str(exc)}
 
         encoded = json.dumps(body, default=_json_default).encode("utf-8")
+        headers = [
+            ("Content-Type", "application/json; charset=utf-8"),
+            ("Content-Length", str(len(encoded))),
+            *_security_headers(),
+        ]
+        if method == "POST" and path == "/session/login" and body.get("ok") and body.get("session_token"):
+            headers.append(("Set-Cookie", _session_cookie(str(body["session_token"]))))
+        if method == "POST" and path == "/session/logout":
+            headers.append(("Set-Cookie", _clear_session_cookie()))
         start_response(
             status,
-            [
-                ("Content-Type", "application/json; charset=utf-8"),
-                ("Content-Length", str(len(encoded))),
-            ],
+            headers,
         )
         return [encoded]
+
+    def _cookie_value(self, header: str, name: str) -> str:
+        for part in header.split(";"):
+            if "=" not in part:
+                continue
+            key, value = part.strip().split("=", 1)
+            if key == name:
+                return value
+        return ""
 
     def _read_json(self, environ: dict[str, Any]) -> dict[str, Any]:
         length = int(environ.get("CONTENT_LENGTH") or 0)
@@ -3425,7 +3557,12 @@ class NinoHttpApp:
 
         parts = [unquote(part) for part in path.split("/") if part]
         if method == "POST" and parts == ["session", "login"]:
-            return "200 OK", self.service.login(payload)
+            out = self.service.login(payload)
+            if out.get("error") == "login_rate_limited":
+                return "429 Too Many Requests", out
+            if out.get("ok") is not True:
+                return "401 Unauthorized", out
+            return "200 OK", out
         if method == "GET" and parts == ["session", "status"]:
             return "200 OK", self.service.session_status(payload)
         if method == "POST" and parts == ["session", "logout"]:
@@ -3464,6 +3601,11 @@ class NinoHttpApp:
 
 
 def create_app(db_path: str | Path) -> NinoHttpApp:
+    if _is_prod():
+        if not _require_session_enabled():
+            raise RuntimeError("NINO_ENV=prod requires NINO_REQUIRE_SESSION=true")
+        if not _password_hash():
+            raise RuntimeError("NINO_ENV=prod requires NINO_PASSWORD_HASH")
     return NinoHttpApp(NinoService(create_persistent_runtime(db_path), db_path=db_path))
 
 
@@ -3473,6 +3615,11 @@ def create_app_with_runtime(
     db_path: str | Path | None = None,
     restart_callback: Callable[[], None] | None = None,
 ) -> NinoHttpApp:
+    if _is_prod():
+        if not _require_session_enabled():
+            raise RuntimeError("NINO_ENV=prod requires NINO_REQUIRE_SESSION=true")
+        if not _password_hash():
+            raise RuntimeError("NINO_ENV=prod requires NINO_PASSWORD_HASH")
     return NinoHttpApp(NinoService(runtime, autonomy=autonomy, db_path=db_path, restart_callback=restart_callback))
 
 

@@ -48,6 +48,7 @@ Commands:
   mode        Request GET /operations/mode.
   claude      Show Claude configuration status without sending a prompt.
   configure-claude Configure Claude in .env.local or macOS Keychain.
+  configure-password Configure the single-user password hash in .env.local.
   disable-claude Remove Claude settings from .env.local and optionally Keychain.
   agents      Request GET /agents.
   snapshot    Request GET /development/snapshot.
@@ -324,6 +325,10 @@ post_json() {
 
 configure_claude() {
   "$ROOT_DIR/scripts/nino-configure-claude" "$@"
+}
+
+configure_password() {
+  "$ROOT_DIR/scripts/nino-configure-password" "$@"
 }
 
 disable_claude() {
@@ -761,6 +766,7 @@ case "$command" in
   mode) request "/operations/mode" ;;
   claude) request "/operations/claude" ;;
   configure-claude) configure_claude "$@" ;;
+  configure-password) configure_password "$@" ;;
   disable-claude) disable_claude "$@" ;;
   agents) request "/agents" ;;
   snapshot) request "/development/snapshot" ;;
