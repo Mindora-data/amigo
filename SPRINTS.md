@@ -670,3 +670,29 @@ Tests:
 - Tras fallo/limite, suben cautela y brevedad y baja iniciativa.
 - El dashboard no incluye texto crudo de la conversacion.
 - La ruta queda publicada en root/openapi y accesible desde la UI interna.
+
+## Sprint 19 - Privacidad Telegram grupo y dashboard directo
+
+Estado: hecho.
+
+Objetivo: corregir el riesgo de privacidad en grupos y hacer visible el aprendizaje
+sin depender de navegar la consola interna.
+
+Hechos:
+
+- En Telegram, un grupo nunca usa memoria privada de un usuario aunque el remitente
+  tenga chat privado vinculado. Todo mensaje dirigido al bot dentro de un grupo usa
+  memoria aislada de grupo `telegram-group-<chat_id>`.
+- Si alguien necesita hablar con su memoria privada, debe abrir conversación privada
+  con el bot. En grupo, toda respuesta que el bot envía es visible para el grupo como
+  cualquier mensaje de Telegram.
+- Se añade `/dashboard` como pantalla directa local para ver aprendizaje relacional,
+  madurez, señales, memoria y proactividad sin buscar el botón dentro de `/app`.
+- `/dashboard` queda deshabilitado en `NINO_ENV=prod`, igual que `/app`, para no
+  exponer consola operativa en internet.
+
+Tests:
+
+- Un remitente vinculado que habla en grupo no enruta a su memoria privada.
+- `/dashboard` sirve HTML local y queda documentado.
+- En producción `/dashboard` devuelve 404.

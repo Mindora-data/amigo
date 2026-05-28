@@ -328,9 +328,7 @@ class TelegramBotService:
         if not clean_text:
             self.telegram.send_message(chat_id, "Estoy aquí. Escríbeme la pregunta en el mismo mensaje o respóndeme directamente.")
             return
-        from_user = message.get("from") if isinstance(message.get("from"), dict) else {}
-        linked_user = self.links.user_for_chat(f"user:{from_user.get('id')}") if from_user.get("id") is not None else None
-        target_user_id = linked_user or self._group_user_id(chat_id)
+        target_user_id = self._group_user_id(chat_id)
         reply = self.backend.tick(target_user_id, clean_text, now)
         if reply:
             self.telegram.send_message(chat_id, reply)

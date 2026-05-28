@@ -207,7 +207,7 @@ def test_group_reply_to_bot_is_directed_and_uses_group_memory(tmp_path) -> None:
     assert backend.ticks[-1]["text"] == "sí, sigue"
 
 
-def test_group_linked_sender_uses_private_user_memory_when_directed(tmp_path) -> None:
+def test_group_linked_sender_still_uses_group_memory_when_directed(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     code = links.create_code("Ana")
     assert links.link_with_code("user:10", code)
@@ -217,5 +217,6 @@ def test_group_linked_sender_uses_private_user_memory_when_directed(tmp_path) ->
 
     bot.handle_update(_group_update(-100, "@amigo_test_bot mi perfil", user_id=10))
 
-    assert backend.ticks[-1]["user_id"] == "ana"
+    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
     assert backend.ticks[-1]["text"] == "mi perfil"
+    assert "ana" not in str(telegram.sent[-1]["text"]).lower()

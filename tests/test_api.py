@@ -103,9 +103,13 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 
     content_type, body = _raw_request(app, "GET", "/app")
+    dashboard_type, dashboard_body = _raw_request(app, "GET", "/dashboard")
 
     assert content_type.startswith("text/html")
+    assert dashboard_type.startswith("text/html")
     assert b"<title>amigo</title>" in body
+    assert b"Aprendizaje de amigo" in dashboard_body
+    assert b"/relationship-dashboard" in dashboard_body
     assert b"/internal/cycle" in body
     assert b"Salud" in body
     assert b"Perfil" in body
@@ -371,6 +375,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /chat" in root["endpoints"]
     assert "GET /health" in root["endpoints"]
     assert "GET /openapi.json" in root["endpoints"]
+    assert "GET /dashboard" in root["endpoints"]
     assert "GET /operations/mode" in root["endpoints"]
     assert "GET /operations/claude" in root["endpoints"]
     assert "POST /operations/claude/configure" in root["endpoints"]
@@ -401,6 +406,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "DELETE /agents/{agent_id}/temporal-events/{event_id}" in root["endpoints"]
     assert openapi["openapi"] == "3.1.0"
     assert "/agents/{agent_id}/tick" in openapi["paths"]
+    assert "/dashboard" in openapi["paths"]
     assert "post" in openapi["paths"]["/agents/{agent_id}/tick"]
     assert "delete" in openapi["paths"]["/agents/{agent_id}/episodes/{episode_id}"]
     assert "delete" in openapi["paths"]["/agents/{agent_id}/memory/facts/{fact_id}"]
@@ -800,11 +806,14 @@ def test_prod_rejects_non_https_and_disables_app(tmp_path, monkeypatch) -> None:
 
     insecure_status, insecure, _ = _request_status_headers(app, "GET", "/health")
     app_status, app_body, _ = _request_status_headers(app, "GET", "/app", headers={"X-Forwarded-Proto": "https"})
+    dashboard_status, dashboard_body, _ = _request_status_headers(app, "GET", "/dashboard", headers={"X-Forwarded-Proto": "https"})
 
     assert insecure_status.startswith("403")
     assert insecure["error"] == "https_required"
     assert app_status.startswith("404")
     assert app_body["error"] == "app_disabled_in_prod"
+    assert dashboard_status.startswith("404")
+    assert dashboard_body["error"] == "dashboard_disabled_in_prod"
 
 
 def test_http_api_tick_accepts_time_context_and_records_temporal_event(tmp_path) -> None:

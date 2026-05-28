@@ -1813,6 +1813,98 @@ USER_HTML = """<!doctype html>
 </html>
 """
 
+DASHBOARD_HTML = """<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>amigo aprendizaje</title>
+  <style>
+    :root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #172026; background: #f4f6f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; }
+    main { max-width: 980px; margin: 0 auto; display: grid; gap: 16px; }
+    header { display: flex; justify-content: space-between; gap: 12px; align-items: end; }
+    h1 { margin: 0; font-size: 24px; letter-spacing: 0; }
+    .controls { display: grid; grid-template-columns: 160px 160px auto; gap: 8px; align-items: end; }
+    label { display: grid; gap: 4px; font-size: 12px; color: #53646d; }
+    input, button { font: inherit; border: 1px solid #b9c5cc; border-radius: 6px; padding: 9px 10px; }
+    button { background: #1f6f78; color: #fff; border-color: #1f6f78; cursor: pointer; min-height: 38px; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .panel { background: #fff; border: 1px solid #cfd8df; border-radius: 8px; padding: 14px; }
+    .panel h2 { margin: 0 0 10px; font-size: 14px; letter-spacing: 0; color: #33424a; }
+    .metric span { display: block; font-size: 12px; color: #667781; }
+    .metric strong { display: block; margin-top: 4px; font-size: 24px; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.45; max-height: 360px; overflow: auto; }
+    .wide { grid-column: 1 / -1; }
+    .muted { color: #667781; font-size: 13px; }
+    @media (max-width: 720px) {
+      body { padding: 14px; }
+      header, .controls { grid-template-columns: 1fr; display: grid; }
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Aprendizaje de amigo</h1>
+        <div id="status" class="muted">Cargando...</div>
+      </div>
+      <div class="controls">
+        <label>Usuario<input id="userId" value="mindora"></label>
+        <label>Agente<input id="agentId" value="nino"></label>
+        <button id="refresh">Actualizar</button>
+      </div>
+    </header>
+    <section class="grid">
+      <div class="panel metric"><span>Madurez</span><strong id="maturity">0</strong></div>
+      <div class="panel metric"><span>Interacciones</span><strong id="interactions">0</strong></div>
+      <div class="panel metric"><span>Aciertos</span><strong id="positive">0</strong></div>
+      <div class="panel metric"><span>Fallos/límites</span><strong id="misses">0</strong></div>
+      <div class="panel"><h2>Estilo</h2><pre id="style">{}</pre></div>
+      <div class="panel"><h2>Memoria</h2><pre id="memory">{}</pre></div>
+      <div class="panel"><h2>Proactividad</h2><pre id="proactivity">{}</pre></div>
+      <div class="panel"><h2>Señales recientes</h2><pre id="signals">[]</pre></div>
+      <div class="panel wide"><h2>Dashboard completo</h2><pre id="raw">{}</pre></div>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const fmt = (value) => Number.isFinite(Number(value)) ? Number(value).toFixed(3).replace(/0+$/, "").replace(/[.]$/, "") : "0";
+    const print = (id, value) => { $(id).textContent = JSON.stringify(value, null, 2); };
+    async function loadDashboard() {
+      const user = ($("userId").value || "mindora").trim();
+      const agent = ($("agentId").value || "nino").trim();
+      localStorage.setItem("nino_user_id", user);
+      localStorage.setItem("nino_agent_id", agent);
+      const path = `/users/${encodeURIComponent(user)}/agents/${encodeURIComponent(agent)}/relationship-dashboard`;
+      const res = await fetch(path, {cache: "no-store", credentials: "same-origin"});
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const out = await res.json();
+      const dash = out.dashboard || {};
+      const counts = dash.relationship_learning?.counts || {};
+      $("maturity").textContent = fmt(dash.maturity?.maturity);
+      $("interactions").textContent = dash.maturity?.interaction_count ?? 0;
+      $("positive").textContent = counts.positive ?? 0;
+      $("misses").textContent = (counts.negative ?? 0) + (counts.correction ?? 0) + (counts.stop ?? 0);
+      print("style", dash.response_style || {});
+      print("memory", dash.memory || {});
+      print("proactivity", dash.proactivity || {});
+      print("signals", dash.relationship_learning?.recent_signals || []);
+      print("raw", out);
+      $("status").textContent = `Actualizado: ${new Date().toLocaleTimeString()}`;
+    }
+    $("refresh").onclick = () => loadDashboard().catch((err) => $("status").textContent = `Error: ${err.message}`);
+    $("userId").value = localStorage.getItem("nino_user_id") || $("userId").value;
+    $("agentId").value = localStorage.getItem("nino_agent_id") || $("agentId").value;
+    loadDashboard().catch((err) => $("status").textContent = `Error: ${err.message}`);
+  </script>
+</body>
+</html>
+"""
+
 
 API_ENDPOINTS = [
     "GET /user",
@@ -1820,6 +1912,7 @@ API_ENDPOINTS = [
     "GET /health",
     "GET /health/deep",
     "GET /app",
+    "GET /dashboard",
     "GET /openapi.json",
     "GET /autonomy/status",
     "POST /autonomy/run-once",
@@ -3388,6 +3481,24 @@ class NinoHttpApp:
                     )
                     return [encoded]
                 encoded = APP_HTML.encode("utf-8")
+                start_response(
+                    "200 OK",
+                    [
+                        ("Content-Type", "text/html; charset=utf-8"),
+                        ("Content-Length", str(len(encoded))),
+                        *_security_headers(),
+                    ],
+                )
+                return [encoded]
+            if method == "GET" and path == "/dashboard":
+                if _is_prod():
+                    encoded = json.dumps({"error": "dashboard_disabled_in_prod"}).encode("utf-8")
+                    start_response(
+                        "404 Not Found",
+                        [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(encoded))), *_security_headers()],
+                    )
+                    return [encoded]
+                encoded = DASHBOARD_HTML.encode("utf-8")
                 start_response(
                     "200 OK",
                     [
