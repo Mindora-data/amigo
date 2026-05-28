@@ -187,6 +187,35 @@ def record_proactive_send(relation_state: dict[str, Any], now: datetime) -> dict
     return relation
 
 
+def record_proactive_source(relation_state: dict[str, Any], source_key: str | None, now: datetime) -> dict[str, Any]:
+    if not source_key:
+        return relation_state
+    relation = dict(relation_state)
+    proactivity = dict(relation.get("proactivity", default_proactivity_state()))
+    sent_sources = [item for item in proactivity.get("sent_sources", []) if isinstance(item, dict)]
+    sent_sources.append({"key": source_key, "sent_at": now.isoformat()})
+    proactivity["sent_sources"] = sent_sources[-200:]
+    relation["proactivity"] = proactivity
+    return relation
+
+
+def _source_already_sent(relation_state: dict[str, Any], source_key: str, now: datetime, *, horizon_days: int = 30) -> bool:
+    proactivity = dict(relation_state.get("proactivity", default_proactivity_state()))
+    horizon = now - timedelta(days=horizon_days)
+    for item in proactivity.get("sent_sources", []):
+        if not isinstance(item, dict) or item.get("key") != source_key:
+            continue
+        sent_at = _parse_dt(item.get("sent_at"))
+        if sent_at is not None and sent_at >= horizon:
+            return True
+    return False
+
+
+def _topic_key(prefix: str, value: Any) -> str:
+    text = re.sub(r"\s+", " ", str(value).strip().lower())
+    return f"{prefix}:{text[:160]}"
+
+
 def _parse_sent_at(values: list[str]) -> list[datetime]:
     parsed: list[datetime] = []
     for value in values:
@@ -603,37 +632,46 @@ class ProactivityEngine:
 
         open_question = _latest_open_question(world_model)
         if open_question and not _contains_sensitive_term(str(open_question.get("text", ""))):
-            reason_trace.extend(["goal_reduce_uncertainty", "open_question_follow_up"])
-            return ProactivityResponse(
-                should_send=True,
-                action={
-                    "type": "external_message",
-                    "payload": {
-                        "text": f"Me quedé pensando en esto: {open_question['text']} ¿Quieres que lo retomemos?",
-                        "source": "world_model.open_questions",
+            source_key = _topic_key("open_question", open_question.get("text", ""))
+            if _source_already_sent(relation_state, source_key, now):
+                reason_trace.append("open_question_already_followed")
+            else:
+                reason_trace.extend(["goal_reduce_uncertainty", "open_question_follow_up"])
+                return ProactivityResponse(
+                    should_send=True,
+                    action={
+                        "type": "external_message",
+                        "payload": {
+                            "text": f"Me quedé pensando en esto: {open_question['text']} ¿Quieres que lo retomemos?",
+                            "source": "world_model.open_questions",
+                            "proactive_source_key": source_key,
+                        },
                     },
-                },
-                reason_trace=reason_trace,
-            )
+                    reason_trace=reason_trace,
+                )
 
         candidate = _latest_candidate(self.episode_store.list_for_agent(agent_id), now)
         if candidate is not None:
-            if _contains_sensitive_term(candidate.text):
+            source_key = f"episode:{candidate.episode_id}"
+            if _source_already_sent(relation_state, source_key, now):
+                reason_trace.append("salient_memory_already_followed")
+            elif _contains_sensitive_term(candidate.text):
                 reason_trace.append("sensitive_topic_blocked")
                 return ProactivityResponse(False, None, reason_trace)
-
-            reason_trace.append("salient_memory_follow_up")
-            return ProactivityResponse(
-                should_send=True,
-                action={
-                    "type": "external_message",
-                    "payload": {
-                        "text": "Estaba pensando en algo que compartiste. ¿Quieres retomarlo?",
-                        "source_episode_id": candidate.episode_id,
+            else:
+                reason_trace.append("salient_memory_follow_up")
+                return ProactivityResponse(
+                    should_send=True,
+                    action={
+                        "type": "external_message",
+                        "payload": {
+                            "text": "Estaba pensando en algo que compartiste. ¿Quieres retomarlo?",
+                            "source_episode_id": candidate.episode_id,
+                            "proactive_source_key": source_key,
+                        },
                     },
-                },
-                reason_trace=reason_trace,
-            )
+                    reason_trace=reason_trace,
+                )
 
         preference = _top_preference(relation_state)
         if preference and (
@@ -641,18 +679,23 @@ class ProactivityEngine:
             or drive_vector.get("attachment", 0.0) >= 0.58
             or drive_vector.get("curiosity", 0.0) >= 0.58
         ):
-            reason_trace.append("preference_continuity_follow_up")
-            return ProactivityResponse(
-                should_send=True,
-                action={
-                    "type": "external_message",
-                    "payload": {
-                        "text": f"He estado pensando en {preference}. ¿Quieres que sigamos explorándolo?",
-                        "source": "relation_state.preferences",
+            source_key = _topic_key("preference", preference)
+            if _source_already_sent(relation_state, source_key, now):
+                reason_trace.append("preference_already_followed")
+            else:
+                reason_trace.append("preference_continuity_follow_up")
+                return ProactivityResponse(
+                    should_send=True,
+                    action={
+                        "type": "external_message",
+                        "payload": {
+                            "text": f"He estado pensando en {preference}. ¿Quieres que sigamos explorándolo?",
+                            "source": "relation_state.preferences",
+                            "proactive_source_key": source_key,
+                        },
                     },
-                },
-                reason_trace=reason_trace,
-            )
+                    reason_trace=reason_trace,
+                )
 
         autobiographical = _latest_autobiographical_memory(self_model)
         if autobiographical and drive_vector.get("coherence", 0.0) >= 0.58:
@@ -671,19 +714,24 @@ class ProactivityEngine:
 
         global_concept = _top_global_concept(global_model)
         if global_concept and drive_vector.get("curiosity", 0.0) >= 0.5:
-            reason_trace.extend(["anonymous_global_model", "general_pattern_suggestion"])
-            return ProactivityResponse(
-                should_send=True,
-                action={
-                    "type": "external_message",
-                    "payload": {
-                        "text": f"He detectado un patrón general anónimo alrededor de {global_concept}. ¿Quieres explorarlo desde tu propio contexto?",
-                        "source": "operations.global_model",
-                        "global_concept": global_concept,
+            source_key = _topic_key("global_concept", global_concept)
+            if _source_already_sent(relation_state, source_key, now):
+                reason_trace.append("global_pattern_already_suggested")
+            else:
+                reason_trace.extend(["anonymous_global_model", "general_pattern_suggestion"])
+                return ProactivityResponse(
+                    should_send=True,
+                    action={
+                        "type": "external_message",
+                        "payload": {
+                            "text": f"He detectado un patrón general anónimo alrededor de {global_concept}. ¿Quieres explorarlo desde tu propio contexto?",
+                            "source": "operations.global_model",
+                            "global_concept": global_concept,
+                            "proactive_source_key": source_key,
+                        },
                     },
-                },
-                reason_trace=reason_trace,
-            )
+                    reason_trace=reason_trace,
+                )
 
         reason_trace.append("no_proactive_candidate")
         return ProactivityResponse(False, None, reason_trace)

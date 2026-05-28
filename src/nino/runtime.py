@@ -30,6 +30,7 @@ from .proactivity import (
     extract_followups,
     mark_temporal_event_reminded,
     record_proactive_send,
+    record_proactive_source,
 )
 
 
@@ -1254,6 +1255,11 @@ class NinoRuntime:
                         str(event_id),
                         sent_at,
                     )
+                state.relation_state = record_proactive_source(
+                    state.relation_state,
+                    str(payload.get("proactive_source_key") or ""),
+                    sent_at,
+                )
             state.relation_state = record_proactive_send(state.relation_state, sent_at)
             state.updated_at = sent_at
             self.state_store.put(state)
@@ -1545,6 +1551,18 @@ class NinoRuntime:
             self.state_store.put(state)
             return {"blocked": True, "permission": permission, "action": action}
         inbox = list(state.relation_state.get("proactive_inbox", []))
+        new_text = str(action.get("payload", {}).get("text", "")).strip().lower() if isinstance(action.get("payload"), dict) else ""
+        new_source_key = str(action.get("payload", {}).get("proactive_source_key", "")).strip() if isinstance(action.get("payload"), dict) else ""
+        for existing in inbox:
+            existing_action = existing.get("action", {}) if isinstance(existing, dict) else {}
+            existing_payload = existing_action.get("payload", {}) if isinstance(existing_action, dict) else {}
+            existing_text = str(existing_payload.get("text", "")).strip().lower() if isinstance(existing_payload, dict) else ""
+            existing_source_key = str(existing_payload.get("proactive_source_key", "")).strip() if isinstance(existing_payload, dict) else ""
+            if not existing.get("delivered") and (
+                (new_source_key and existing_source_key == new_source_key)
+                or (new_text and existing_text == new_text)
+            ):
+                return dict(existing)
         item = {
             "id": str(uuid4()),
             "created_at": now.isoformat(),

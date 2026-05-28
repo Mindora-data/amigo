@@ -384,6 +384,27 @@ Criterios de salida:
 - Tests verifican que `/user` contiene `resumeSession`, usa `/session/status`, no guarda token en `localStorage` y no llama `loginUser()` al cargar.
 - La interfaz final sigue sin exponer controles operativos de `/app`.
 
+## Sprint 15 - Proactividad no repetitiva
+
+Estado: hecho inicial.
+
+Objetivo: evitar que amigo insista con el mismo seguimiento o la misma pregunta abierta, especialmente al refrescar `/user` o al tener varios avisos pendientes iguales.
+
+Hecho:
+
+- Cada seguimiento no candidato registra una `proactive_source_key` para recordar que ya se propuso.
+- Las preguntas abiertas del world-model solo se reabren una vez por tema en una ventana de 30 días.
+- Los seguimientos genéricos de memoria saliente solo se envían una vez por episodio.
+- Preferencias y patrones globales anónimos también quedan protegidos contra repetición por clave.
+- El inbox proactivo deduplica mensajes pendientes con el mismo texto o la misma `proactive_source_key`.
+- La UI `/user` deduplica avisos del inbox por texto y marca duplicados como entregados sin mostrarlos otra vez.
+- La contraseña deja de ser obligatoria a nivel HTML en local si no se ha configurado password; producción sigue validando contraseña en backend.
+
+Criterios de salida:
+
+- Tests cubren que una misma pregunta abierta no se repite, un mismo episodio saliente no se repite y el inbox no duplica un mensaje pendiente.
+- `nino-readiness` pasa con la suite completa.
+
 ## Proxima tarea recomendada
 
 Auditoria final de producto 100% local:

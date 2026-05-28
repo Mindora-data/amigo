@@ -265,10 +265,11 @@ def test_http_api_serves_minimal_user_app(tmp_path) -> None:
     assert b"/session/status" in body
     assert b"/session/logout" in body
     assert b"current-password" in body
-    assert b"type=\"password\" required" in body
+    assert b"type=\"password\"" in body
     assert b"credentials: \"same-origin\"" in body
     assert b"resumeSession" in body
     assert b"enterChat" in body
+    assert b"deliveredInboxText" in body
     assert b"nino_session_token" not in body
     assert b"x-nino-session" not in body
     assert b"loginUser();" not in body

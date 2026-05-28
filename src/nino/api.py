@@ -1505,7 +1505,7 @@ USER_HTML = """<!doctype html>
     </header>
     <form id="loginView" class="login">
       <input id="userId" autocomplete="username" placeholder="Usuario" aria-label="Usuario" required>
-      <input id="password" autocomplete="current-password" placeholder="Contraseña" aria-label="Contraseña" type="password" required>
+      <input id="password" autocomplete="current-password" placeholder="Contraseña" aria-label="Contraseña" type="password">
       <button id="loginButton" type="submit">Entrar</button>
     </form>
     <section id="chatView" class="chat" aria-live="polite">
@@ -1537,6 +1537,7 @@ USER_HTML = """<!doctype html>
     let onboardingActive = false;
     let onboardingStep = 0;
     const deliveredInbox = new Set();
+    const deliveredInboxText = new Set();
 
     function currentUserId() {
       return ($("userId").value || localStorage.getItem(STORAGE_USER) || "usuario").trim();
@@ -1748,6 +1749,13 @@ USER_HTML = """<!doctype html>
         if (item.status === "delivered" || deliveredInbox.has(item.id)) continue;
         const text = item.action && item.action.payload ? item.action.payload.text : "";
         if (!text) continue;
+        const textKey = text.trim().toLowerCase();
+        if (deliveredInboxText.has(textKey)) {
+          deliveredInbox.add(item.id);
+          await api(agentPath(`/proactivity/inbox/${encodeURIComponent(item.id)}/delivered`), {method: "POST", body: "{}"});
+          continue;
+        }
+        deliveredInboxText.add(textKey);
         deliveredInbox.add(item.id);
         addMessage("nino", text);
         speak(text);

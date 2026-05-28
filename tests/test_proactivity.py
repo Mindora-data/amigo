@@ -244,6 +244,59 @@ def test_proactivity_follows_up_open_question_from_world_model() -> None:
     assert "open_question_follow_up" in out.reason_trace
 
 
+def test_proactivity_does_not_repeat_same_open_question_followup() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime.configure_proactivity(
+        "agent-p",
+        ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=0),
+    )
+    runtime.tick(
+        "agent-p",
+        {"intent": "question", "text": "a que hora es el dentista?", "salience": 0.6, "confidence": 0.9},
+    )
+
+    first = runtime.evaluate_proactivity("agent-p", now=now)
+    second = runtime.evaluate_proactivity("agent-p", now=now + timedelta(hours=2))
+
+    assert first.should_send is True
+    assert second.should_send is False
+    assert "open_question_already_followed" in second.reason_trace
+
+
+def test_proactivity_does_not_repeat_same_salient_episode_followup() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime.configure_proactivity(
+        "agent-p",
+        ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=0),
+    )
+    runtime.episode_store.append(
+        Episode("e1", "agent-p", now - timedelta(hours=2), "mañana tengo examen", "school", 0.9, 0.9)
+    )
+
+    first = runtime.evaluate_proactivity("agent-p", now=now)
+    second = runtime.evaluate_proactivity("agent-p", now=now + timedelta(hours=2))
+
+    assert first.should_send is True
+    assert second.should_send is False
+    assert "salient_memory_already_followed" in second.reason_trace
+
+
+def test_proactive_inbox_deduplicates_same_pending_message() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    action = {
+        "type": "external_message",
+        "payload": {"text": "Me quedé pensando en esto: a que hora es el dentista?", "proactive_source_key": "open_question:dentista"},
+    }
+
+    first = runtime.enqueue_proactive_action("agent-p", action, now=datetime(2026, 5, 21, 10, tzinfo=timezone.utc))
+    second = runtime.enqueue_proactive_action("agent-p", action, now=datetime(2026, 5, 21, 10, 1, tzinfo=timezone.utc))
+
+    assert second["id"] == first["id"]
+    assert len(runtime.list_proactive_inbox("agent-p")) == 1
+
+
 def test_proactivity_can_follow_relation_preference_without_salient_episode() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
