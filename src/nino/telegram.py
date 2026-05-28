@@ -134,6 +134,9 @@ class TelegramAPI(Protocol):
     def send_message(self, chat_id: int | str, text: str) -> dict[str, Any]:
         ...
 
+    def get_me(self) -> dict[str, Any]:
+        ...
+
 
 class HTTPTelegramAPI:
     def __init__(self, token: str, base_url: str = "https://api.telegram.org") -> None:
@@ -163,6 +166,9 @@ class HTTPTelegramAPI:
 
     def send_message(self, chat_id: int | str, text: str) -> dict[str, Any]:
         return self._call("sendMessage", {"chat_id": chat_id, "text": text})
+
+    def get_me(self) -> dict[str, Any]:
+        return dict(self._call("getMe", {}).get("result", {}))
 
 
 @dataclass
@@ -238,12 +244,52 @@ class TelegramBotService:
         links: TelegramLinkStore,
         *,
         poll_timeout: int = 25,
+        bot_username: str | None = None,
     ) -> None:
         self.telegram = telegram
         self.backend = backend
         self.links = links
         self.poll_timeout = poll_timeout
+        self.bot_username = bot_username.lower().lstrip("@") if bot_username else None
         self.offset: int | None = None
+
+    def _bot_username(self) -> str | None:
+        if self.bot_username is None:
+            try:
+                me = self.telegram.get_me()
+            except Exception:
+                return None
+            username = str(me.get("username") or "").strip()
+            self.bot_username = username.lower().lstrip("@") if username else None
+        return self.bot_username
+
+    def _is_group_chat(self, chat: dict[str, Any]) -> bool:
+        return str(chat.get("type") or "").lower() in {"group", "supergroup"}
+
+    def _is_directed_at_bot(self, message: dict[str, Any], text: str) -> bool:
+        if text.startswith("/"):
+            return True
+        username = self._bot_username()
+        if username and f"@{username}" in text.lower():
+            return True
+        reply_to = message.get("reply_to_message") if isinstance(message.get("reply_to_message"), dict) else {}
+        reply_from = reply_to.get("from") if isinstance(reply_to.get("from"), dict) else {}
+        if reply_from.get("is_bot") and username and str(reply_from.get("username", "")).lower() == username:
+            return True
+        return False
+
+    def _clean_group_text(self, text: str) -> str:
+        username = self._bot_username()
+        cleaned = text
+        if username:
+            cleaned = cleaned.replace(f"@{username}", "").replace(f"@{username.lower()}", "")
+        if cleaned.startswith("/"):
+            parts = cleaned.split(maxsplit=1)
+            cleaned = parts[1] if len(parts) > 1 else ""
+        return cleaned.strip()
+
+    def _group_user_id(self, chat_id: int | str) -> str:
+        return f"telegram-group-{_slug(str(chat_id))}"
 
     def handle_update(self, update: dict[str, Any], now: datetime | None = None) -> None:
         self.offset = int(update.get("update_id", 0)) + 1
@@ -254,6 +300,9 @@ class TelegramBotService:
         if chat_id is None or not text:
             return
         current_time = now or datetime.fromtimestamp(int(message.get("date") or time.time()), tz=timezone.utc)
+        if self._is_group_chat(chat):
+            self._handle_group_message(message, chat_id, text, current_time)
+            return
         user_id = self.links.user_for_chat(chat_id)
         if user_id is None:
             if text.lower().startswith("/link "):
@@ -269,6 +318,20 @@ class TelegramBotService:
             )
             return
         reply = self.backend.tick(user_id, text, current_time)
+        if reply:
+            self.telegram.send_message(chat_id, reply)
+
+    def _handle_group_message(self, message: dict[str, Any], chat_id: int | str, text: str, now: datetime) -> None:
+        if not self._is_directed_at_bot(message, text):
+            return
+        clean_text = self._clean_group_text(text)
+        if not clean_text:
+            self.telegram.send_message(chat_id, "Estoy aquí. Escríbeme la pregunta en el mismo mensaje o respóndeme directamente.")
+            return
+        from_user = message.get("from") if isinstance(message.get("from"), dict) else {}
+        linked_user = self.links.user_for_chat(f"user:{from_user.get('id')}") if from_user.get("id") is not None else None
+        target_user_id = linked_user or self._group_user_id(chat_id)
+        reply = self.backend.tick(target_user_id, clean_text, now)
         if reply:
             self.telegram.send_message(chat_id, reply)
 

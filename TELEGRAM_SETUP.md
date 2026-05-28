@@ -84,3 +84,13 @@ tail -f data/nino-telegram.err.log
 - El bot llama a las rutas privadas `/users/{user_id}/agents/nino/...`.
 - Si `NINO_REQUIRE_SESSION=true`, el bot inicia sesión contra el backend y usa `X-Nino-Session`.
 - La proactividad sale por Telegram solo después de pasar por las reglas del backend.
+
+## Grupos
+
+Puedes añadir el bot a un grupo, pero usa reglas más estrictas:
+
+- Si el grupo habla entre sí, amigo no responde.
+- Responde solo si lo mencionan (`@nombre_del_bot`), usan comando o responden a un mensaje suyo.
+- Un grupo usa memoria separada `telegram-group-<chat_id>`, no memoria privada.
+- Si una persona vinculó su cuenta individual, sus mensajes dirigidos al bot pueden usar su memoria privada.
+- Una persona no vinculada en grupo nunca accede a memoria privada.

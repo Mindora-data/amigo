@@ -20,6 +20,9 @@ class FakeTelegram:
         self.sent.append(item)
         return {"ok": True, "result": item}
 
+    def get_me(self) -> dict[str, object]:
+        return {"id": 999, "is_bot": True, "username": "amigo_test_bot"}
+
 
 class FakeBackend:
     def __init__(self) -> None:
@@ -43,6 +46,18 @@ class FakeBackend:
 
 def _update(chat_id: int, text: str, update_id: int = 1) -> dict[str, object]:
     return {"update_id": update_id, "message": {"chat": {"id": chat_id}, "text": text, "date": 1_779_977_600}}
+
+
+def _group_update(chat_id: int, text: str, user_id: int = 10, update_id: int = 1) -> dict[str, object]:
+    return {
+        "update_id": update_id,
+        "message": {
+            "chat": {"id": chat_id, "type": "supergroup", "title": "Grupo"},
+            "from": {"id": user_id, "is_bot": False, "first_name": "Pablo"},
+            "text": text,
+            "date": 1_779_977_600,
+        },
+    }
 
 
 def test_linked_chat_resolves_user_and_replies(tmp_path) -> None:
@@ -152,3 +167,55 @@ def test_link_code_cli_path_does_not_require_telegram_token(tmp_path, capsys) ->
     assert main(["--db", str(tmp_path / "nino.db"), "--create-link-code", "Ana"]) == 0
     code = capsys.readouterr().out.strip()
     assert len(code) >= 8
+
+
+def test_group_message_not_directed_to_bot_is_ignored(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "hola grupo"))
+
+    assert backend.ticks == []
+    assert telegram.sent == []
+
+
+def test_group_mention_uses_group_memory_not_private_memory(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "@amigo_test_bot qué opinas?", user_id=10))
+
+    assert backend.ticks == [{"user_id": "telegram-group-100", "text": "qué opinas?", "now": "2026-05-28T14:13:20+00:00"}]
+    assert telegram.sent[-1]["chat_id"] == "-100"
+
+
+def test_group_reply_to_bot_is_directed_and_uses_group_memory(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+    update = _group_update(-100, "sí, sigue", user_id=10)
+    update["message"]["reply_to_message"] = {"from": {"id": 999, "is_bot": True, "username": "amigo_test_bot"}, "text": "respuesta previa"}
+
+    bot.handle_update(update)
+
+    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
+    assert backend.ticks[-1]["text"] == "sí, sigue"
+
+
+def test_group_linked_sender_uses_private_user_memory_when_directed(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    code = links.create_code("Ana")
+    assert links.link_with_code("user:10", code)
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "@amigo_test_bot mi perfil", user_id=10))
+
+    assert backend.ticks[-1]["user_id"] == "ana"
+    assert backend.ticks[-1]["text"] == "mi perfil"

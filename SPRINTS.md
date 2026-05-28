@@ -430,6 +430,26 @@ Criterios de salida:
 - Tests cubren chat vinculado, chat no vinculado, aislamiento entre dos `chat_id`, push correcto, bloqueo por límites, reacción del usuario y falta de token.
 - No hay webhooks ni puertos entrantes nuevos.
 
+## Sprint 17 - Telegram grupos conservador
+
+Estado: hecho inicial.
+
+Objetivo: permitir usar amigo en grupos sin mezclar memorias privadas ni convertirlo en un bot pesado.
+
+Hecho:
+
+- Telegram detecta chats `group`/`supergroup`.
+- En grupo, amigo ignora mensajes no dirigidos a él.
+- Responde solo si lo mencionan por `@username`, usan comando o responden a un mensaje suyo.
+- Los mensajes de grupo no vinculados usan memoria de grupo aislada `telegram-group-<chat_id>`.
+- Si el remitente individual está vinculado como `user:<telegram_user_id>`, sus mensajes dirigidos al bot usan su memoria privada.
+- La documentación explica las reglas de grupo y el límite de privacidad.
+
+Criterios de salida:
+
+- Tests cubren silencio en conversación de grupo no dirigida, mención al bot, respuesta a mensaje del bot y usuario vinculado dentro de grupo.
+- No se comparte memoria privada con un grupo por defecto.
+
 ## Proxima tarea recomendada
 
 Auditoria final de producto 100% local:
