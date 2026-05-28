@@ -1399,9 +1399,10 @@ USER_HTML = """<!doctype html>
       background: #f4f6f2;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: #f4f6f2; }
+    body { margin: 0; min-height: 100vh; background: #f4f6f2; overflow: hidden; }
     main {
-      min-height: 100vh;
+      height: 100vh;
+      height: 100dvh;
       display: grid;
       grid-template-rows: auto 1fr auto;
       max-width: 780px;
@@ -1425,6 +1426,10 @@ USER_HTML = """<!doctype html>
       color: #182126;
     }
     input, textarea { width: 100%; padding: 11px 12px; }
+    input:focus, textarea:focus, button:focus-visible {
+      outline: 2px solid #2d7a73;
+      outline-offset: 2px;
+    }
     textarea { resize: none; min-height: 48px; max-height: 150px; }
     button {
       min-height: 42px;
@@ -1444,6 +1449,7 @@ USER_HTML = """<!doctype html>
       width: min(100%, 380px);
       margin: 0 auto;
     }
+    .login[hidden] { display: none; }
     .chat {
       display: none;
       min-height: 0;
@@ -1456,6 +1462,7 @@ USER_HTML = """<!doctype html>
       flex-direction: column;
       gap: 10px;
       padding: 6px 0;
+      scrollbar-width: thin;
     }
     .message {
       max-width: 78%;
@@ -1465,6 +1472,7 @@ USER_HTML = """<!doctype html>
       border: 1px solid #d2dbd6;
       border-radius: 8px;
       background: #fff;
+      overflow-wrap: anywhere;
     }
     .message.user {
       align-self: flex-end;
@@ -1496,8 +1504,8 @@ USER_HTML = """<!doctype html>
       <button id="logoutButton" class="secondary" hidden>Salir</button>
     </header>
     <form id="loginView" class="login">
-      <input id="userId" autocomplete="username" placeholder="Usuario" aria-label="Usuario">
-      <input id="password" autocomplete="current-password" placeholder="Contraseña" aria-label="Contraseña" type="password">
+      <input id="userId" autocomplete="username" placeholder="Usuario" aria-label="Usuario" required>
+      <input id="password" autocomplete="current-password" placeholder="Contraseña" aria-label="Contraseña" type="password" required>
       <button id="loginButton" type="submit">Entrar</button>
     </form>
     <section id="chatView" class="chat" aria-live="polite">
@@ -1508,7 +1516,7 @@ USER_HTML = """<!doctype html>
         <button id="sendButton" type="submit">Enviar</button>
       </form>
     </section>
-    <div id="status" class="status"></div>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
   </main>
   <script>
     const $ = (id) => document.getElementById(id);
@@ -1586,9 +1594,21 @@ USER_HTML = """<!doctype html>
     async function loginUser(event) {
       if (event) event.preventDefault();
       const userId = currentUserId();
-      localStorage.setItem(STORAGE_USER, userId);
-      const login = await api("/session/login", {method: "POST", body: JSON.stringify({user_id: userId, agent_id: AGENT_ID, password: $("password").value})});
-      $("loginView").style.display = "none";
+      $("loginButton").disabled = true;
+      setStatus("");
+      try {
+        localStorage.setItem(STORAGE_USER, userId);
+        await api("/session/login", {method: "POST", body: JSON.stringify({user_id: userId, agent_id: AGENT_ID, password: $("password").value})});
+        await enterChat();
+      } catch (err) {
+        setStatus(err.message);
+        $("password").select();
+      } finally {
+        $("loginButton").disabled = false;
+      }
+    }
+    async function enterChat() {
+      $("loginView").hidden = true;
       $("chatView").style.display = "grid";
       $("logoutButton").hidden = false;
       await loadConversation();
@@ -1597,6 +1617,19 @@ USER_HTML = """<!doctype html>
       await loadProactiveInbox();
       startInboxPolling();
       $("text").focus();
+    }
+    async function resumeSession() {
+      const storedUser = localStorage.getItem(STORAGE_USER);
+      if (storedUser) $("userId").value = storedUser;
+      const status = await api("/session/status").catch(() => null);
+      if (status && status.authenticated) {
+        if (status.user_id) $("userId").value = status.user_id;
+        localStorage.setItem(STORAGE_USER, currentUserId());
+        await enterChat();
+        return;
+      }
+      $("loginView").hidden = false;
+      $("userId").focus();
     }
     async function loadConversation() {
       const out = await api(agentPath("/conversation"));
@@ -1751,9 +1784,10 @@ USER_HTML = """<!doctype html>
       stopInboxPolling();
       voiceReply = false;
       $("chatView").style.display = "none";
-      $("loginView").style.display = "grid";
+      $("loginView").hidden = false;
       $("logoutButton").hidden = true;
       $("messages").replaceChildren();
+      $("password").value = "";
       $("userId").focus();
     };
     $("voiceButton").onclick = () => {
@@ -1762,12 +1796,8 @@ USER_HTML = """<!doctype html>
       if (listening) recognition.stop();
       else recognition.start();
     };
-    const storedUser = localStorage.getItem(STORAGE_USER);
-    if (storedUser) {
-      $("userId").value = storedUser;
-      loginUser();
-    }
     setupVoice();
+    resumeSession();
   </script>
 </body>
 </html>

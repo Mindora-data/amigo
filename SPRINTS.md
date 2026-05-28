@@ -363,6 +363,27 @@ Criterios de salida:
 - `scripts/ninoctl prod-smoke` debe pasar antes de activar un proxy público.
 - La validación externa real queda pendiente hasta tener el proyecto/proxy conectado: abrir `/user` por HTTPS, confirmar login/logout y verificar que `/app` no responde.
 
+## Sprint 14 - UI final minimalista robusta
+
+Estado: hecho inicial.
+
+Objetivo: dejar `/user` como superficie final simple y fiable: login y, después, chat/voz sin consola interna ni paneles técnicos.
+
+Hecho:
+
+- `/user` conserva una pantalla inicial mínima de usuario/contraseña y una pantalla posterior de chat/voz.
+- La UI deja de intentar login automático con contraseña vacía cuando hay usuario guardado.
+- La sesión se reanuda con `GET /session/status` usando la cookie `HttpOnly`; si no hay sesión válida, vuelve al login.
+- El formulario de login exige usuario y contraseña antes de enviar.
+- Errores de login se muestran en el estado mínimo sin abrir la conversación.
+- Logout limpia la cookie en servidor, borra el usuario local y vacía la contraseña en la UI.
+- Ajustes visuales discretos: altura `100dvh`, scroll solo en mensajes, foco accesible, texto largo sin romper layout y estado con `role=status`.
+
+Criterios de salida:
+
+- Tests verifican que `/user` contiene `resumeSession`, usa `/session/status`, no guarda token en `localStorage` y no llama `loginUser()` al cargar.
+- La interfaz final sigue sin exponer controles operativos de `/app`.
+
 ## Proxima tarea recomendada
 
 Auditoria final de producto 100% local:
