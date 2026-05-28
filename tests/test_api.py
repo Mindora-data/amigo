@@ -121,6 +121,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"globalModel" in body
     assert b"globalSuggestions" in body
     assert b"/operations/global-suggestions" in body
+    assert b"relationshipDashboard" in body
+    assert b"/relationship-dashboard" in body
     assert b"temporalEvents" in body
     assert b"/temporal-events" in body
     assert b"loadTemporalEvents" in body
@@ -362,6 +364,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     tasks_before_run = _request(app, "GET", "/agents/api-agent/tasks")
     ran_task = _request(app, "POST", "/agents/api-agent/tasks/run-next", {})
     tasks_after_run = _request(app, "GET", "/agents/api-agent/tasks")
+    relationship_dashboard = _request(app, "GET", "/agents/api-agent/relationship-dashboard")
 
     assert root["service"] == "nino"
     assert "GET /user" in root["endpoints"]
@@ -392,6 +395,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /session/status" in root["endpoints"]
     assert "POST /session/logout" in root["endpoints"]
     assert "POST /agents/{agent_id}/tasks/run-next" in root["endpoints"]
+    assert "GET /agents/{agent_id}/relationship-dashboard" in root["endpoints"]
     assert "GET /agents/{agent_id}/temporal-events" in root["endpoints"]
     assert "PATCH /agents/{agent_id}/temporal-events/{event_id}" in root["endpoints"]
     assert "DELETE /agents/{agent_id}/temporal-events/{event_id}" in root["endpoints"]
@@ -402,6 +406,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "delete" in openapi["paths"]["/agents/{agent_id}/memory/facts/{fact_id}"]
     assert "/agents/{agent_id}/temporal-events/{event_id}" in openapi["paths"]
     assert "patch" in openapi["paths"]["/agents/{agent_id}/temporal-events/{event_id}"]
+    assert "/agents/{agent_id}/relationship-dashboard" in openapi["paths"]
     assert "/operations/claude" in openapi["paths"]
     assert "/operations/claude/configure" in openapi["paths"]
     assert "/operations/claude/disable" in openapi["paths"]
@@ -1536,10 +1541,14 @@ def test_http_api_exposes_self_and_world_models(tmp_path) -> None:
     )
     self_model = _request(app, "GET", "/agents/api-agent/self-model")
     world_model = _request(app, "GET", "/agents/api-agent/world-model")
+    relationship_dashboard = _request(app, "GET", "/agents/api-agent/relationship-dashboard")
 
     assert self_model["self_model"]["interaction_count"] == 1
     assert self_model["self_model"]["identity_stage"] == "early_childhood"
     assert world_model["world_model"]["concept_counts"]["piano"] == 1
+    assert relationship_dashboard["dashboard"]["agent_id"] == "api-agent"
+    assert relationship_dashboard["dashboard"]["privacy"]["raw_conversation_included"] is False
+    assert relationship_dashboard["dashboard"]["maturity"]["interaction_count"] >= 1
 
 
 def test_http_api_exposes_narrative(tmp_path) -> None:
@@ -1552,6 +1561,26 @@ def test_http_api_exposes_narrative(tmp_path) -> None:
     assert narrative["narrative"]["known_user"] == "Pablo"
     assert "piano" in narrative["narrative"]["preferences"]
     assert "Soy amigo" in narrative["narrative"]["summary"]
+
+
+def test_relationship_dashboard_learns_from_hits_mistakes_and_limits(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "gracias, eso me ayuda", "salience": 0.7})
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "te equivocas, no era eso", "salience": 0.8})
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "no insistas con ese tema", "salience": 0.8})
+    dashboard = _request(app, "GET", "/agents/api-agent/relationship-dashboard")["dashboard"]
+    state = _request(app, "GET", "/agents/api-agent/state")
+
+    counts = dashboard["relationship_learning"]["counts"]
+    assert counts["positive"] == 1
+    assert counts["negative"] == 1
+    assert counts["stop"] == 1
+    assert dashboard["response_style"]["caution"] > 0.5
+    assert dashboard["response_style"]["initiative"] < 0.5
+    assert dashboard["privacy"]["raw_conversation_included"] is False
+    assert "no era eso" not in json.dumps(dashboard)
+    assert state["relation_state"]["relationship_learning"]["last_outcome"] == "stop"
 
 
 def test_http_api_exports_imports_and_reports_metrics(tmp_path) -> None:

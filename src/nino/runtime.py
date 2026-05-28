@@ -659,6 +659,88 @@ def _detect_emotional_tone(text: str) -> str | None:
             return tone
     return None
 
+RELATIONSHIP_FEEDBACK_PATTERNS = {
+    "positive": re.compile(
+        r"\b("
+        r"gracias|perfecto|genial|bien visto|eso era|justo eso|me ayuda|me ayud[oó]|"
+        r"acertaste|has acertado|correcto|va perfecto|asi si|as[ií] s[ií]"
+        r")\b",
+        re.IGNORECASE,
+    ),
+    "negative": re.compile(
+        r"\b("
+        r"te equivocas|equivocado|no era eso|eso no|mal entendido|no has entendido|"
+        r"incorrecto|metiste la pata|mete la pata|fallaste|no responde|no funciona"
+        r")\b",
+        re.IGNORECASE,
+    ),
+    "stop": re.compile(
+        r"\b("
+        r"no insistas|para ya|p[áa]rate|deja de|no me recuerdes|no preguntes m[aá]s|"
+        r"pesado|muy pesado|calla|no quiero hablar de eso"
+        r")\b",
+        re.IGNORECASE,
+    ),
+}
+
+RELATIONSHIP_DEFAULT_STYLE = {
+    "brevity": 0.5,
+    "caution": 0.5,
+    "initiative": 0.5,
+}
+
+
+def _detect_relationship_feedback(text: str) -> dict[str, str] | None:
+    plain = _without_accents(text)
+    for outcome in ("stop", "negative", "positive"):
+        pattern = RELATIONSHIP_FEEDBACK_PATTERNS[outcome]
+        if pattern.search(text) or pattern.search(plain):
+            return {"outcome": outcome, "signal": outcome}
+    if _profile_correction_from_text(text) or _profile_forget_from_text(text):
+        return {"outcome": "correction", "signal": "profile_adjustment"}
+    return None
+
+
+def _relationship_learning_from_feedback(
+    current: dict[str, Any],
+    feedback: dict[str, str],
+    now: datetime,
+) -> dict[str, Any]:
+    learning = dict(current)
+    counts = dict(learning.get("counts", {}))
+    outcome = feedback["outcome"]
+    counts[outcome] = int(counts.get(outcome, 0)) + 1
+    learning["counts"] = counts
+    learning["last_outcome"] = outcome
+    learning["last_signal"] = feedback.get("signal", outcome)
+    learning["last_signal_at"] = now.isoformat()
+
+    style = dict(RELATIONSHIP_DEFAULT_STYLE)
+    style.update({key: float(value) for key, value in dict(learning.get("response_style", {})).items() if key in style})
+    if outcome == "positive":
+        style["initiative"] = _clamp01(style["initiative"] + 0.04)
+        style["caution"] = _clamp01(style["caution"] - 0.02)
+    elif outcome in {"negative", "correction"}:
+        style["caution"] = _clamp01(style["caution"] + 0.08)
+        style["brevity"] = _clamp01(style["brevity"] + 0.04)
+        style["initiative"] = _clamp01(style["initiative"] - 0.04)
+    elif outcome == "stop":
+        style["caution"] = _clamp01(style["caution"] + 0.14)
+        style["brevity"] = _clamp01(style["brevity"] + 0.08)
+        style["initiative"] = _clamp01(style["initiative"] - 0.14)
+    learning["response_style"] = {key: round(value, 4) for key, value in style.items()}
+
+    recent = list(learning.get("recent", []))
+    recent.append(
+        {
+            "outcome": outcome,
+            "signal": feedback.get("signal", outcome),
+            "observed_at": now.isoformat(),
+        }
+    )
+    learning["recent"] = recent[-20:]
+    return learning
+
 def _update_relation_from_percept(
     relation_state: dict[str, Any],
     percept_frame: dict[str, Any],
@@ -669,6 +751,13 @@ def _update_relation_from_percept(
     text = str(percept_frame.get("text", "")).strip()
     relation["interaction_count"] = int(relation.get("interaction_count", 0)) + 1
     relation["last_interaction_at"] = now.isoformat()
+    feedback = _detect_relationship_feedback(text)
+    if feedback is not None:
+        relation["relationship_learning"] = _relationship_learning_from_feedback(
+            dict(relation.get("relationship_learning", {})),
+            feedback,
+            now,
+        )
 
     name = NAME_RE.search(text)
     if name:
@@ -1415,6 +1504,74 @@ class NinoRuntime:
             "dominant_concepts": concept_names,
             "dream_reflection_count": len(reflections),
             "affect_state": affect,
+        }
+
+    def relationship_dashboard(self, agent_id: str) -> dict[str, Any]:
+        state = self.load_or_init_state(agent_id)
+        relation = state.relation_state
+        metrics = self.metrics(agent_id)
+        learning = dict(relation.get("relationship_learning", {}))
+        counts = {
+            "positive": int(dict(learning.get("counts", {})).get("positive", 0)),
+            "negative": int(dict(learning.get("counts", {})).get("negative", 0)),
+            "correction": int(dict(learning.get("counts", {})).get("correction", 0)),
+            "stop": int(dict(learning.get("counts", {})).get("stop", 0)),
+        }
+        style = dict(RELATIONSHIP_DEFAULT_STYLE)
+        style.update({key: float(value) for key, value in dict(learning.get("response_style", {})).items() if key in style})
+        recent_signals = [
+            {
+                "outcome": str(item.get("outcome", "")),
+                "signal": str(item.get("signal", "")),
+                "observed_at": str(item.get("observed_at", "")),
+            }
+            for item in list(learning.get("recent", []))[-10:]
+            if isinstance(item, dict)
+        ]
+        proactivity = dict(relation.get("proactivity", {}))
+        inbox = self.list_proactive_inbox(agent_id)
+        open_questions = list(state.world_model.get("open_questions", []))
+        return {
+            "agent_id": agent_id,
+            "privacy": {
+                "raw_conversation_included": False,
+                "private_scope": "telegram_group" if agent_id.startswith("telegram-group-") else "user_private",
+            },
+            "maturity": {
+                "age_ticks": state.cognitive_time.get("age_ticks", 0.0),
+                "experience_mass": state.cognitive_time.get("experience_mass", 0.0),
+                "maturity": state.cognitive_time.get("maturity", 0.0),
+                "interaction_count": int(relation.get("interaction_count", 0)),
+            },
+            "relationship_learning": {
+                "counts": counts,
+                "last_outcome": learning.get("last_outcome"),
+                "last_signal_at": learning.get("last_signal_at"),
+                "recent_signals": recent_signals,
+            },
+            "response_style": {key: round(float(value), 4) for key, value in style.items()},
+            "memory": {
+                "episode_count": metrics["episode_count"],
+                "cold_memory_count": metrics["cold_memory_count"],
+                "preference_count": metrics["preference_count"],
+                "dominant_concepts": self.build_narrative(agent_id)["dominant_concepts"],
+            },
+            "proactivity": {
+                "consent": proactivity.get("consent", "unknown"),
+                "pending_inbox_count": len([item for item in inbox if not item.get("delivered", False)]),
+                "active_start_hour": proactivity.get("active_start_hour"),
+                "active_end_hour": proactivity.get("active_end_hour"),
+            },
+            "conversation": {
+                "open_question_count": len(open_questions),
+                "recent_open_questions": [str(item)[:120] for item in open_questions[-5:]],
+                "quality": self.evaluate_conversation_quality(agent_id),
+            },
+            "notes": [
+                "Los aciertos, fallos y limites se guardan como senales agregadas de relacion.",
+                "El dashboard no incluye texto crudo de conversaciones ni secretos.",
+                "Si aumentan negative/stop, amigo sube cautela y brevedad y baja iniciativa.",
+            ],
         }
 
     def export_agent(self, agent_id: str) -> dict[str, Any]:

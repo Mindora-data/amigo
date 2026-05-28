@@ -638,3 +638,35 @@ Auditoria final de producto 100% local:
 160. Hecho inicial: amigo permite borrar datos del perfil por chat con frases como `olvida mi lugar` o `borra mi perfil`, limpiando el estado persistente asociado.
 
 Esta tarea desbloquea el uso vivo sin depender de comandos sueltos.
+
+## Sprint 18 - Aprendizaje relacional y dashboard operativo
+
+Estado: hecho.
+
+Objetivo: que amigo aprenda de la relacion, no solo del contenido. Cuando el usuario
+senala que una respuesta ayudo, fallo, fue una correccion o cruzo un limite, amigo lo
+guarda como senal agregada de relacion y ajusta su estilo: mas cautela y brevedad ante
+fallos/limites, algo mas de iniciativa ante aciertos, siempre sin volverse pesado.
+
+Hechos:
+
+- Se detectan senales explicitas de acierto (`gracias`, `me ayuda`, `acertaste`),
+  fallo (`te equivocas`, `no era eso`, `metiste la pata`) y limite (`no insistas`,
+  `no me recuerdes`, `pesado`) en todos los clientes, incluido Telegram, porque viven
+  en el runtime comun.
+- `relation_state.relationship_learning` guarda solo conteos, ultima senal y estilo
+  agregado (`brevity`, `caution`, `initiative`), sin texto crudo de conversaciones.
+- El prompt LLM recibe ese aprendizaje agregado para responder mas breve, humilde y
+  menos invasivo cuando hay fallos o limites recientes.
+- `GET /agents/{agent_id}/relationship-dashboard` y la ruta privada equivalente
+  `/users/{user_id}/agents/{agent_id}/relationship-dashboard` exponen madurez,
+  aprendizaje relacional, memoria, proactividad y calidad conversacional sin secretos
+  ni transcript completo.
+- `/app` incorpora el boton `Aprendizaje` para inspeccionar el dashboard operativo.
+
+Tests:
+
+- El dashboard cuenta aciertos, fallos y limites.
+- Tras fallo/limite, suben cautela y brevedad y baja iniciativa.
+- El dashboard no incluye texto crudo de la conversacion.
+- La ruta queda publicada en root/openapi y accesible desde la UI interna.

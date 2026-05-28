@@ -312,6 +312,7 @@ APP_HTML = """<!doctype html>
         <div id="memoryList" class="list"></div>
         <div class="row">
           <button id="relation" class="secondary">Relación</button>
+          <button id="relationshipDashboard" class="secondary">Aprendizaje</button>
           <button id="narrative" class="secondary">Narrativa</button>
         </div>
         <div class="row">
@@ -1222,6 +1223,7 @@ APP_HTML = """<!doctype html>
       await loadFacts();
     };
     $("relation").onclick = async () => print($("memory"), await api(agentPath("/relation")));
+    $("relationshipDashboard").onclick = async () => print($("memory"), await api(agentPath("/relationship-dashboard")));
     $("selfModel").onclick = async () => print($("memory"), await api(agentPath("/self-model")));
     $("worldModel").onclick = async () => print($("memory"), await api(agentPath("/world-model")));
     $("narrative").onclick = async () => print($("memory"), await api(agentPath("/narrative")));
@@ -1856,6 +1858,7 @@ API_ENDPOINTS = [
     "POST /users/{user_id}/agents/{agent_id}/memory/search",
     "GET /users/{user_id}/agents/{agent_id}/profile",
     "GET /users/{user_id}/agents/{agent_id}/metrics",
+    "GET /users/{user_id}/agents/{agent_id}/relationship-dashboard",
     "POST /agents/prune",
     "POST /agents/import",
     "POST /agents/{agent_id}/tick",
@@ -1876,6 +1879,7 @@ API_ENDPOINTS = [
     "GET /agents/{agent_id}/narrative",
     "GET /agents/{agent_id}/profile",
     "GET /agents/{agent_id}/metrics",
+    "GET /agents/{agent_id}/relationship-dashboard",
     "GET /agents/{agent_id}/export",
     "GET /agents/{agent_id}/export-safe",
     "GET /agents/{agent_id}/proactivity/inbox",
@@ -3202,6 +3206,9 @@ class NinoService:
     def metrics(self, agent_id: str) -> dict[str, Any]:
         return {"metrics": _to_jsonable(self.runtime.metrics(agent_id))}
 
+    def relationship_dashboard(self, agent_id: str) -> dict[str, Any]:
+        return {"dashboard": _to_jsonable(self.runtime.relationship_dashboard(agent_id))}
+
     def proactive_inbox(self, agent_id: str) -> dict[str, Any]:
         return {"inbox": _to_jsonable(self.runtime.list_proactive_inbox(agent_id))}
 
@@ -3480,6 +3487,8 @@ class NinoHttpApp:
             return "200 OK", self.service.get_profile(agent_id)
         if method == "GET" and tail == ["metrics"]:
             return "200 OK", self.service.metrics(agent_id)
+        if method == "GET" and tail == ["relationship-dashboard"]:
+            return "200 OK", self.service.relationship_dashboard(agent_id)
         if method == "GET" and tail == ["export"]:
             return "200 OK", self.service.export_agent(agent_id)
         if method == "GET" and tail == ["export-safe"]:

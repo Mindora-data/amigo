@@ -297,6 +297,18 @@ def build_nino_prompt(
         if isinstance(answer, dict) and answer.get("value")
     ) or "- No onboarding profile."
     preferences = ", ".join(sorted(relation_state.get("preferences", {}).keys())) or "none"
+    learning = relation_state.get("relationship_learning", {})
+    response_style = learning.get("response_style", {}) if isinstance(learning, dict) else {}
+    learning_counts = learning.get("counts", {}) if isinstance(learning, dict) else {}
+    relation_learning = (
+        f"aciertos={int(learning_counts.get('positive', 0))}, "
+        f"fallos={int(learning_counts.get('negative', 0))}, "
+        f"correcciones={int(learning_counts.get('correction', 0))}, "
+        f"limites={int(learning_counts.get('stop', 0))}; "
+        f"estilo brevedad={float(response_style.get('brevity', 0.5)):.2f}, "
+        f"cautela={float(response_style.get('caution', 0.5)):.2f}, "
+        f"iniciativa={float(response_style.get('initiative', 0.5)):.2f}"
+    )
     concepts = sorted(
         world_model.get("concept_counts", {}).items(),
         key=lambda item: item[1],
@@ -329,6 +341,8 @@ def build_nino_prompt(
         "Usa la memoria dada como contexto, no inventes recuerdos. Si no sabes algo, dilo. "
         "Mantén respuestas breves, normalmente entre 1 y 4 frases. "
         "No seas pesado: pregunta por la vida del usuario con tacto, recuerda lo importante y deja espacio si no quiere hablar. "
+        "Adapta tu respuesta a las senales relacionales: si hay fallos, correcciones o limites recientes, responde mas breve, humilde y con menos iniciativa; "
+        "si hay aciertos, conserva ese tipo de ayuda sin exagerar confianza. "
         "No conviertas una hora suelta o una respuesta breve del usuario en recordatorio; solo hay recordatorio si el usuario lo pide explícitamente. "
         "Si malinterpretas al usuario, discúlpate una sola vez de forma breve, corrige el rumbo y no encadenes disculpas tras disculpas. "
         "No menciones detalles internos de implementación salvo que el usuario lo pregunte. "
@@ -346,6 +360,7 @@ def build_nino_prompt(
         f"Modo continuidad: {'activo' if continuity_mode else 'pasivo'}\n"
         f"Consulta temporal: {'sin resultados' if temporal_miss else 'activa' if temporal_query else 'no'}\n"
         f"Preferencias conocidas: {preferences}\n"
+        f"Aprendizaje relacional agregado: {relation_learning}\n"
         f"Objetivos activos: {', '.join(active_goals) or 'none'}\n"
         f"Etapa de identidad: {self_model.get('identity_stage', 'unknown')}\n"
         f"Conceptos dominantes: {concept_text}\n\n"
