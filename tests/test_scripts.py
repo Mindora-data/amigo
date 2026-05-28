@@ -44,6 +44,38 @@ def test_launchd_plist_does_not_embed_anthropic_key(tmp_path) -> None:
     assert "secret-launchd-test" not in content
 
 
+def test_telegram_launchd_uses_configured_python(tmp_path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    env_file = tmp_path / "nino.env"
+    env_file.write_text("NINO_TELEGRAM_BOT_TOKEN=fake\n", encoding="utf-8")
+    launchctl = tmp_path / "launchctl"
+    launchctl.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    launchctl.chmod(0o755)
+    python_bin = tmp_path / "python3.14"
+    python_bin.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    python_bin.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_ENV_FILE": str(env_file),
+        "NINO_ROOT_DIR": str(Path.cwd()),
+        "NINO_PYTHON": str(python_bin),
+    }
+    subprocess.run(["scripts/nino-telegram-launchd", "install"], check=True, env=env, capture_output=True, text=True)
+
+    plist = home / "Library" / "LaunchAgents" / "local.nino.telegram.plist"
+    content = plist.read_text(encoding="utf-8")
+
+    assert "scripts/nino-telegram-launchd" in content
+    assert "NINO_PYTHON" in content
+    assert str(python_bin) in content
+    assert "NINO_TELEGRAM_BOT_TOKEN" not in content
+    assert "fake" not in content
+
+
 def test_scripts_default_to_macos_system_cert_bundle() -> None:
     ninoctl = Path("scripts/ninoctl").read_text(encoding="utf-8")
     launchd = Path("scripts/nino-launchd").read_text(encoding="utf-8")

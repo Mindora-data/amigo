@@ -8,6 +8,12 @@ LABEL="${NINO_TELEGRAM_LAUNCHD_LABEL:-local.nino.telegram}"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_FILE="${NINO_TELEGRAM_LOG_FILE:-$ROOT_DIR/data/nino-telegram.log}"
 ERR_FILE="${NINO_TELEGRAM_ERR_FILE:-$ROOT_DIR/data/nino-telegram.err.log}"
+DEFAULT_PYTHON="$ROOT_DIR/.venv/bin/python"
+if [[ -x "$DEFAULT_PYTHON" ]]; then
+  PYTHON_BIN="${NINO_PYTHON:-$DEFAULT_PYTHON}"
+else
+  PYTHON_BIN="${NINO_PYTHON:-$(command -v python3)}"
+fi
 
 usage() {
   cat <<EOF
@@ -45,6 +51,8 @@ install() {
     <string>$ENV_FILE</string>
     <key>NINO_ROOT_DIR</key>
     <string>$ROOT_DIR</string>
+    <key>NINO_PYTHON</key>
+    <string>$PYTHON_BIN</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>
