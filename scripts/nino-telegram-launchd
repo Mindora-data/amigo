@@ -53,6 +53,8 @@ install() {
     <string>$ROOT_DIR</string>
     <key>NINO_PYTHON</key>
     <string>$PYTHON_BIN</string>
+    <key>SSL_CERT_FILE</key>
+    <string>/etc/ssl/cert.pem</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

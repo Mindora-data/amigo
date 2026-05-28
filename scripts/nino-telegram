@@ -9,6 +9,9 @@ if [[ -f "$ENV_FILE" ]]; then
   source "$ENV_FILE"
   set +a
 fi
+if [[ -z "${SSL_CERT_FILE:-}" && -f /etc/ssl/cert.pem ]]; then
+  export SSL_CERT_FILE=/etc/ssl/cert.pem
+fi
 DEFAULT_PYTHON="$ROOT_DIR/.venv/bin/python"
 if [[ -x "$DEFAULT_PYTHON" ]]; then
   PYTHON_BIN="${NINO_PYTHON:-$DEFAULT_PYTHON}"

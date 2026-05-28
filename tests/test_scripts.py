@@ -79,9 +79,13 @@ def test_telegram_launchd_uses_configured_python(tmp_path) -> None:
 def test_scripts_default_to_macos_system_cert_bundle() -> None:
     ninoctl = Path("scripts/ninoctl").read_text(encoding="utf-8")
     launchd = Path("scripts/nino-launchd").read_text(encoding="utf-8")
+    telegram = Path("scripts/nino-telegram").read_text(encoding="utf-8")
+    telegram_launchd = Path("scripts/nino-telegram-launchd").read_text(encoding="utf-8")
 
     assert "SSL_CERT_FILE=/etc/ssl/cert.pem" in ninoctl
     assert "SSL_CERT_FILE=/etc/ssl/cert.pem" in launchd
+    assert "SSL_CERT_FILE=/etc/ssl/cert.pem" in telegram
+    assert "SSL_CERT_FILE" in telegram_launchd
 
 
 def test_readme_documents_memory_search_cli_examples() -> None:
