@@ -67,6 +67,7 @@ Commands:
   next-action Print only the recommended next command.
   completion-audit Audit every completion requirement and remaining blockers.
   closing-report Write a JSON evidence report for the current product state.
+  prod-smoke Run production-mode auth smoke without exposing the server.
   reports     List local closing evidence reports.
   report      Print one closing evidence report. Use: scripts/ninoctl report <nino-closing-*.json|latest>
   eval        Run deterministic local regression evaluations.
@@ -576,6 +577,10 @@ closing_report() {
   "$ROOT_DIR/scripts/nino-closing-report" "$@"
 }
 
+prod_smoke() {
+  "$ROOT_DIR/scripts/nino-prod-smoke" "$@"
+}
+
 eval_local() {
   "$ROOT_DIR/scripts/nino-eval" "$@"
 }
@@ -783,6 +788,7 @@ case "$command" in
   next-action) product_status --next-action ;;
   completion-audit) completion_audit "$@" ;;
   closing-report) closing_report "$@" ;;
+  prod-smoke) prod_smoke "$@" ;;
   reports) reports ;;
   report) report "${1:-}" ;;
   eval) eval_local "$@" ;;

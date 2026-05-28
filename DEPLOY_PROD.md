@@ -81,8 +81,16 @@ Si ves varios `login_failed` o `login_blocked` desde una IP:
 ## Validación antes de exponer
 
 ```sh
+scripts/ninoctl prod-smoke
 scripts/ninoctl final-audit
 scripts/ninoctl product-status
 ```
 
 No expongas si `product-status` no está en `ready`.
+
+Después de conectar el dominio/proxy externo, comprueba desde un navegador:
+
+- `/user` abre por HTTPS y permite login con la contraseña configurada.
+- `/app` devuelve error y no muestra la consola interna.
+- Logout impide reutilizar la sesión.
+- El audit log no muestra ráfagas de `login_failed` o `login_blocked`.

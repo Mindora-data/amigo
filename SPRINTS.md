@@ -1,10 +1,10 @@
 # NIÑO Sprint Roadmap
 
-Estado confirmado el 2026-05-23:
+Estado confirmado el 2026-05-28:
 
 - GitHub se mantiene sincronizado desde los commits de sprint; confirmar hash exacto con `git rev-parse HEAD`.
 - Rama activa: `main`.
-- Suite actual: 142 tests pasando.
+- Suite actual: 253 tests pasando.
 - La memoria viva local (`data/nino.db`) no se versiona en GitHub.
 - El producto publicado es el motor, API, UI minima y pruebas; no incluye datos de uso real.
 
@@ -318,6 +318,50 @@ Hecho:
 Criterios de salida:
 
 - Tests cubren hora suelta como respuesta, hora suelta aislada, recordatorio explícito, cita con confirmación pendiente y recuperación sin sumisión.
+
+## Sprint 12 - Auth producción privada
+
+Estado: hecho inicial.
+
+Objetivo: endurecer amigo para exponerlo desde internet solo para uso propio, sin registro abierto ni consola interna pública.
+
+Hecho:
+
+- `NINO_ENV=prod` falla cerrado si `NINO_REQUIRE_SESSION=true` no está activo.
+- Producción exige `NINO_PASSWORD_HASH`; la contraseña se configura por stdin con `scripts/ninoctl configure-password --password-stdin`.
+- Hash de contraseña con `scrypt` de la librería estándar y comparación constante.
+- Login con rate limit por IP en memoria para frenar fuerza bruta básica.
+- Sesiones con TTL de 7 días, refresco en uso, logout invalidante y hash HMAC del token en memoria.
+- `/user` usa cookie `HttpOnly`, `SameSite=Strict` y `Secure` en producción; no guarda el token en `localStorage`.
+- `X-Nino-Session` se mantiene solo para clientes internos y tests.
+- Producción rechaza tráfico sin `X-Forwarded-Proto: https`.
+- Cabeceras de seguridad básicas: HSTS, `nosniff`, `DENY` y CSP mínima.
+- Auditoría de acceso en memoria para `login_ok`, `login_failed`, `login_blocked` y `session_expired`, sin guardar contraseñas ni tokens.
+- `/app` queda deshabilitada en producción para no exponer la consola interna.
+- `DEPLOY_PROD.md` documenta variables, contraseña, sesiones, HTTPS, consola interna, secretos y reacción ante intentos sospechosos.
+
+Criterios de salida:
+
+- Tests cubren login correcto/incorrecto, bloqueo por intentos, sesión obligatoria, expiración, logout, HTTPS, `/app` cerrada y auditoría.
+- `nino-readiness` pasa y `product-status` queda `ready` tras informe de cierre actual.
+
+## Sprint 13 - Despliegue privado controlado
+
+Estado: hecho inicial.
+
+Objetivo: tener una puerta práctica antes de exponer amigo: validar localmente el modo producción privado y dejar el despliegue externo reducido a configurar secretos/proxy.
+
+Hecho:
+
+- `scripts/nino-prod-smoke` ejecuta una simulación local de producción sin abrir el servidor a internet.
+- `scripts/ninoctl prod-smoke` expone la misma puerta desde la CLI operativa.
+- `nino-prod-smoke` valida arranque cerrado, HTTPS obligatorio, `/app` deshabilitada, rutas privadas con sesión, contraseña correcta/incorrecta, cookie segura y logout.
+- `DEPLOY_PROD.md` incluye la validación `scripts/ninoctl prod-smoke` antes de exponer.
+
+Criterios de salida:
+
+- `scripts/ninoctl prod-smoke` debe pasar antes de activar un proxy público.
+- La validación externa real queda pendiente hasta tener el proyecto/proxy conectado: abrir `/user` por HTTPS, confirmar login/logout y verificar que `/app` no responde.
 
 ## Proxima tarea recomendada
 

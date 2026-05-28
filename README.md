@@ -457,18 +457,23 @@ Run the broader local product gate:
 
 ```bash
 scripts/nino-smoke --json
+scripts/ninoctl prod-smoke
 scripts/ninoctl product-status
 ```
 
 ## Vercel validation
 
 The repo includes `api/index.py` and `vercel.json` so Vercel can run NIÑO as a
-Python WSGI function. The final user surface is `/user` or `/chat`; `/app`
-remains the operations console.
+Python WSGI function. The final user surface is `/user` or `/chat`; in
+`NINO_ENV=prod`, `/app` is disabled and internal operations stay local/CLI only.
 
 Required project environment variables for a DeepSeek test:
 
 ```bash
+NINO_ENV=prod
+NINO_REQUIRE_SESSION=true
+NINO_PASSWORD_HASH=<generated with scripts/ninoctl configure-password --password-stdin>
+NINO_SESSION_PEPPER=<long random secret>
 NINO_LLM_PROVIDER=deepseek
 NINO_DEEPSEEK_API_KEY=...
 NINO_DEEPSEEK_MODEL=deepseek-chat

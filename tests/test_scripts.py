@@ -760,6 +760,26 @@ def test_nino_readiness_skips_pytest_when_tests_are_not_installed(tmp_path) -> N
     ]
 
 
+def test_prod_smoke_cli_validates_private_production_mode() -> None:
+    result = subprocess.run(
+        ["scripts/nino-prod-smoke", "--json"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["ok"] is True
+    assert {check["name"] for check in payload["checks"]} >= {
+        "prod_refuses_open_session_mode",
+        "prod_rejects_non_https",
+        "prod_disables_internal_app",
+        "private_routes_require_session",
+        "good_password_sets_secure_cookie",
+        "logout_invalidates_session",
+    }
+
+
 def test_install_local_copies_runtime_and_keeps_existing_data(tmp_path) -> None:
     install_dir = tmp_path / "installed"
     data_dir = install_dir / "data"

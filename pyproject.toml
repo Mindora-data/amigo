@@ -23,6 +23,7 @@ nino-eval = "nino.eval_runner:main"
 nino-status = "nino.product_status:main"
 nino-completion-audit = "nino.completion_audit:main"
 nino-closing-report = "nino.closing_report:main"
+nino-prod-smoke = "nino.prod_smoke:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

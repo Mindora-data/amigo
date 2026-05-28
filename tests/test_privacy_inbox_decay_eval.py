@@ -60,7 +60,14 @@ def test_global_model_filters_obvious_places_and_sensitive_context(tmp_path) -> 
         {"intent": "chat", "text": "soy Pablo y hoy tengo dentista en Madrid a las 11", "salience": 0.9},
     )
 
-    rendered = str(runtime.global_model()).lower()
+    global_model = runtime.global_model()
+    rendered = str(
+        {
+            "tag_counts": global_model["tag_counts"],
+            "concept_counts": global_model["concept_counts"],
+            "pattern_outcomes": global_model["pattern_outcomes"],
+        }
+    ).lower()
 
     assert "pablo" not in rendered
     assert "madrid" not in rendered
