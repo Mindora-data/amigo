@@ -21,6 +21,7 @@ def test_package_metadata_exposes_server_console_script() -> None:
     assert pyproject["project"]["scripts"]["nino-completion-audit"] == "nino.completion_audit:main"
     assert pyproject["project"]["scripts"]["nino-closing-report"] == "nino.closing_report:main"
     assert pyproject["project"]["scripts"]["nino-prod-smoke"] == "nino.prod_smoke:main"
+    assert pyproject["project"]["scripts"]["nino-telegram"] == "nino.telegram:main"
     assert pyproject["tool"]["setuptools"]["package-dir"] == {"": "src"}
 
 

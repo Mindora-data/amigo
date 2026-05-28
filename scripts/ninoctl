@@ -68,6 +68,8 @@ Commands:
   completion-audit Audit every completion requirement and remaining blockers.
   closing-report Write a JSON evidence report for the current product state.
   prod-smoke Run production-mode auth smoke without exposing the server.
+  telegram Run Telegram long-polling bot or create link code.
+  telegram-launchd Manage Telegram long-polling service with launchd.
   reports     List local closing evidence reports.
   report      Print one closing evidence report. Use: scripts/ninoctl report <nino-closing-*.json|latest>
   eval        Run deterministic local regression evaluations.
@@ -581,6 +583,14 @@ prod_smoke() {
   "$ROOT_DIR/scripts/nino-prod-smoke" "$@"
 }
 
+telegram_bot() {
+  "$ROOT_DIR/scripts/nino-telegram" "$@"
+}
+
+telegram_launchd() {
+  "$ROOT_DIR/scripts/nino-telegram-launchd" "$@"
+}
+
 eval_local() {
   "$ROOT_DIR/scripts/nino-eval" "$@"
 }
@@ -789,6 +799,8 @@ case "$command" in
   completion-audit) completion_audit "$@" ;;
   closing-report) closing_report "$@" ;;
   prod-smoke) prod_smoke "$@" ;;
+  telegram) telegram_bot "$@" ;;
+  telegram-launchd) telegram_launchd "$@" ;;
   reports) reports ;;
   report) report "${1:-}" ;;
   eval) eval_local "$@" ;;

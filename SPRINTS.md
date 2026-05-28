@@ -405,6 +405,31 @@ Criterios de salida:
 - Tests cubren que una misma pregunta abierta no se repite, un mismo episodio saliente no se repite y el inbox no duplica un mensaje pendiente.
 - `nino-readiness` pasa con la suite completa.
 
+## Sprint 16 - Cliente Telegram por long polling
+
+Estado: hecho inicial.
+
+Objetivo: añadir Telegram como ventana privada al backend local sin webhooks ni exponer la máquina a internet.
+
+Hecho:
+
+- Módulo `nino.telegram` con servicio long polling basado en `getUpdates`.
+- Script `scripts/nino-telegram` y comando `scripts/ninoctl telegram`.
+- Servicio launchd separado con `scripts/nino-telegram-launchd` y `scripts/ninoctl telegram-launchd`.
+- Token del bot leído desde `NINO_TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_TOKEN` o Keychain vía `NINO_TELEGRAM_KEYCHAIN_SERVICE`; si falta, no arranca.
+- Tabla `telegram_link` para mapear `chat_id` a `user_id` interno aislado.
+- Tabla `telegram_link_code` para códigos de vinculación de un solo uso, generados con `scripts/ninoctl telegram --create-link-code <user_id>`.
+- Chat no vinculado recibe presentación explícita como bot/asistente con memoria y no accede a ninguna ruta privada.
+- Mensajes vinculados llaman al backend por las rutas `/users/{user_id}/agents/nino/tick`, con sesión backend y fecha/hora del mensaje.
+- Push proactivo por Telegram llama a `/proactivity/evaluate`; solo envía si la lógica del Sprint 9 ya decidió entregar.
+- Respuestas del usuario por Telegram entran por `tick`, por lo que cuentan como reacción y actualizan receptividad.
+- `TELEGRAM_SETUP.md` documenta BotFather, token, vinculación y launchd.
+
+Criterios de salida:
+
+- Tests cubren chat vinculado, chat no vinculado, aislamiento entre dos `chat_id`, push correcto, bloqueo por límites, reacción del usuario y falta de token.
+- No hay webhooks ni puertos entrantes nuevos.
+
 ## Proxima tarea recomendada
 
 Auditoria final de producto 100% local:

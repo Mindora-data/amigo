@@ -461,6 +461,16 @@ scripts/ninoctl prod-smoke
 scripts/ninoctl product-status
 ```
 
+## Telegram client
+
+Telegram is available as a long-polling client, not a webhook. It does not open
+incoming ports. See `TELEGRAM_SETUP.md`.
+
+```bash
+scripts/ninoctl telegram --create-link-code mindora
+scripts/ninoctl telegram-launchd install
+```
+
 ## Vercel validation
 
 The repo includes `api/index.py` and `vercel.json` so Vercel can run NIÑO as a

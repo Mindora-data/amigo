@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="${NINO_ROOT_DIR:-$SCRIPT_ROOT}"
+ENV_FILE="${NINO_ENV_FILE:-$ROOT_DIR/.env.local}"
+LABEL="${NINO_TELEGRAM_LAUNCHD_LABEL:-local.nino.telegram}"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+LOG_FILE="${NINO_TELEGRAM_LOG_FILE:-$ROOT_DIR/data/nino-telegram.log}"
+ERR_FILE="${NINO_TELEGRAM_ERR_FILE:-$ROOT_DIR/data/nino-telegram.err.log}"
+
+usage() {
+  cat <<EOF
+Usage: scripts/nino-telegram-launchd <command>
+
+Commands:
+  install    Install and start Telegram long-polling service.
+  uninstall  Stop and remove the service.
+  start      Start the installed service.
+  stop       Stop the installed service.
+  status     Show launchd status.
+  run        Internal launchd entrypoint.
+EOF
+}
+
+install() {
+  mkdir -p "$HOME/Library/LaunchAgents" "$ROOT_DIR/data"
+  cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$LABEL</string>
+  <key>WorkingDirectory</key>
+  <string>$ROOT_DIR</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$ROOT_DIR/scripts/nino-telegram-launchd</string>
+    <string>run</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NINO_ENV_FILE</key>
+    <string>$ENV_FILE</string>
+    <key>NINO_ROOT_DIR</key>
+    <string>$ROOT_DIR</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>$LOG_FILE</string>
+  <key>StandardErrorPath</key>
+  <string>$ERR_FILE</string>
+</dict>
+</plist>
+EOF
+  launchctl unload "$PLIST" >/dev/null 2>&1 || true
+  launchctl load "$PLIST"
+  echo "Installed: $PLIST"
+}
+
+run() {
+  cd "$ROOT_DIR"
+  exec "$ROOT_DIR/scripts/nino-telegram"
+}
+
+case "${1:-}" in
+  install) install ;;
+  uninstall) launchctl unload "$PLIST" >/dev/null 2>&1 || true; rm -f "$PLIST"; echo "Removed: $PLIST" ;;
+  start) launchctl load "$PLIST" ;;
+  stop) launchctl unload "$PLIST" ;;
+  status) launchctl list "$LABEL" || launchctl print "gui/$(id -u)/$LABEL" || true ;;
+  run) run ;;
+  -h|--help|help|"") usage ;;
+  *) echo "Unknown command: ${1:-}" >&2; usage >&2; exit 2 ;;
+esac
