@@ -3461,6 +3461,38 @@ class NinoService:
             "visible_facts": len(filtered),
         }
 
+    def public_context(self, agent_id: str) -> dict[str, Any]:
+        relation = self.runtime.load_or_init_state(agent_id).relation_state
+        allowed: list[str] = []
+        name = str(relation.get("user_name", "")).strip()
+        location = str(relation.get("user_location", "")).strip()
+        birth_or_age = str(relation.get("user_birth_or_age", "")).strip()
+        if name:
+            allowed.append(f"se llama {name}")
+        if location:
+            allowed.append(f"vive en/es de {location}")
+        if birth_or_age:
+            allowed.append(f"edad/nacimiento: {birth_or_age}")
+        preferences = sorted(str(key) for key in dict(relation.get("preferences", {})).keys() if str(key).strip())
+        if preferences:
+            allowed.append(f"le gusta {', '.join(preferences[:3])}")
+        fact_labels = {
+            "user_role": "trabaja como",
+            "user_study": "estudia",
+            "project_name": "proyecto",
+            "current_project_focus": "trabaja en",
+        }
+        for fact in self.runtime.cold_store.list_for_agent(agent_id):
+            key = str(getattr(fact, "key", ""))
+            value = str(getattr(fact, "value", "")).strip()
+            if key in fact_labels and value and getattr(fact, "valid_to", None) is None:
+                allowed.append(f"{fact_labels[key]} {value}")
+        return {
+            "items": allowed[:8],
+            "text": "; ".join(allowed[:8]),
+            "privacy": "public_profile_only_no_private_conversation",
+        }
+
     def delete_episode(self, agent_id: str, episode_id: str) -> dict[str, Any]:
         return self.runtime.delete_episode(agent_id, episode_id)
 
@@ -3797,6 +3829,8 @@ class NinoHttpApp:
             return "200 OK", self.service.delete_episode(agent_id, tail[1])
         if method == "GET" and tail == ["memory", "facts"]:
             return "200 OK", self.service.list_memory_facts(agent_id, payload)
+        if method == "GET" and tail == ["public-context"]:
+            return "200 OK", self.service.public_context(agent_id)
         if method == "DELETE" and len(tail) == 3 and tail[:2] == ["memory", "facts"]:
             return "200 OK", self.service.delete_memory_fact(agent_id, tail[2])
         if method == "GET" and tail == ["temporal-events"]:

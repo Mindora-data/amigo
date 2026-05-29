@@ -622,6 +622,23 @@ def test_http_api_observe_records_episode_without_response(tmp_path) -> None:
     assert episodes["episodes"][0]["intent"] == "group_observation"
 
 
+def test_http_api_public_context_exposes_only_general_profile(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(app, "POST", "/users/ana/agents/nino/tick", {"intent": "onboarding:name", "text": "Ana"})
+    _request(app, "POST", "/users/ana/agents/nino/tick", {"intent": "onboarding:location", "text": "Madrid"})
+    _request(app, "POST", "/users/ana/agents/nino/tick", {"intent": "onboarding:likes", "text": "cómics"})
+    _request(app, "POST", "/users/ana/agents/nino/tick", {"intent": "chat", "text": "mi contraseña es 1234"})
+
+    out = _request(app, "GET", "/users/ana/agents/nino/public-context")
+
+    assert out["privacy"] == "public_profile_only_no_private_conversation"
+    assert "se llama Ana" in out["text"]
+    assert "vive en/es de Madrid" in out["text"]
+    assert "cómics" in out["text"]
+    assert "contraseña" not in out["text"]
+    assert "1234" not in out["text"]
+
+
 def test_http_api_scopes_memory_by_logged_user(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

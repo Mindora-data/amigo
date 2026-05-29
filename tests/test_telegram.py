@@ -35,6 +35,7 @@ class FakeBackend:
         self.ticks: list[dict[str, object]] = []
         self.observations: list[dict[str, object]] = []
         self.proactive: dict[str, str | None] = {}
+        self.public_contexts: dict[str, str] = {}
         self.sessions: dict[str, str] = {}
 
     def session_for(self, user_id: str) -> str:
@@ -53,6 +54,10 @@ class FakeBackend:
     def observe(self, user_id: str, text: str, now: datetime) -> None:
         self.session_for(user_id)
         self.observations.append({"user_id": user_id, "text": text, "now": now.isoformat()})
+
+    def public_context(self, user_id: str) -> str:
+        self.session_for(user_id)
+        return self.public_contexts.get(user_id, "")
 
 
 def _update(chat_id: int, text: str, update_id: int = 1) -> dict[str, object]:
@@ -223,13 +228,15 @@ def test_group_ambient_question_can_reply_without_private_memory(tmp_path) -> No
     assert links.link_with_code("user:10", links.create_code("AnaPrivada"))
     telegram = FakeTelegram()
     backend = FakeBackend()
+    backend.public_contexts["anaprivada"] = "se llama Ana; vive en Madrid; le gusta comics"
     bot = TelegramBotService(telegram, backend, links)
 
     bot.handle_update(_group_update(-100, "¿qué opináis de esta idea?", user_id=10))
 
     assert backend.observations == []
     assert backend.ticks[-1]["user_id"] == "telegram-group-100"
-    assert backend.ticks[-1]["text"] == "¿qué opináis de esta idea?"
+    assert "Contexto público del autor: se llama Ana; vive en Madrid; le gusta comics" in str(backend.ticks[-1]["text"])
+    assert "Mensaje del grupo: ¿qué opináis de esta idea?" in str(backend.ticks[-1]["text"])
     assert "anaprivada" not in str(telegram.sent[-1]["text"]).lower()
 
 
@@ -245,6 +252,21 @@ def test_group_ambient_replies_are_rate_limited(tmp_path) -> None:
     assert len(backend.ticks) == 1
     assert backend.observations[-1]["text"] == "¿alguna idea más?"
     assert len(telegram.sent) == 1
+
+
+def test_group_ambient_cooldown_shortens_when_group_is_active(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "¿qué opináis de esto?", update_id=1), now=datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc))
+    for idx in range(2, 7):
+        bot.handle_update(_group_update(-100, f"mensaje {idx}", update_id=idx), now=datetime(2026, 5, 28, 16, idx, tzinfo=timezone.utc))
+    bot.handle_update(_group_update(-100, "¿alguna idea nueva?", update_id=7), now=datetime(2026, 5, 28, 16, 4, tzinfo=timezone.utc))
+
+    assert len(backend.ticks) == 2
+    assert len(telegram.sent) == 2
 
 
 def test_group_sensitive_ambient_question_is_observed_without_reply(tmp_path) -> None:

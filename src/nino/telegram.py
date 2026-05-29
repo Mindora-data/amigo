@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 AGENT_ID = "nino"
 GROUP_AMBIENT_COOLDOWN_SECONDS = 600
+GROUP_AMBIENT_COOLDOWN_FAST_SECONDS = 180
+GROUP_AMBIENT_COOLDOWN_SLOW_SECONDS = 900
 GROUP_AMBIENT_CUES = (
     "?",
     "¿",
@@ -268,6 +270,11 @@ class BackendClient:
             user_id=user,
         )
 
+    def public_context(self, user_id: str) -> str:
+        user = _slug(user_id)
+        out = self._json("GET", f"/users/{parse.quote(user)}/agents/{AGENT_ID}/public-context", user_id=user)
+        return str(out.get("text") or "").strip()
+
     def evaluate_proactivity(self, user_id: str, now: datetime) -> str | None:
         user = _slug(user_id)
         out = self._json(
@@ -303,6 +310,7 @@ class TelegramBotService:
         self.local_tz = local_tz or telegram_local_timezone()
         self.offset: int | None = None
         self._group_last_ambient_reply: dict[str, datetime] = {}
+        self._group_messages_since_ambient_reply: dict[str, int] = {}
 
     def _bot_username(self) -> str | None:
         if self.bot_username is None:
@@ -344,6 +352,37 @@ class TelegramBotService:
     def _group_user_id(self, chat_id: int | str) -> str:
         return f"telegram-group-{_slug(str(chat_id))}"
 
+    def _linked_sender_user_id(self, message: dict[str, Any]) -> str | None:
+        sender = message.get("from") if isinstance(message.get("from"), dict) else {}
+        sender_id = sender.get("id")
+        if sender_id is None:
+            return None
+        return self.links.user_for_chat(f"user:{sender_id}") or self.links.user_for_chat(str(sender_id))
+
+    def _with_public_sender_context(self, message: dict[str, Any], text: str) -> str:
+        user_id = self._linked_sender_user_id(message)
+        if not user_id:
+            return text
+        try:
+            context = self.backend.public_context(user_id)
+        except Exception:
+            context = ""
+        if not context:
+            return text
+        return f"Contexto público del autor: {context}\nMensaje del grupo: {text}"
+
+    def _record_group_message(self, chat_id: int | str) -> None:
+        key = str(chat_id)
+        self._group_messages_since_ambient_reply[key] = self._group_messages_since_ambient_reply.get(key, 0) + 1
+
+    def _ambient_cooldown_seconds(self, chat_id: int | str) -> int:
+        count = self._group_messages_since_ambient_reply.get(str(chat_id), 0)
+        if count >= 5:
+            return GROUP_AMBIENT_COOLDOWN_FAST_SECONDS
+        if count <= 1:
+            return GROUP_AMBIENT_COOLDOWN_SLOW_SECONDS
+        return GROUP_AMBIENT_COOLDOWN_SECONDS
+
     def _should_reply_ambiently_in_group(self, chat_id: int | str, text: str, now: datetime) -> bool:
         lowered = text.lower()
         if any(cue in lowered for cue in GROUP_SENSITIVE_CUES):
@@ -351,9 +390,10 @@ class TelegramBotService:
         if not any(cue in lowered for cue in GROUP_AMBIENT_CUES):
             return False
         last = self._group_last_ambient_reply.get(str(chat_id))
-        if last is not None and (now - last).total_seconds() < GROUP_AMBIENT_COOLDOWN_SECONDS:
+        if last is not None and (now - last).total_seconds() < self._ambient_cooldown_seconds(chat_id):
             return False
         self._group_last_ambient_reply[str(chat_id)] = now
+        self._group_messages_since_ambient_reply[str(chat_id)] = 0
         return True
 
     def handle_update(self, update: dict[str, Any], now: datetime | None = None) -> None:
@@ -389,15 +429,17 @@ class TelegramBotService:
     def _handle_group_message(self, message: dict[str, Any], chat_id: int | str, text: str, now: datetime) -> None:
         directed = self._is_directed_at_bot(message, text)
         clean_text = self._clean_group_text(text)
+        self._record_group_message(chat_id)
         if not clean_text:
             if directed:
                 self.telegram.send_message(chat_id, "Estoy aquí. Escríbeme la pregunta en el mismo mensaje o respóndeme directamente.")
             return
         target_user_id = self._group_user_id(chat_id)
+        context_text = self._with_public_sender_context(message, clean_text)
         if not directed and not self._should_reply_ambiently_in_group(chat_id, clean_text, now):
-            self.backend.observe(target_user_id, clean_text, now)
+            self.backend.observe(target_user_id, context_text, now)
             return
-        reply = self.backend.tick(target_user_id, clean_text, now)
+        reply = self.backend.tick(target_user_id, context_text, now)
         if reply:
             self.telegram.send_message(chat_id, reply)
 

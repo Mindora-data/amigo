@@ -811,15 +811,19 @@ Hechos:
 - Los mensajes normales de grupo se observan en una memoria separada
   `telegram-group-<chat_id>` mediante `/observe`, sin generar respuesta visible.
 - Si el grupo plantea una pregunta o pide opinión, amigo puede responder de forma
-  ambiental con cooldown de 10 minutos.
+  ambiental con cooldown inteligente: discreto por defecto, baja cuando hay mucha
+  actividad y sube cuando apenas hay conversación.
 - Mensajes dirigidos por mencion, respuesta o la palabra "amigo" siguen contestando
   directamente en la memoria del grupo.
 - Preguntas ambientales con datos sensibles se observan sin responder.
 - La memoria privada de chats individuales no se lee ni se vuelca en grupos.
+- Si el autor del mensaje esta vinculado, el grupo puede usar solo contexto publico
+  general del autor (nombre, ciudad, gustos, ocupacion/estudios), nunca texto privado.
 
 Tests:
 
 - Mensaje de grupo no dirigido se guarda sin respuesta.
 - Pregunta ambiental responde usando solo memoria de grupo.
-- Las respuestas ambientales tienen limite de frecuencia.
+- Las respuestas ambientales tienen limite de frecuencia inteligente.
 - Una pregunta sensible se observa sin respuesta.
+- El contexto publico del autor no incluye secretos ni conversaciones privadas.
