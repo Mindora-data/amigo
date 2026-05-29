@@ -109,7 +109,7 @@ def test_direct_reminder_creation_does_not_call_llm() -> None:
         {"intent": "chat", "text": "recuérdame en 5 minutos que beba agua", "now": "2026-05-26T12:27:00+02:00"},
     )
 
-    assert out["action"]["payload"]["text"] == "Hecho, te doy un toque a las 12:32: beba agua."
+    assert out["action"]["payload"]["text"] == "Vale, te aviso a las 12:32 para que beba agua."
     assert "direct_reminder_created" in out["reason_trace"]
     assert llm.prompts == []
 

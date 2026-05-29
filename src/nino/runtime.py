@@ -337,7 +337,14 @@ def _reminder_text_from_request(text: str) -> str:
     plain = re.sub(r"\ben\s+\d{1,3}\s+(minuto|minutos|hora|horas)\b", "", plain, flags=re.IGNORECASE)
     plain = TIME_RE.sub("", plain)
     plain = plain.strip(" ,.")
-    return (plain or cleaned)[:180]
+    return (plain or "esto")[:180]
+
+
+def _direct_reminder_confirmation_text(due_at: datetime | None, event_text: str) -> str:
+    time_text = due_at.strftime("%H:%M") if due_at is not None else "la hora marcada"
+    if event_text.strip().lower() == "esto":
+        return f"Vale, te aviso a las {time_text}."
+    return f"Vale, te aviso a las {time_text} para que {event_text}."
 
 def _next_weekday(now: datetime, weekday: int) -> datetime:
     days = (weekday - now.weekday()) % 7
@@ -2112,10 +2119,11 @@ class NinoRuntime:
             event_text = str(event.get("text", "ese evento"))
             if event.get("reminder_status") == "confirmed":
                 due_at = _parse_datetime(event.get("due_at"))
+                reply_text = _direct_reminder_confirmation_text(due_at, event_text)
                 return PolicyResponse(
                     chosen_action={
                         "type": "external_message",
-                        "payload": {"text": f"Hecho, te doy un toque a las {due_at.strftime('%H:%M')}: {event_text}."},
+                        "payload": {"text": reply_text},
                     },
                     confidence=0.74,
                     reason_trace=["context_policy", "direct_reminder_created"],

@@ -1150,7 +1150,7 @@ def test_http_api_relative_reminder_fires_from_polling_time(tmp_path) -> None:
         {"now": "2026-05-26T12:32:00+02:00"},
     )
 
-    assert created["action"]["payload"]["text"] == "Hecho, te doy un toque a las 12:32: beba agua."
+    assert created["action"]["payload"]["text"] == "Vale, te aviso a las 12:32 para que beba agua."
     assert event["kind"] == "recordatorio"
     assert event["text"] == "beba agua"
     assert event["due_at"] == "2026-05-26T12:32:00+02:00"
@@ -1159,6 +1159,28 @@ def test_http_api_relative_reminder_fires_from_polling_time(tmp_path) -> None:
     assert "temporal_alarm_scheduled" in early["reason_trace"]
     assert due["should_send"] is True
     assert due["action"]["payload"]["text"] == "Oye, acuérdate: beba agua."
+
+
+def test_http_api_relative_reminder_without_task_sounds_natural(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    created = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {
+            "intent": "chat",
+            "text": "avísame en 1 minuto",
+            "salience": 0.7,
+            "confidence": 0.95,
+            "now": "2026-05-29T13:31:00+02:00",
+        },
+    )
+    relation = _request(app, "GET", "/agents/api-agent/relation")
+    event = relation["relation_state"]["temporal_events"][0]
+
+    assert created["action"]["payload"]["text"] == "Vale, te aviso a las 13:32."
+    assert event["text"] == "esto"
+    assert event["due_at"] == "2026-05-29T13:32:00+02:00"
 
 
 def test_http_api_temporal_event_accepts_weekly_recurrence(tmp_path) -> None:
