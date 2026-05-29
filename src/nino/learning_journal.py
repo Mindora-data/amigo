@@ -9,6 +9,7 @@ from uuid import uuid4
 
 ACTIVE_STATUSES = {"active", "draft", "archived"}
 SOURCES = {"auto", "manual", "detected"}
+THEMES = {"vida", "cultura", "amistad", "trabajo", "comportamiento", "salud", "otros"}
 
 
 @dataclass(slots=True)
@@ -132,6 +133,33 @@ def _title_from_lesson(lesson: str, tag: str) -> str:
     return title[:90]
 
 
+def classify_learning_theme(title: str, lesson: str, tags: list[str] | None = None) -> str:
+    text = _norm_lesson(f"{title} {lesson} {' '.join(tags or [])}")
+    if any(word in text for word in ("comic", "comics", "superman", "autor", "libro", "cine", "serie", "musica", "cultura", "brubaker", "byrne")):
+        return "cultura"
+    if any(word in text for word in ("amigo", "amistad", "grupo", "confianza", "cercano", "relacion")):
+        return "amistad"
+    if any(word in text for word in ("trabajo", "proyecto", "cliente", "reunion", "sprint", "tarea")):
+        return "trabajo"
+    if any(word in text for word in ("salud", "dentista", "medico", "cansado", "triste", "alegre", "ansiedad", "estres")):
+        return "salud"
+    if any(word in text for word in ("responde", "pregunt", "insist", "corrige", "interpreta", "tono", "comportamiento", "limite", "moldear")):
+        return "comportamiento"
+    if any(word in text for word in ("vida", "familia", "casa", "madrid", "rutina", "hobby", "gusta")):
+        return "vida"
+    return "otros"
+
+
+def _tags_with_theme(tag: str, title: str, lesson: str, tags: list[str] | None = None) -> list[str]:
+    clean = [str(item)[:40] for item in ([tag, *(tags or [])]) if str(item).strip()]
+    theme = next((item for item in clean if item in THEMES), None) or classify_learning_theme(title, lesson, clean)
+    out: list[str] = []
+    for item in [*clean, theme]:
+        if item not in out:
+            out.append(item)
+    return out[:8]
+
+
 def _new_entry(
     *,
     agent_id: str,
@@ -150,17 +178,18 @@ def _new_entry(
     clean = _clean_lesson(lesson)
     if not clean:
         raise ValueError("empty_learning_journal_lesson")
+    resolved_title = (title or _title_from_lesson(clean, tag))[:90]
     return LearningJournalEntry(
         entry_id=f"journal::{uuid4()}",
         agent_id=agent_id,
-        title=(title or _title_from_lesson(clean, tag))[:90],
+        title=resolved_title,
         lesson=clean,
         source=source,
         status=status,
         created_at=now,
         updated_at=now,
         source_episode_id=source_episode_id,
-        tags=[tag],
+        tags=_tags_with_theme(tag, resolved_title, clean),
     )
 
 
@@ -260,5 +289,5 @@ def make_manual_learning_entry(
         title=title,
         status=status,
     )
-    entry.tags = [str(tag)[:40] for tag in (tags or ["manual"]) if str(tag).strip()][:6]
+    entry.tags = _tags_with_theme("manual", entry.title, entry.lesson, tags or ["manual"])
     return entry

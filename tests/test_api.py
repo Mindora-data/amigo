@@ -115,6 +115,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"Bit\xc3\xa1cora editable" in dashboard_body
     assert b"/learning-journal" in dashboard_body
     assert b"Detectados" in dashboard_body
+    assert b"journalTabs" in dashboard_body
+    assert b"cultura" in dashboard_body
     assert b"/internal/cycle" in body
     assert b"Salud" in body
     assert b"Perfil" in body
@@ -1773,16 +1775,17 @@ def test_learning_journal_auto_manual_edit_and_isolation(tmp_path) -> None:
         app,
         "POST",
         "/users/mindora/agents/nino/learning-journal",
-        {"title": "Tono", "lesson": "Responde con calma y sin alargar por defecto", "tags": ["manual"]},
+        {"title": "Tono", "lesson": "Responde con calma y sin alargar por defecto", "tags": ["comportamiento", "manual"]},
     )
     assert created["ok"] is True
     patched = _request(
         app,
         "PATCH",
         f"/users/mindora/agents/nino/learning-journal/{created['entry']['entry_id']}",
-        {"lesson": "Responde con calma, breve, y sin alargar por defecto", "status": "active"},
+        {"lesson": "Responde con calma, breve, y sin alargar por defecto", "status": "active", "tags": ["comportamiento"]},
     )
     assert patched["entry"]["lesson"] == "Responde con calma, breve, y sin alargar por defecto"
+    assert "comportamiento" in patched["entry"]["tags"]
 
     dashboard = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
     assert dashboard["learning_journal"]["count"] == 2

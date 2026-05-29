@@ -1840,7 +1840,10 @@ DASHBOARD_HTML = """<!doctype html>
     .wide { grid-column: 1 / -1; }
     .journal-list { display: grid; gap: 10px; }
     .journal-entry { display: grid; gap: 8px; border-top: 1px solid #e1e7eb; padding-top: 10px; }
-    .journal-row { display: grid; grid-template-columns: 1fr 130px auto; gap: 8px; align-items: start; }
+    .journal-row { display: grid; grid-template-columns: 1fr 130px 150px auto; gap: 8px; align-items: start; }
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+    .tab { background: #eef3f4; color: #223036; border-color: #c7d4d8; min-height: 34px; }
+    .tab.active { background: #1f6f78; color: #fff; border-color: #1f6f78; }
     .muted { color: #667781; font-size: 13px; }
     @media (max-width: 720px) {
       body { padding: 14px; }
@@ -1883,9 +1886,11 @@ DASHBOARD_HTML = """<!doctype html>
         <div class="journal-row">
           <input id="journalTitle" placeholder="Título">
           <select id="journalStatus"><option value="active">active</option><option value="draft">draft</option><option value="archived">archived</option></select>
+          <select id="journalTheme"><option value="vida">vida</option><option value="cultura">cultura</option><option value="amistad">amistad</option><option value="trabajo">trabajo</option><option value="comportamiento">comportamiento</option><option value="salud">salud</option><option value="otros">otros</option></select>
           <button id="journalAdd">Añadir</button>
         </div>
         <textarea id="journalLesson" placeholder="Aprendizaje, pauta o comportamiento que quieres moldear"></textarea>
+        <div id="journalTabs" class="tabs"></div>
         <div id="journalList" class="journal-list"></div>
       </div>
       <div class="panel"><h2>Perfil</h2><pre id="profile">{}</pre></div>
@@ -1900,6 +1905,8 @@ DASHBOARD_HTML = """<!doctype html>
     const fmt = (value) => Number.isFinite(Number(value)) ? Number(value).toFixed(3).replace(/0+$/, "").replace(/[.]$/, "") : "0";
     const print = (id, value) => { $(id).textContent = JSON.stringify(value, null, 2); };
     let lastJournal = [];
+    let activeJournalTheme = "todos";
+    const journalThemes = ["todos", "vida", "cultura", "amistad", "trabajo", "comportamiento", "salud", "otros", "detectados"];
     async function requestJson(path, options = {}) {
       const res = await fetch(path, {cache: "no-store", credentials: "same-origin", ...options});
       const out = await res.json();
@@ -1911,9 +1918,43 @@ DASHBOARD_HTML = """<!doctype html>
       const agent = ($("agentId").value || "nino").trim();
       return `/users/${encodeURIComponent(user)}/agents/${encodeURIComponent(agent)}${suffix}`;
     }
+    function inferTheme(entry) {
+      const tags = entry.tags || [];
+      for (const theme of journalThemes) {
+        if (theme !== "todos" && theme !== "detectados" && tags.includes(theme)) return theme;
+      }
+      const text = `${entry.title || ""} ${entry.lesson || ""}`.toLowerCase();
+      if (/(comic|cómic|superman|autor|libro|cine|serie|música|brubaker|byrne)/.test(text)) return "cultura";
+      if (/(amigo|amistad|grupo|confianza|relación)/.test(text)) return "amistad";
+      if (/(trabajo|proyecto|cliente|reunión|sprint|tarea)/.test(text)) return "trabajo";
+      if (/(salud|dentista|médico|cansado|triste|alegre|ansiedad|estrés)/.test(text)) return "salud";
+      if (/(responde|pregunt|insist|corrige|interpreta|tono|comportamiento|límite|moldear)/.test(text)) return "comportamiento";
+      if (/(vida|familia|casa|madrid|rutina|hobby|gusta)/.test(text)) return "vida";
+      return "otros";
+    }
+    function renderJournalTabs(entries) {
+      $("journalTabs").replaceChildren(...journalThemes.map((theme) => {
+        const count = theme === "todos"
+          ? entries.length
+          : theme === "detectados"
+            ? entries.filter((entry) => entry.status === "draft" || entry.source === "detected").length
+            : entries.filter((entry) => inferTheme(entry) === theme).length;
+        const btn = document.createElement("button");
+        btn.className = `tab${theme === activeJournalTheme ? " active" : ""}`;
+        btn.textContent = `${theme} (${count})`;
+        btn.onclick = () => { activeJournalTheme = theme; renderJournal(lastJournal); };
+        return btn;
+      }));
+    }
     function renderJournal(entries) {
       lastJournal = entries || [];
-      $("journalList").replaceChildren(...lastJournal.map((entry) => {
+      renderJournalTabs(lastJournal);
+      const visible = lastJournal.filter((entry) => {
+        if (activeJournalTheme === "todos") return true;
+        if (activeJournalTheme === "detectados") return entry.status === "draft" || entry.source === "detected";
+        return inferTheme(entry) === activeJournalTheme;
+      });
+      $("journalList").replaceChildren(...visible.map((entry) => {
         const wrap = document.createElement("div");
         wrap.className = "journal-entry";
         const row = document.createElement("div");
@@ -1926,6 +1967,13 @@ DASHBOARD_HTML = """<!doctype html>
           opt.value = value; opt.textContent = value; opt.selected = value === entry.status;
           status.appendChild(opt);
         }
+        const theme = document.createElement("select");
+        const entryTheme = inferTheme(entry);
+        for (const value of ["vida", "cultura", "amistad", "trabajo", "comportamiento", "salud", "otros"]) {
+          const opt = document.createElement("option");
+          opt.value = value; opt.textContent = value; opt.selected = value === entryTheme;
+          theme.appendChild(opt);
+        }
         const save = document.createElement("button");
         save.textContent = "Guardar";
         const lesson = document.createElement("textarea");
@@ -1937,11 +1985,11 @@ DASHBOARD_HTML = """<!doctype html>
           await requestJson(currentAgentPath(`/learning-journal/${encodeURIComponent(entry.entry_id)}`), {
             method: "PATCH",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({title: title.value, lesson: lesson.value, status: status.value})
+            body: JSON.stringify({title: title.value, lesson: lesson.value, status: status.value, tags: [theme.value]})
           });
           await loadDashboard();
         };
-        row.append(title, status, save);
+        row.append(title, status, theme, save);
         wrap.append(row, lesson, meta);
         return wrap;
       }));
@@ -1984,7 +2032,7 @@ DASHBOARD_HTML = """<!doctype html>
       await requestJson(currentAgentPath("/learning-journal"), {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({title: $("journalTitle").value, lesson: $("journalLesson").value, status: $("journalStatus").value, tags: ["manual"]})
+        body: JSON.stringify({title: $("journalTitle").value, lesson: $("journalLesson").value, status: $("journalStatus").value, tags: [$("journalTheme").value, "manual"]})
       });
       $("journalTitle").value = "";
       $("journalLesson").value = "";
