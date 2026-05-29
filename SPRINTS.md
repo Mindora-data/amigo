@@ -943,3 +943,48 @@ Tests:
 
 - Pregunta general de conocimiento en grupo, sin mencionar a amigo, dispara respuesta.
 - El prompt de grupo incluye la regla de no cerrar siempre con pregunta.
+
+## Sprint 29 - Grafo relacional de memoria
+
+Estado: hecho inicial.
+
+Diagnostico previo:
+
+- La consolidacion existente no extraia entidades reutilizables. Extraia hechos frios
+  planos (`user_name`, `user_location`, `project_name`, preferencias, acuerdos de
+  trabajo), pero no creaba nodos ni relaciones entre episodios.
+- Por eso el sprint añade una capa nueva encima de la memoria fria y episodica, sin
+  reemplazar el recuperador semantico/temporal actual.
+
+Objetivo: que amigo conecte recuerdos por entidades y relaciones, no solo por
+parecido semantico o ventana temporal.
+
+Hechos:
+
+- Se añade `memory_graph.py` con nodos privados por agente (`persona`, `lugar`,
+  `proyecto`, `evento`, `concepto`) y aristas `mentioned_with` entre entidades vistas
+  en el mismo episodio.
+- SQLite crea tablas `memory_graph_nodes` y `memory_graph_edges`, aisladas por
+  `agent_id`, respetando el modelo `user::<usuario>::agent::<agente>`.
+- La consolidacion y el ciclo de sueño alimentan el grafo desde episodios existentes;
+  el sueño puede reinterpretar experiencias viejas y crear enlaces retroactivos.
+- La recuperacion mantiene similitud/temporal y añade candidatos por grafo cuando una
+  entidad de la consulta activa nodos conectados.
+- `nino_context.memory_candidates` marca `retrieval_source` y expone
+  `graph_retrieved_count` frente a `similarity_retrieved_count` para auditoria.
+- Reset de agente borra tambien el grafo privado.
+
+Privacidad:
+
+- El grafo vive en la memoria privada del agente/usuario. No se copia al modelo global
+  anonimo y no cruza entre usuarios.
+- Si no hay entidad o arista, no se inventa relacion.
+
+Tests:
+
+- Dos episodios sobre la misma entidad crean nodos y aristas.
+- La recuperacion por grafo trae un episodio conectado aunque no haya solape semantico
+  directo con la consulta.
+- El grafo de un usuario no aparece en consultas de otro.
+- No se inventan aristas para entidades desconocidas.
+- El ciclo de sueño reconstruye enlaces desde episodios existentes.

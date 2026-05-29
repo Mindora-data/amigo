@@ -22,6 +22,7 @@ from .contracts import (
 from .llm import LLMClient, build_configured_llm, build_nino_prompt
 from .learning import distill_to_global, pattern_context_for_candidate, starting_prior
 from .memory import Episode, InMemoryEpisodeStore, MemoryRetriever
+from .memory_graph import InMemoryGraphStore, graph_candidates, ingest_episodes_graph
 from .proactivity import (
     InMemoryProactiveCandidateStore,
     ProactivityEngine,
@@ -51,9 +52,12 @@ def _nino_context_summary(
             "statement": candidate.statement,
             "score": round(candidate.score, 4),
             "confidence": round(candidate.confidence, 4),
+            "retrieval_source": candidate.retrieval_source,
         }
         for candidate in llm_retrieved.memory_candidates[:5]
     ]
+    graph_count = len([candidate for candidate in llm_retrieved.memory_candidates if candidate.retrieval_source == "graph"])
+    similarity_count = len([candidate for candidate in llm_retrieved.memory_candidates if candidate.retrieval_source != "graph"])
     return {
         "agent_id": state.agent_id,
         "current_time": state.updated_at.isoformat(),
@@ -66,6 +70,8 @@ def _nino_context_summary(
         "retrieved_memory_count": len(retrieved.memory_candidates),
         "llm_context_memory_count": len(llm_retrieved.memory_candidates),
         "memory_candidates": memory_candidates,
+        "graph_retrieved_count": graph_count,
+        "similarity_retrieved_count": similarity_count,
         "temporal_query": llm_retrieved.temporal_query,
         "temporal_window": llm_retrieved.temporal_window,
         "temporal_miss": llm_retrieved.temporal_miss,
@@ -1367,6 +1373,7 @@ class NinoRuntime:
         cold_store: InMemoryColdStore | None = None,
         global_model_store: InMemoryGlobalModelStore | None = None,
         proactive_candidate_store: InMemoryProactiveCandidateStore | None = None,
+        graph_store: InMemoryGraphStore | None = None,
         llm_client: LLMClient | None = None,
     ) -> None:
         self.state_store = state_store
@@ -1376,6 +1383,7 @@ class NinoRuntime:
         self.retriever = MemoryRetriever(self.episode_store, self.cold_store)
         self.consolidator = Consolidator(self.cold_store)
         self.proactive_candidate_store = proactive_candidate_store or InMemoryProactiveCandidateStore()
+        self.graph_store = graph_store or InMemoryGraphStore()
         self.llm_client = llm_client if llm_client is not None else build_configured_llm()
         self.proactivity = ProactivityEngine(
             self.episode_store,
@@ -1578,6 +1586,8 @@ class NinoRuntime:
             deleted["cold_memory"] = self.cold_store.delete_for_agent(agent_id)
         if hasattr(self.proactive_candidate_store, "delete_for_agent"):
             deleted["proactive_candidates"] = self.proactive_candidate_store.delete_for_agent(agent_id)
+        if hasattr(self.graph_store, "delete_for_agent"):
+            deleted["memory_graph"] = self.graph_store.delete_for_agent(agent_id)
         return deleted
 
     def list_agents(self) -> list[str]:
@@ -1675,7 +1685,17 @@ class NinoRuntime:
         return {"agent_id": agent_id, "event_id": event_id, "deleted": deleted}
 
     def retrieve_memory(self, agent_id: str, request: RetrieveRequest) -> RetrieveResponse:
-        return self.retriever.retrieve(agent_id=agent_id, request=request, top_k=5)
+        out = self.retriever.retrieve(agent_id=agent_id, request=request, top_k=5)
+        graph = graph_candidates(self.graph_store, self.episode_store, agent_id, request.query_intent, limit=3)
+        existing = {candidate.source_episode_id for candidate in out.memory_candidates}
+        merged = list(out.memory_candidates)
+        for candidate in graph:
+            if candidate.source_episode_id not in existing:
+                merged.append(candidate)
+                existing.add(candidate.source_episode_id)
+        merged.sort(key=lambda candidate: candidate.score, reverse=True)
+        out.memory_candidates = merged[:5]
+        return out
 
     def build_narrative(self, agent_id: str) -> dict[str, Any]:
         state = self.load_or_init_state(agent_id)
@@ -2581,6 +2601,7 @@ class NinoRuntime:
             until=now,
             min_confidence=0.55,
         )
+        ingest_episodes_graph(self.graph_store, request.agent_id, episodes)
         return ConsolidationResponse(
             cold_memory_updates=result["cold_memory_updates"],
             autobiographical_updates=[],
@@ -2722,6 +2743,7 @@ class NinoRuntime:
                 until=now + timedelta(seconds=1),
                 min_confidence=0.9,
             )
+            ingest_episodes_graph(self.graph_store, agent_id, [episode])
             if auto_consolidation["cold_memory_updates"] or auto_consolidation["contradictions"]:
                 decision.reason_trace = [*decision.reason_trace, "auto_memory_consolidation"]
 

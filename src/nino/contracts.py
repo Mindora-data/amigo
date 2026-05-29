@@ -14,6 +14,7 @@ class MemoryCandidate:
     score: float
     source_episode_id: str
     confidence: float
+    retrieval_source: str = "similarity"
 
 @dataclass(slots=True)
 class RetrieveRequest:

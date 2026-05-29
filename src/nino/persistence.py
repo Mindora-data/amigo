@@ -8,6 +8,7 @@ import sqlite3
 from .consolidation import MemoryFact
 from .contracts import AgentState
 from .memory import Episode
+from .memory_graph import GraphEdge, GraphNode
 from .proactivity import InMemoryProactiveCandidateStore
 from .runtime import NinoRuntime, _safe_global_concept_counts
 
@@ -297,6 +298,148 @@ class SQLiteColdStore:
     def list_agent_ids(self) -> list[str]:
         rows = self.conn.execute("SELECT DISTINCT agent_id FROM memory_facts ORDER BY agent_id").fetchall()
         return [row["agent_id"] for row in rows]
+
+
+class SQLiteGraphStore:
+    def __init__(self, path: str | Path) -> None:
+        self.conn = _connect(path)
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS memory_graph_nodes (
+                node_id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                label TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                first_seen_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                mention_count INTEGER NOT NULL,
+                UNIQUE(agent_id, entity_type, label)
+            )
+            """
+        )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS memory_graph_edges (
+                edge_id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                source_node_id TEXT NOT NULL,
+                relation TEXT NOT NULL,
+                target_node_id TEXT NOT NULL,
+                source_episode_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                UNIQUE(agent_id, source_node_id, relation, target_node_id, source_episode_id)
+            )
+            """
+        )
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_graph_nodes_agent ON memory_graph_nodes(agent_id)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_graph_edges_agent ON memory_graph_edges(agent_id)")
+        self.conn.commit()
+
+    def upsert_node(self, node: GraphNode) -> GraphNode:
+        existing = self.conn.execute(
+            "SELECT * FROM memory_graph_nodes WHERE agent_id = ? AND entity_type = ? AND label = ?",
+            (node.agent_id, node.entity_type, node.label),
+        ).fetchone()
+        if existing is not None:
+            updated = GraphNode(
+                node_id=str(existing["node_id"]),
+                agent_id=str(existing["agent_id"]),
+                label=str(existing["label"]),
+                entity_type=str(existing["entity_type"]),
+                first_seen_at=min(datetime.fromisoformat(existing["first_seen_at"]), node.first_seen_at),
+                last_seen_at=max(datetime.fromisoformat(existing["last_seen_at"]), node.last_seen_at),
+                mention_count=int(existing["mention_count"]) + node.mention_count,
+            )
+            node = updated
+        self.conn.execute(
+            """
+            INSERT INTO memory_graph_nodes (
+                node_id, agent_id, label, entity_type, first_seen_at, last_seen_at, mention_count
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(agent_id, entity_type, label) DO UPDATE SET
+                first_seen_at = excluded.first_seen_at,
+                last_seen_at = excluded.last_seen_at,
+                mention_count = excluded.mention_count
+            """,
+            (
+                node.node_id,
+                node.agent_id,
+                node.label,
+                node.entity_type,
+                node.first_seen_at.isoformat(),
+                node.last_seen_at.isoformat(),
+                node.mention_count,
+            ),
+        )
+        self.conn.commit()
+        return node
+
+    def upsert_edge(self, edge: GraphEdge) -> None:
+        self.conn.execute(
+            """
+            INSERT OR IGNORE INTO memory_graph_edges (
+                edge_id, agent_id, source_node_id, relation, target_node_id,
+                source_episode_id, timestamp, confidence
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                edge.edge_id,
+                edge.agent_id,
+                edge.source_node_id,
+                edge.relation,
+                edge.target_node_id,
+                edge.source_episode_id,
+                edge.timestamp.isoformat(),
+                edge.confidence,
+            ),
+        )
+        self.conn.commit()
+
+    def nodes_for_agent(self, agent_id: str) -> list[GraphNode]:
+        rows = self.conn.execute(
+            "SELECT * FROM memory_graph_nodes WHERE agent_id = ? ORDER BY first_seen_at, node_id",
+            (agent_id,),
+        ).fetchall()
+        return [
+            GraphNode(
+                node_id=row["node_id"],
+                agent_id=row["agent_id"],
+                label=row["label"],
+                entity_type=row["entity_type"],
+                first_seen_at=datetime.fromisoformat(row["first_seen_at"]),
+                last_seen_at=datetime.fromisoformat(row["last_seen_at"]),
+                mention_count=int(row["mention_count"]),
+            )
+            for row in rows
+        ]
+
+    def edges_for_agent(self, agent_id: str) -> list[GraphEdge]:
+        rows = self.conn.execute(
+            "SELECT * FROM memory_graph_edges WHERE agent_id = ? ORDER BY timestamp, edge_id",
+            (agent_id,),
+        ).fetchall()
+        return [
+            GraphEdge(
+                edge_id=row["edge_id"],
+                agent_id=row["agent_id"],
+                source_node_id=row["source_node_id"],
+                relation=row["relation"],
+                target_node_id=row["target_node_id"],
+                source_episode_id=row["source_episode_id"],
+                timestamp=datetime.fromisoformat(row["timestamp"]),
+                confidence=float(row["confidence"]),
+            )
+            for row in rows
+        ]
+
+    def delete_for_agent(self, agent_id: str) -> int:
+        edge_cursor = self.conn.execute("DELETE FROM memory_graph_edges WHERE agent_id = ?", (agent_id,))
+        node_cursor = self.conn.execute("DELETE FROM memory_graph_nodes WHERE agent_id = ?", (agent_id,))
+        self.conn.commit()
+        return edge_cursor.rowcount + node_cursor.rowcount
 
 
 class SQLiteGlobalModelStore:
@@ -620,4 +763,5 @@ def create_persistent_runtime(path: str | Path) -> NinoRuntime:
         cold_store=SQLiteColdStore(db_path),
         global_model_store=SQLiteGlobalModelStore(db_path),
         proactive_candidate_store=SQLiteProactiveCandidateStore(db_path),
+        graph_store=SQLiteGraphStore(db_path),
     )

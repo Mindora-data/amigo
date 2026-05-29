@@ -2035,14 +2035,16 @@ def _to_jsonable(value: Any) -> Any:
 
 
 def _memory_type_for_candidate(candidate: dict[str, Any]) -> str:
+    if str(candidate.get("retrieval_source", "")) == "graph" or str(candidate.get("fact_id", "")).startswith("graph::"):
+        return "graph"
     return "cold" if str(candidate.get("fact_id", "")).startswith("cold::") else "hot"
 
 
 def _memory_type_counts(candidates: list[dict[str, Any]]) -> dict[str, int]:
-    counts = {"cold": 0, "hot": 0, "total": 0}
+    counts = {"cold": 0, "hot": 0, "graph": 0, "total": 0}
     for candidate in candidates:
         memory_type = str(candidate.get("memory_type") or _memory_type_for_candidate(candidate))
-        if memory_type not in {"cold", "hot"}:
+        if memory_type not in {"cold", "hot", "graph"}:
             memory_type = "hot"
         counts[memory_type] += 1
         counts["total"] += 1
@@ -3609,7 +3611,7 @@ class NinoService:
         memory_type_filter = str(payload.get("memory_type_filter", "all"))
         all_candidates = list(out.get("memory_candidates", []))
         out["memory_type_counts"] = _memory_type_counts(all_candidates)
-        if memory_type_filter in {"cold", "hot"}:
+        if memory_type_filter in {"cold", "hot", "graph"}:
             candidates = []
             for candidate in all_candidates:
                 if candidate.get("memory_type") == memory_type_filter:
