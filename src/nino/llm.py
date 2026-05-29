@@ -297,6 +297,15 @@ def build_nino_prompt(
         if isinstance(answer, dict) and answer.get("value")
     ) or "- No onboarding profile."
     preferences = ", ".join(sorted(relation_state.get("preferences", {}).keys())) or "none"
+    active_thread = relation_state.get("active_conversation_thread", {})
+    active_thread_text = "- No active thread."
+    if isinstance(active_thread, dict) and active_thread.get("summary"):
+        terms = ", ".join(str(item) for item in list(active_thread.get("topic_terms", []))[-8:])
+        active_thread_text = (
+            f"- Resumen: {_redact_context(str(active_thread.get('summary', '')))}\n"
+            f"- Turnos enlazados: {int(active_thread.get('turn_count', 0))}\n"
+            f"- Terminos: {terms or 'none'}"
+        )
     learning = relation_state.get("relationship_learning", {})
     response_style = learning.get("response_style", {}) if isinstance(learning, dict) else {}
     learning_counts = learning.get("counts", {}) if isinstance(learning, dict) else {}
@@ -343,6 +352,7 @@ def build_nino_prompt(
         "No seas pesado: pregunta por la vida del usuario con tacto, recuerda lo importante y deja espacio si no quiere hablar. "
         "Adapta tu respuesta a las senales relacionales: si hay fallos, correcciones o limites recientes, responde mas breve, humilde y con menos iniciativa; "
         "si hay aciertos, conserva ese tipo de ayuda sin exagerar confianza. "
+        "Usa el hilo activo para relacionar frases consecutivas del usuario; si el mensaje actual es corto, pronominal o continua una idea, no lo trates aislado. "
         "No conviertas una hora suelta o una respuesta breve del usuario en recordatorio; solo hay recordatorio si el usuario lo pide explícitamente. "
         "Si malinterpretas al usuario, discúlpate una sola vez de forma breve, corrige el rumbo y no encadenes disculpas tras disculpas. "
         "No menciones detalles internos de implementación salvo que el usuario lo pregunte. "
@@ -365,6 +375,7 @@ def build_nino_prompt(
         f"Etapa de identidad: {self_model.get('identity_stage', 'unknown')}\n"
         f"Conceptos dominantes: {concept_text}\n\n"
         f"Últimos turnos:\n{turns}\n\n"
+        f"Hilo activo de conversación:\n{active_thread_text}\n\n"
         f"Memoria recuperada:\n{memories}\n\n"
         f"Hechos fríos activos:\n{facts}\n\n"
         f"Eventos temporales activos:\n{temporal_events}\n\n"

@@ -1592,6 +1592,46 @@ def test_relationship_dashboard_learns_from_hits_mistakes_and_limits(tmp_path) -
     assert state["relation_state"]["relationship_learning"]["last_outcome"] == "stop"
 
 
+def test_active_conversation_thread_connects_short_followups(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "chat", "text": "Tengo una idea para amigo: que aprenda del tono de cada conversacion.", "salience": 0.8},
+    )
+    followup = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "chat", "text": "y que no repita el mismo error cuando se lo corregimos", "salience": 0.8},
+    )
+    state = _request(app, "GET", "/agents/api-agent/state")
+    dashboard = _request(app, "GET", "/agents/api-agent/relationship-dashboard")["dashboard"]
+
+    thread = state["relation_state"]["active_conversation_thread"]
+    assert thread["turn_count"] == 2
+    assert "aprenda del tono" in thread["summary"]
+    assert "mismo error" in thread["summary"]
+    assert "active_thread_continuity" in followup["reason_trace"]
+    assert dashboard["active_conversation_thread"]["present"] is True
+    assert dashboard["active_conversation_thread"]["turn_count"] == 2
+
+
+def test_continuity_correction_is_counted_as_learning_signal(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "Estoy explicando una idea en dos partes", "salience": 0.7})
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "te pierdes y no relacionas el contexto", "salience": 0.8})
+    dashboard = _request(app, "GET", "/agents/api-agent/relationship-dashboard")["dashboard"]
+
+    counts = dashboard["relationship_learning"]["counts"]
+    assert counts["negative"] >= 1
+    assert counts["continuity_miss"] == 1
+    assert dashboard["response_style"]["caution"] > 0.5
+
+
 def test_http_api_exports_imports_and_reports_metrics(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "soy Pablo", "salience": 0.8})

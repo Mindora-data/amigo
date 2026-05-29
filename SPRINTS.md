@@ -696,3 +696,34 @@ Tests:
 - Un remitente vinculado que habla en grupo no enruta a su memoria privada.
 - `/dashboard` sirve HTML local y queda documentado.
 - En producción `/dashboard` devuelve 404.
+
+## Sprint 20 - Continuidad de hilo conversacional
+
+Estado: hecho.
+
+Objetivo: evitar que amigo trate frases consecutivas como mensajes aislados. Si el
+usuario desarrolla una idea en dos o mas frases, amigo debe mantener el hilo activo y
+usar ese contexto antes de responder.
+
+Hechos:
+
+- `relation_state.active_conversation_thread` guarda el resumen privado del hilo
+  actual, terminos principales, ultimos mensajes del usuario, turnos enlazados y fecha
+  de actualizacion.
+- La recuperacion de memoria amplia `query_intent` con el hilo activo cuando el mensaje
+  parece continuacion corta o pronominal.
+- La politica local tiene una ruta `active_thread_continuity` para conectar mensajes
+  cortos con la idea previa en vez de responder como si no hubiera contexto.
+- El prompt LLM recibe `Hilo activo de conversacion` e instruccion explicita de no
+  tratar mensajes cortos o continuaciones como aislados.
+- Si el usuario corrige que amigo se pierde, no conecta o no relaciona contexto, se
+  registra `continuity_miss` como senal de aprendizaje relacional y sube la cautela.
+- El dashboard muestra si hay hilo activo, turnos enlazados y terminos del hilo sin
+  exponer el texto crudo.
+
+Tests:
+
+- Dos frases consecutivas se unen en el mismo hilo activo.
+- Una continuacion corta usa `active_thread_continuity`.
+- Una correccion de continuidad incrementa `continuity_miss`.
+- Las rutas explicitas de tema/preferencia mantienen prioridad sobre el hilo activo.

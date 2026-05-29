@@ -741,6 +741,84 @@ def _relationship_learning_from_feedback(
     learning["recent"] = recent[-20:]
     return learning
 
+
+CONTINUATION_MARKERS = {
+    "eso", "esto", "esa", "ese", "tambien", "también", "ademas", "además",
+    "entonces", "y", "pero", "la idea", "lo anterior", "sigue", "relaciona",
+}
+
+
+def _active_thread_context(relation_state: dict[str, Any]) -> dict[str, Any] | None:
+    thread = relation_state.get("active_conversation_thread")
+    return dict(thread) if isinstance(thread, dict) and thread.get("summary") else None
+
+
+def _is_thread_continuation(text: str, thread: dict[str, Any] | None) -> bool:
+    if not thread:
+        return False
+    plain = _without_accents(text).strip()
+    if not plain:
+        return False
+    tokens = _tokens_for_model(plain)
+    if len(tokens) <= 4:
+        return True
+    return any(_without_accents(marker) in plain for marker in CONTINUATION_MARKERS)
+
+
+def _update_active_conversation_thread(
+    relation_state: dict[str, Any],
+    text: str,
+    intent: str,
+    now: datetime,
+) -> dict[str, Any]:
+    if not text.strip() or intent.startswith("onboarding:"):
+        return relation_state
+    relation = dict(relation_state)
+    existing = _active_thread_context(relation)
+    tokens = _tokens_for_model(text)
+    continuation = _is_thread_continuation(text, existing)
+    if existing and (continuation or len(tokens) <= 10):
+        messages = [str(item) for item in list(existing.get("recent_user_messages", []))[-3:]]
+        topic_terms = list(existing.get("topic_terms", []))
+        turn_count = int(existing.get("turn_count", 0)) + 1
+    else:
+        messages = []
+        topic_terms = []
+        turn_count = 1
+    messages.append(text[:220])
+    seen = set(topic_terms)
+    for token in tokens:
+        if token not in seen:
+            topic_terms.append(token)
+            seen.add(token)
+    summary = " | ".join(messages[-4:])
+    relation["active_conversation_thread"] = {
+        "summary": summary[:700],
+        "topic_terms": topic_terms[-16:],
+        "recent_user_messages": messages[-4:],
+        "turn_count": turn_count,
+        "updated_at": now.isoformat(),
+        "continuation_detected": continuation,
+    }
+    return relation
+
+
+def _record_continuity_miss_if_needed(relation_state: dict[str, Any], text: str, now: datetime) -> dict[str, Any]:
+    plain = _without_accents(text)
+    if not any(marker in plain for marker in ("no relaciona", "no conect", "pierde", "contexto", "no entiende el hilo")):
+        return relation_state
+    relation = dict(relation_state)
+    learning = _relationship_learning_from_feedback(
+        dict(relation.get("relationship_learning", {})),
+        {"outcome": "negative", "signal": "continuity_miss"},
+        now,
+    )
+    counts = dict(learning.get("counts", {}))
+    counts["continuity_miss"] = int(counts.get("continuity_miss", 0)) + 1
+    learning["counts"] = counts
+    relation["relationship_learning"] = learning
+    return relation
+
 def _update_relation_from_percept(
     relation_state: dict[str, Any],
     percept_frame: dict[str, Any],
@@ -758,6 +836,8 @@ def _update_relation_from_percept(
             feedback,
             now,
         )
+    relation = _record_continuity_miss_if_needed(relation, text, now)
+    relation = _update_active_conversation_thread(relation, text, intent, now)
 
     name = NAME_RE.search(text)
     if name:
@@ -1516,6 +1596,7 @@ class NinoRuntime:
             "negative": int(dict(learning.get("counts", {})).get("negative", 0)),
             "correction": int(dict(learning.get("counts", {})).get("correction", 0)),
             "stop": int(dict(learning.get("counts", {})).get("stop", 0)),
+            "continuity_miss": int(dict(learning.get("counts", {})).get("continuity_miss", 0)),
         }
         style = dict(RELATIONSHIP_DEFAULT_STYLE)
         style.update({key: float(value) for key, value in dict(learning.get("response_style", {})).items() if key in style})
@@ -1548,6 +1629,12 @@ class NinoRuntime:
                 "last_outcome": learning.get("last_outcome"),
                 "last_signal_at": learning.get("last_signal_at"),
                 "recent_signals": recent_signals,
+            },
+            "active_conversation_thread": {
+                "present": _active_thread_context(relation) is not None,
+                "turn_count": int((_active_thread_context(relation) or {}).get("turn_count", 0)),
+                "topic_terms": list((_active_thread_context(relation) or {}).get("topic_terms", []))[-8:],
+                "updated_at": (_active_thread_context(relation) or {}).get("updated_at"),
             },
             "response_style": {key: round(float(value), 4) for key, value in style.items()},
             "memory": {
@@ -2225,6 +2312,25 @@ class NinoRuntime:
                 reason_trace=["context_policy", "temporal_memory_miss"],
             )
 
+        active_thread = request.percept_frame.get("active_conversation_thread")
+        if (
+            isinstance(active_thread, dict)
+            and active_thread.get("summary")
+            and _is_thread_continuation(text, active_thread)
+            and TOPIC_RE.search(text) is None
+            and PREFERENCE_RE.search(text) is None
+        ):
+            summary = str(active_thread.get("summary", "")).replace("\n", " ")[:180]
+            action = {
+                "type": "external_message",
+                "payload": {"text": f"Lo conecto con la idea que veníamos construyendo: {summary}. Sigue, te sigo el hilo."},
+            }
+            return PolicyResponse(
+                chosen_action=action,
+                confidence=0.67,
+                reason_trace=["context_policy", "active_thread_continuity"],
+            )
+
         topic_match = TOPIC_RE.search(text)
         if topic_match:
             topic = _clean_preference_value(topic_match.group("topic"))
@@ -2346,8 +2452,11 @@ class NinoRuntime:
         new_temporal_events = _extract_temporal_events(text, now)
         reminder_confirmation = _reminder_confirmation_from_text(text)
         query_intent = text.strip() or intent
+        active_thread = _active_thread_context(state.relation_state)
+        if active_thread and _is_thread_continuation(text, active_thread):
+            query_intent = f"{active_thread.get('summary', '')} {query_intent}".strip()
         if intent not in GENERIC_INTENTS and text.strip():
-            query_intent = f"{intent} {text}".strip()
+            query_intent = f"{intent} {query_intent}".strip()
 
         retrieve_req = RetrieveRequest(
             query_intent=query_intent,
@@ -2379,6 +2488,7 @@ class NinoRuntime:
                 "temporal_miss": retrieved.temporal_miss,
                 "new_temporal_events": new_temporal_events,
                 "reminder_confirmation": reminder_confirmation,
+                "active_conversation_thread": active_thread,
             },
             drive_vector=state.drive_vector,
             memory_candidates=retrieved.memory_candidates,
