@@ -401,3 +401,18 @@ def test_llm_prompt_includes_onboarding_profile() -> None:
     assert "Perfil inicial del usuario:" in prompt
     assert "Nombre: Pablo" in prompt
     assert "Lugar: Madrid" in prompt
+
+
+def test_llm_prompt_includes_honest_group_maturity_not_human_life() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick("telegram-group-100", {"intent": "group_chat", "text": "tenemos una idea para el viaje"})
+    runtime.tick("telegram-group-100", {"intent": "group_chat", "text": "¿cómo lo veis?"})
+
+    system = llm.prompts[-1]["system"]
+    prompt = llm.prompts[-1]["user"]
+    assert "No tienes vida humana" in system
+    assert "Madurez grupal honesta:" in prompt
+    assert "software_companion_no_human_life" in prompt
+    assert "Historia compartida reciente:" in prompt

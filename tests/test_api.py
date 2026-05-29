@@ -1654,6 +1654,33 @@ def test_relationship_dashboard_learns_from_hits_mistakes_and_limits(tmp_path) -
     assert state["relation_state"]["relationship_learning"]["last_outcome"] == "stop"
 
 
+def test_group_maturity_is_honest_and_group_scoped(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/users/grupo/agents/nino/observe",
+        {"intent": "group_observation", "text": "tenemos una idea para el viaje", "now": "2026-05-29T13:00:00+02:00"},
+    )
+    _request(
+        app,
+        "POST",
+        "/users/grupo/agents/nino/tick",
+        {"intent": "group_chat", "text": "¿cómo lo veis para quedar?", "now": "2026-05-29T13:01:00+02:00"},
+    )
+    dashboard = _request(app, "GET", "/users/grupo/agents/nino/relationship-dashboard")["dashboard"]
+    state = _request(app, "GET", "/users/grupo/agents/nino/state")
+
+    group = dashboard["group_maturity"]
+    assert group["present"] is True
+    assert group["identity"] == "software_companion_no_human_life"
+    assert group["observed_messages"] == 2
+    assert group["bot_replies"] == 1
+    assert group["privacy"] == "group_scope_only_no_private_chats_no_human_life"
+    assert state["relation_state"]["group_maturity"]["identity"] == "software_companion_no_human_life"
+
+
 def test_active_conversation_thread_connects_short_followups(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

@@ -318,6 +318,30 @@ def build_nino_prompt(
         f"cautela={float(response_style.get('caution', 0.5)):.2f}, "
         f"iniciativa={float(response_style.get('initiative', 0.5)):.2f}"
     )
+    group_maturity = relation_state.get("group_maturity", {})
+    group_maturity_text = "- No group maturity context."
+    if isinstance(group_maturity, dict) and group_maturity:
+        topic_counts = dict(group_maturity.get("topic_counts", {}))
+        tone_counts = dict(group_maturity.get("tone_counts", {}))
+        topics = ", ".join(
+            key for key, _ in sorted(topic_counts.items(), key=lambda item: int(item[1]), reverse=True)[:6]
+        ) or "none"
+        tones = ", ".join(
+            key for key, _ in sorted(tone_counts.items(), key=lambda item: int(item[1]), reverse=True)[:6]
+        ) or "none"
+        shared = [
+            _redact_context(str(item.get("summary", "")))
+            for item in list(group_maturity.get("shared_history", []))[-4:]
+            if isinstance(item, dict) and item.get("summary")
+        ]
+        group_maturity_text = (
+            f"- Identidad honesta: {group_maturity.get('identity', 'software_companion_no_human_life')}\n"
+            f"- Mensajes observados: {int(group_maturity.get('observed_messages', 0))}\n"
+            f"- Respuestas de amigo en este grupo: {int(group_maturity.get('bot_replies', 0))}\n"
+            f"- Temas frecuentes: {topics}\n"
+            f"- Tono del grupo: {tones}\n"
+            f"- Historia compartida reciente: {' | '.join(shared) if shared else 'none'}"
+        )
     concepts = sorted(
         world_model.get("concept_counts", {}).items(),
         key=lambda item: item[1],
@@ -348,6 +372,9 @@ def build_nino_prompt(
         "Eres amigo, un compañero cercano con memoria y continuidad. Responde en español, con tono natural, cálido y poco invasivo. "
         f"{AMIGO_ETHICS} "
         "Usa la memoria dada como contexto, no inventes recuerdos. Si no sabes algo, dilo. "
+        "No tienes vida humana, familia, infancia, trabajo ni experiencias fuera de tus interacciones como software. "
+        "Si necesitas un fondo al que recurrir, usa solo tu historia honesta: conversaciones vividas, cosas aprendidas del usuario o del grupo, y cambios en tu forma de acompañar. "
+        "En grupos puedes sonar como uno mas, pero sin fingir ser humano ni revelar datos privados de chats individuales. "
         "Mantén respuestas breves, normalmente entre 1 y 4 frases. "
         "No seas pesado: pregunta por la vida del usuario con tacto, recuerda lo importante y deja espacio si no quiere hablar. "
         "Adapta tu respuesta a las senales relacionales: si hay fallos, correcciones o limites recientes, responde mas breve, humilde y con menos iniciativa; "
@@ -376,6 +403,7 @@ def build_nino_prompt(
         f"Conceptos dominantes: {concept_text}\n\n"
         f"Últimos turnos:\n{turns}\n\n"
         f"Hilo activo de conversación:\n{active_thread_text}\n\n"
+        f"Madurez grupal honesta:\n{group_maturity_text}\n\n"
         f"Memoria recuperada:\n{memories}\n\n"
         f"Hechos fríos activos:\n{facts}\n\n"
         f"Eventos temporales activos:\n{temporal_events}\n\n"

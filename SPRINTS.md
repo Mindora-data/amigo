@@ -867,3 +867,33 @@ Criterios de salida:
 - Tests cubren allowlist obligatoria, filtrado privado/terceros, sanitizacion,
   fallback determinista del usuario sintetico, recordatorios y honestidad temporal.
 - El corpus de estilo queda disponible para prompt/style few-shot, no para recuerdos.
+
+## Sprint 26 - Madurez grupal honesta
+
+Estado: hecho inicial.
+
+Objetivo: que amigo participe en grupos como compañero de conversación sin fingir una
+vida humana ni mezclar memoria privada.
+
+Hechos:
+
+- `relation_state.group_maturity` guarda madurez del grupo: mensajes observados,
+  respuestas de amigo, preguntas vistas, temas frecuentes, tono agregado e historia
+  compartida reciente.
+- La identidad grupal queda fijada como `software_companion_no_human_life`: amigo no
+  usa familia, infancia, trabajo ni experiencias humanas inventadas como fondo.
+- El prompt LLM recibe `Madurez grupal honesta` y la instruccion de recurrir solo a
+  conversaciones vividas y aprendizajes reales del grupo.
+- Telegram puede intervenir no solo en preguntas, tambien ante senales sociales donde
+  una respuesta breve aporta (`me siento...`, `me preocupa...`, `tengo una idea...`),
+  respetando el cooldown ambiental.
+- Los ticks de grupos usan intent `group_chat`; las observaciones silenciosas siguen
+  usando `group_observation`.
+- El dashboard relacional expone `group_maturity` sin texto crudo completo ni datos de
+  chats privados.
+
+Tests:
+
+- Un mensaje vulnerable de grupo puede activar participacion breve.
+- La madurez grupal se guarda y aparece en dashboard como ambito de grupo.
+- El prompt incluye la identidad honesta y no permite biografia humana inventada.

@@ -40,6 +40,19 @@ GROUP_AMBIENT_CUES = (
     "qué tal vais",
     "consejo",
 )
+GROUP_PARTICIPATION_CUES = (
+    "estoy triste",
+    "estoy mal",
+    "me siento",
+    "me preocupa",
+    "tengo miedo",
+    "me agobia",
+    "necesito hablar",
+    "no se que hacer",
+    "no sé qué hacer",
+    "tengo una idea",
+    "os cuento",
+)
 GROUP_SENSITIVE_CUES = (
     "contraseña",
     "password",
@@ -259,10 +272,11 @@ class BackendClient:
 
     def tick(self, user_id: str, text: str, now: datetime) -> str:
         user = _slug(user_id)
+        intent = "group_chat" if user.startswith("telegram-group-") else "chat"
         out = self._json(
             "POST",
             f"/users/{parse.quote(user)}/agents/{AGENT_ID}/tick",
-            {"intent": "chat", "text": text, "salience": 0.7, "confidence": 0.8, "now": now.isoformat()},
+            {"intent": intent, "text": text, "salience": 0.7, "confidence": 0.8, "now": now.isoformat()},
             user_id=user,
         )
         action = out.get("action") if isinstance(out, dict) else None
@@ -395,7 +409,7 @@ class TelegramBotService:
         lowered = text.lower()
         if any(cue in lowered for cue in GROUP_SENSITIVE_CUES):
             return False
-        if not any(cue in lowered for cue in GROUP_AMBIENT_CUES):
+        if not any(cue in lowered for cue in (*GROUP_AMBIENT_CUES, *GROUP_PARTICIPATION_CUES)):
             return False
         last = self._group_last_ambient_reply.get(str(chat_id))
         if last is not None and (now - last).total_seconds() < self._ambient_cooldown_seconds(chat_id):

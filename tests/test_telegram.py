@@ -308,6 +308,20 @@ def test_group_mention_uses_group_memory_not_private_memory(tmp_path) -> None:
     assert telegram.sent[-1]["chat_id"] == "-100"
 
 
+def test_group_vulnerable_message_can_trigger_brief_participation(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "me siento un poco perdido con esto", user_id=10))
+
+    assert backend.observations == []
+    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
+    assert backend.ticks[-1]["text"] == "me siento un poco perdido con esto"
+    assert telegram.sent[-1]["chat_id"] == "-100"
+
+
 def test_group_reply_to_bot_is_directed_and_uses_group_memory(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()

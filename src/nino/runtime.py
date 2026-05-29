@@ -826,6 +826,108 @@ def _record_continuity_miss_if_needed(relation_state: dict[str, Any], text: str,
     relation["relationship_learning"] = learning
     return relation
 
+
+GROUP_TOPIC_MARKERS = {
+    "plan",
+    "planes",
+    "trabajo",
+    "familia",
+    "salud",
+    "cita",
+    "dentista",
+    "proyecto",
+    "viaje",
+    "quedada",
+    "idea",
+    "duda",
+    "problema",
+}
+GROUP_TONE_MARKERS = {
+    "humor": ("jaja", "jeje", "lol", "broma"),
+    "apoyo": ("gracias", "animo", "ánimo", "tranqui", "te entiendo", "me alegro"),
+    "cuidado": ("triste", "agobiado", "agobiada", "preocupado", "preocupada", "miedo", "mal"),
+    "practico": ("plan", "idea", "hacer", "quedamos", "cuando", "hora"),
+}
+
+
+def _update_group_maturity(
+    relation_state: dict[str, Any],
+    text: str,
+    intent: str,
+    now: datetime,
+) -> dict[str, Any]:
+    if not text.strip() or not (intent.startswith("group_") or intent == "chat"):
+        return relation_state
+    relation = dict(relation_state)
+    maturity = dict(relation.get("group_maturity", {}))
+    observed = int(maturity.get("observed_messages", 0)) + 1
+    replied = int(maturity.get("bot_replies", 0)) + (0 if intent == "group_observation" else 1)
+    questions = int(maturity.get("questions_seen", 0)) + (1 if "?" in text or "¿" in text else 0)
+    plain = _without_accents(text)
+    topic_counts = dict(maturity.get("topic_counts", {}))
+    for marker in GROUP_TOPIC_MARKERS:
+        if marker in plain:
+            topic_counts[marker] = int(topic_counts.get(marker, 0)) + 1
+    tone_counts = dict(maturity.get("tone_counts", {}))
+    for tone, markers in GROUP_TONE_MARKERS.items():
+        if any(_without_accents(marker) in plain for marker in markers):
+            tone_counts[tone] = int(tone_counts.get(tone, 0)) + 1
+    shared_history = list(maturity.get("shared_history", []))
+    if len(_tokens_for_model(text)) >= 4 and (questions > int(maturity.get("questions_seen", 0)) or any(marker in plain for marker in GROUP_TOPIC_MARKERS)):
+        shared_history.append(
+            {
+                "kind": "group_exchange",
+                "summary": text[:140],
+                "observed_at": now.isoformat(),
+                "source": "group_conversation",
+            }
+        )
+    maturity.update(
+        {
+            "identity": "software_companion_no_human_life",
+            "observed_messages": observed,
+            "bot_replies": replied,
+            "questions_seen": questions,
+            "topic_counts": topic_counts,
+            "tone_counts": tone_counts,
+            "shared_history": shared_history[-12:],
+            "last_observed_at": now.isoformat(),
+            "participation_guidance": (
+                "participa solo cuando aporte algo breve; no inventes vida humana; "
+                "usa como fondo la historia compartida del grupo y lo que has aprendido aqui"
+            ),
+        }
+    )
+    relation["group_maturity"] = maturity
+    return relation
+
+
+def _to_group_maturity_dashboard(relation_state: dict[str, Any]) -> dict[str, Any]:
+    maturity = relation_state.get("group_maturity", {})
+    if not isinstance(maturity, dict) or not maturity:
+        return {"present": False}
+    topic_counts = dict(maturity.get("topic_counts", {}))
+    tone_counts = dict(maturity.get("tone_counts", {}))
+    return {
+        "present": True,
+        "identity": str(maturity.get("identity", "software_companion_no_human_life")),
+        "observed_messages": int(maturity.get("observed_messages", 0)),
+        "bot_replies": int(maturity.get("bot_replies", 0)),
+        "questions_seen": int(maturity.get("questions_seen", 0)),
+        "top_topics": [
+            {"topic": str(key), "count": int(value)}
+            for key, value in sorted(topic_counts.items(), key=lambda item: int(item[1]), reverse=True)[:8]
+        ],
+        "tone": [
+            {"tone": str(key), "count": int(value)}
+            for key, value in sorted(tone_counts.items(), key=lambda item: int(item[1]), reverse=True)[:8]
+        ],
+        "shared_history_count": len([item for item in maturity.get("shared_history", []) if isinstance(item, dict)]),
+        "last_observed_at": maturity.get("last_observed_at"),
+        "privacy": "group_scope_only_no_private_chats_no_human_life",
+    }
+
+
 def _update_relation_from_percept(
     relation_state: dict[str, Any],
     percept_frame: dict[str, Any],
@@ -845,6 +947,7 @@ def _update_relation_from_percept(
         )
     relation = _record_continuity_miss_if_needed(relation, text, now)
     relation = _update_active_conversation_thread(relation, text, intent, now)
+    relation = _update_group_maturity(relation, text, intent, now)
 
     name = NAME_RE.search(text)
     if name:
@@ -1661,6 +1764,7 @@ class NinoRuntime:
                 "recent_open_questions": [str(item)[:120] for item in open_questions[-5:]],
                 "quality": self.evaluate_conversation_quality(agent_id),
             },
+            "group_maturity": _to_group_maturity_dashboard(relation),
             "notes": [
                 "Los aciertos, fallos y limites se guardan como senales agregadas de relacion.",
                 "El dashboard no incluye texto crudo de conversaciones ni secretos.",
