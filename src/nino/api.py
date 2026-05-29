@@ -1871,6 +1871,8 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel metric"><span>Usuarios activos</span><strong id="activeUsers">0</strong></div>
       <div class="panel metric"><span>Telegram</span><strong id="telegramUsers">0</strong></div>
       <div class="panel metric"><span>Pendientes</span><strong id="pendingUsers">0</strong></div>
+      <div class="panel metric"><span>Aprendizajes activos</span><strong id="journalActive">0</strong></div>
+      <div class="panel metric"><span>Detectados</span><strong id="journalDraft">0</strong></div>
       <div class="panel wide"><h2>Usuarios y uso</h2><pre id="userOverview">{}</pre></div>
       <div class="panel"><h2>Estilo</h2><pre id="style">{}</pre></div>
       <div class="panel"><h2>Memoria</h2><pre id="memory">{}</pre></div>
@@ -1928,6 +1930,9 @@ DASHBOARD_HTML = """<!doctype html>
         save.textContent = "Guardar";
         const lesson = document.createElement("textarea");
         lesson.value = entry.lesson || "";
+        const meta = document.createElement("div");
+        meta.className = "muted";
+        meta.textContent = `${entry.source || "manual"} · ${(entry.tags || []).join(", ") || "sin etiqueta"}`;
         save.onclick = async () => {
           await requestJson(currentAgentPath(`/learning-journal/${encodeURIComponent(entry.entry_id)}`), {
             method: "PATCH",
@@ -1937,7 +1942,7 @@ DASHBOARD_HTML = """<!doctype html>
           await loadDashboard();
         };
         row.append(title, status, save);
-        wrap.append(row, lesson);
+        wrap.append(row, lesson, meta);
         return wrap;
       }));
     }
@@ -1958,6 +1963,8 @@ DASHBOARD_HTML = """<!doctype html>
       $("activeUsers").textContent = out.users?.active_user_count ?? 0;
       $("telegramUsers").textContent = out.users?.telegram_link_count ?? 0;
       $("pendingUsers").textContent = out.users?.telegram_pending_link_count ?? 0;
+      $("journalActive").textContent = dash.learning_journal?.active_count ?? 0;
+      $("journalDraft").textContent = dash.learning_journal?.draft_count ?? 0;
       print("userOverview", out.users || {});
       print("style", dash.response_style || {});
       print("memory", dash.memory || {});

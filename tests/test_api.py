@@ -114,6 +114,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"Usuarios y uso" in dashboard_body
     assert b"Bit\xc3\xa1cora editable" in dashboard_body
     assert b"/learning-journal" in dashboard_body
+    assert b"Detectados" in dashboard_body
     assert b"/internal/cycle" in body
     assert b"Salud" in body
     assert b"Perfil" in body
@@ -1792,6 +1793,39 @@ def test_learning_journal_auto_manual_edit_and_isolation(tmp_path) -> None:
 
     global_model = _request(app, "GET", "/operations/global-model")
     assert "no hace falta seguir preguntando" not in json.dumps(global_model)
+
+
+def test_learning_journal_detects_draft_candidates_from_conversation(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    tick = _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/tick",
+        {"intent": "chat", "text": "No me gusta que termines siempre preguntando algo para alargar la conversacion"},
+    )
+
+    assert len(tick["learning_journal_updates"]) == 1
+    detected = tick["learning_journal_updates"][0]
+    assert detected["source"] == "detected"
+    assert detected["status"] == "draft"
+    assert "Evitar ese patron" in detected["lesson"]
+
+    journal = _request(app, "GET", "/users/mindora/agents/nino/learning-journal")
+    assert journal["count"] == 1
+    assert journal["entries"][0]["status"] == "draft"
+
+    dashboard = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
+    assert dashboard["relationship_dashboard"]["dashboard"]["learning_journal"]["draft_count"] == 1
+
+    _request(
+        app,
+        "PATCH",
+        f"/users/mindora/agents/nino/learning-journal/{journal['entries'][0]['entry_id']}",
+        {"status": "active"},
+    )
+    approved = _request(app, "GET", "/users/mindora/agents/nino/learning-journal?status=active")
+    assert approved["count"] == 1
 
 
 def test_dashboard_data_counts_telegram_users_and_pending_links(tmp_path) -> None:

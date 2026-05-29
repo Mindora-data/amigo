@@ -24,6 +24,7 @@ from .learning import distill_to_global, pattern_context_for_candidate, starting
 from .learning_journal import (
     InMemoryLearningJournalStore,
     LearningJournalEntry,
+    extract_detected_learning_journal_entries,
     extract_learning_journal_entries,
     make_manual_learning_entry,
 )
@@ -1877,6 +1878,7 @@ class NinoRuntime:
         open_questions = list(state.world_model.get("open_questions", []))
         journal_entries = self.learning_journal_store.list_for_agent(agent_id, status="all")
         active_journal = [entry for entry in journal_entries if entry.status == "active"]
+        draft_journal = [entry for entry in journal_entries if entry.status == "draft"]
         return {
             "agent_id": agent_id,
             "privacy": {
@@ -1911,6 +1913,7 @@ class NinoRuntime:
             },
             "learning_journal": {
                 "active_count": len(active_journal),
+                "draft_count": len(draft_journal),
                 "total_count": len(journal_entries),
                 "recent_entries": [asdict(entry) for entry in journal_entries[:8]],
                 "scope": "private_editable_user_journal",
@@ -2863,6 +2866,15 @@ class NinoRuntime:
                 source_episode_id=episode.episode_id,
                 now=now,
             )
+            existing_lessons = [entry.lesson for entry in self.learning_journal_store.list_for_agent(agent_id, status="all")]
+            if not journal_updates:
+                journal_updates = extract_detected_learning_journal_entries(
+                    text,
+                    agent_id=agent_id,
+                    source_episode_id=episode.episode_id,
+                    now=now,
+                    existing_lessons=existing_lessons,
+                )
             for entry in journal_updates:
                 self.learning_journal_store.upsert(entry)
         if text.strip():

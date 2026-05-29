@@ -1076,3 +1076,35 @@ Tests:
 - Aislamiento entre usuarios.
 - El prompt incluye entradas activas.
 - El modelo global no contiene el texto privado de la bitacora.
+
+## Sprint 33 - Aprendizajes detectados revisables
+
+Estado: hecho inicial.
+
+Objetivo: que amigo empiece a detectar aprendizajes implicitos de las conversaciones
+sin convertirlos automaticamente en verdad activa. Lo detectado queda en `draft`, el
+usuario lo revisa en `/dashboard` y decide si lo activa, edita o archiva.
+
+Hechos:
+
+- La extraccion conserva el carril explicito (`aprende que...`, `bitacora: ...`) como
+  entrada activa.
+- Nuevo carril `detected`: correcciones, preferencias de trato y limites
+  conversacionales generan entradas `draft`.
+- El dashboard muestra contadores de aprendizajes activos y detectados, y cada entrada
+  enseña su fuente (`manual`, `auto`, `detected`) y etiquetas.
+- Solo las entradas `active` entran al prompt. Las `draft` se ven y editan, pero no
+  moldean a amigo hasta que el usuario las aprueba.
+- La deduplicacion basica evita proponer la misma leccion una y otra vez dentro del
+  mismo agente.
+
+Privacidad:
+
+- Todo sigue aislado por `agent_id`; no hay mezcla entre usuarios ni grupos.
+- El modelo global anonimo no recibe el texto de estos aprendizajes.
+
+Tests:
+
+- Una correccion/preferencia implicita crea aprendizaje `detected` en `draft`.
+- El usuario puede aprobarlo cambiando `status` a `active`.
+- El dashboard expone el contador de detectados.

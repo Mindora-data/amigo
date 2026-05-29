@@ -8,7 +8,7 @@ from uuid import uuid4
 
 
 ACTIVE_STATUSES = {"active", "draft", "archived"}
-SOURCES = {"auto", "manual"}
+SOURCES = {"auto", "manual", "detected"}
 
 
 @dataclass(slots=True)
@@ -72,10 +72,54 @@ EXPLICIT_LESSON_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bcuando\s+(.+?),\s*(?:mejor\s+)?(?:haz|responde|act[uú]a)\s+(.+)", re.IGNORECASE | re.DOTALL), "behavior"),
 )
 
+DETECTED_LESSON_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
+    (
+        re.compile(r"\b(?:lo has interpretado mal|has interpretado mal|eso fue un error|te has equivocado)\b(.{0,220})", re.IGNORECASE | re.DOTALL),
+        "correction",
+        "Cuando el usuario marque una mala interpretacion, corregir el rumbo sin insistir ni justificar demasiado.",
+    ),
+    (
+        re.compile(r"\bno (?:me )?gusta que\s+(.{4,220})", re.IGNORECASE | re.DOTALL),
+        "preference",
+        "Al usuario no le gusta que {detail}. Evitar ese patron salvo que lo pida claramente.",
+    ),
+    (
+        re.compile(r"\bprefiero que\s+(.{4,220})", re.IGNORECASE | re.DOTALL),
+        "preference",
+        "El usuario prefiere que {detail}. Tenerlo como pauta de trato.",
+    ),
+    (
+        re.compile(r"\bmejor que\s+(.{4,220})", re.IGNORECASE | re.DOTALL),
+        "behavior",
+        "Mejor que {detail}. Aplicarlo como pauta conversacional si encaja.",
+    ),
+    (
+        re.compile(r"\bno hace falta que\s+(.{4,220})", re.IGNORECASE | re.DOTALL),
+        "behavior",
+        "No hace falta que {detail}. Reducir esa conducta.",
+    ),
+    (
+        re.compile(r"\bno quiero que\s+(.{4,220})", re.IGNORECASE | re.DOTALL),
+        "boundary",
+        "El usuario no quiere que {detail}. Respetar este limite conversacional.",
+    ),
+    (
+        re.compile(r"\b(?:deberias|deberías|tendrias que|tendrías que)\s+(.{4,220})", re.IGNORECASE | re.DOTALL),
+        "behavior",
+        "El usuario sugiere que deberia {detail}. Revisarlo como posible pauta.",
+    ),
+)
+
 
 def _clean_lesson(value: str) -> str:
     value = re.sub(r"\s+", " ", value).strip(" .\n\t")
     return value[:500]
+
+
+def _norm_lesson(value: str) -> str:
+    value = value.lower()
+    value = value.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ñ", "n")
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", value)).strip()
 
 
 def _title_from_lesson(lesson: str, tag: str) -> str:
@@ -152,6 +196,50 @@ def extract_learning_journal_entries(
         except ValueError:
             continue
     return out[:3]
+
+
+def extract_detected_learning_journal_entries(
+    text: str,
+    *,
+    agent_id: str,
+    source_episode_id: str,
+    now: datetime,
+    existing_lessons: list[str] | None = None,
+) -> list[LearningJournalEntry]:
+    if len(text.strip()) < 12:
+        return []
+    existing = {_norm_lesson(item) for item in (existing_lessons or [])}
+    out: list[LearningJournalEntry] = []
+    for pattern, tag, template in DETECTED_LESSON_PATTERNS:
+        match = pattern.search(text)
+        if not match:
+            continue
+        detail = _clean_lesson(match.group(1) if match.groups() else "")
+        if "{detail}" in template:
+            if not detail:
+                continue
+            lesson = template.format(detail=detail)
+        else:
+            lesson = template
+        if _norm_lesson(lesson) in existing:
+            continue
+        existing.add(_norm_lesson(lesson))
+        try:
+            out.append(
+                _new_entry(
+                    agent_id=agent_id,
+                    lesson=lesson,
+                    tag=tag,
+                    source="detected",
+                    status="draft",
+                    now=now,
+                    source_episode_id=source_episode_id,
+                    title=f"Detectado: {_title_from_lesson(lesson, tag)}",
+                )
+            )
+        except ValueError:
+            continue
+    return out[:2]
 
 
 def make_manual_learning_entry(
