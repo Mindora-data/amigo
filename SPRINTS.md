@@ -887,6 +887,8 @@ Hechos:
 - Telegram puede intervenir no solo en preguntas, tambien ante senales sociales donde
   una respuesta breve aporta (`me siento...`, `me preocupa...`, `tengo una idea...`),
   respetando el cooldown ambiental.
+- Los saludos de grupo (`hola`, `buenas`, `buenos dias`) tambien pueden recibir una
+  respuesta breve, sin convertir cada saludo en obligacion de responder.
 - Los ticks de grupos usan intent `group_chat`; las observaciones silenciosas siguen
   usando `group_observation`.
 - El dashboard relacional expone `group_maturity` sin texto crudo completo ni datos de

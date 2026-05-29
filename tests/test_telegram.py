@@ -216,10 +216,10 @@ def test_group_message_not_directed_to_bot_is_observed_without_reply(tmp_path) -
     backend = FakeBackend()
     bot = TelegramBotService(telegram, backend, links)
 
-    bot.handle_update(_group_update(-100, "hola grupo"))
+    bot.handle_update(_group_update(-100, "mensaje del grupo"))
 
     assert backend.ticks == []
-    assert backend.observations == [{"user_id": "telegram-group-100", "text": "hola grupo", "now": "2026-05-28T16:13:20+02:00"}]
+    assert backend.observations == [{"user_id": "telegram-group-100", "text": "mensaje del grupo", "now": "2026-05-28T16:13:20+02:00"}]
     assert telegram.sent == []
 
 
@@ -251,6 +251,20 @@ def test_group_social_question_can_get_ambient_reply(tmp_path) -> None:
     assert backend.observations == []
     assert backend.ticks[-1]["user_id"] == "telegram-group-100"
     assert backend.ticks[-1]["text"] == "como estais"
+    assert telegram.sent[-1]["chat_id"] == "-100"
+
+
+def test_group_greeting_can_get_ambient_reply(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "hola", user_id=10))
+
+    assert backend.observations == []
+    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
+    assert backend.ticks[-1]["text"] == "hola"
     assert telegram.sent[-1]["chat_id"] == "-100"
 
 

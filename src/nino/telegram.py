@@ -41,6 +41,12 @@ GROUP_AMBIENT_CUES = (
     "consejo",
 )
 GROUP_PARTICIPATION_CUES = (
+    "hola",
+    "buenas",
+    "buenos dias",
+    "buenos días",
+    "buenas tardes",
+    "buenas noches",
     "estoy triste",
     "estoy mal",
     "me siento",
