@@ -921,3 +921,25 @@ Tests:
 - Dos respuestas cerradas seguidas producen primero acuse breve y despues silencio.
 - El camino con LLM configurado se salta para cierres breves, evitando preguntas
   repetitivas generadas por el modelo.
+
+## Sprint 28 - Preguntas generales de grupo sin mencion
+
+Estado: hecho inicial.
+
+Objetivo: que amigo participe en el grupo cuando alguien lanza una pregunta general
+que puede contestar, aunque no lo mencionen, sin alargar siempre la conversacion.
+
+Hechos:
+
+- La deteccion ambiental de Telegram reconoce preguntas generales sin mencion:
+  `alguien sabe`, `sabeis`, `quien sabe`, `cual es`, `donde esta`, `como se`, con
+  normalizacion sin acentos y tolerancia al typo `alguin sabe`.
+- Una pregunta como `alguin sabe cual es la capital de españa` entra al backend como
+  `group_chat` del agente aislado `telegram-group-<chat_id>`.
+- El prompt de grupo instruye a contestar directo y breve cuando sabe la respuesta y
+  a no terminar siempre con una pregunta para alargar la conversacion.
+
+Tests:
+
+- Pregunta general de conocimiento en grupo, sin mencionar a amigo, dispara respuesta.
+- El prompt de grupo incluye la regla de no cerrar siempre con pregunta.

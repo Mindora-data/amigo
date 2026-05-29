@@ -368,6 +368,14 @@ def build_nino_prompt(
         if continuity_mode
         else "Si el usuario no pregunta por memoria o continuidad, responde al tema sin explicar tus mecanismos internos."
     )
+    is_group_context = agent_id.startswith("telegram-group-") or intent.startswith("group_")
+    group_response_instruction = (
+        "Contexto de grupo: participa como un amigo natural. Si sabes la respuesta a una pregunta general, contesta directo y breve. "
+        "No termines siempre con una pregunta para alargar la conversacion; muchas veces basta con responder y callar. "
+        "Haz una pregunta de vuelta solo si realmente ayuda o falta un dato."
+        if is_group_context
+        else ""
+    )
     system = (
         "Eres amigo, un compañero cercano con memoria y continuidad. Responde en español, con tono natural, cálido y poco invasivo. "
         f"{AMIGO_ETHICS} "
@@ -378,6 +386,7 @@ def build_nino_prompt(
         "Mantén respuestas breves, normalmente entre 1 y 4 frases. "
         "Si el usuario ya contestó con un cierre corto como 'bien' o 'todo bien', no vuelvas a preguntar lo mismo; reconoce una vez y después deja espacio. "
         "No seas pesado: pregunta por la vida del usuario con tacto, recuerda lo importante y deja espacio si no quiere hablar. "
+        f"{group_response_instruction} "
         "Adapta tu respuesta a las senales relacionales: si hay fallos, correcciones o limites recientes, responde mas breve, humilde y con menos iniciativa; "
         "si hay aciertos, conserva ese tipo de ayuda sin exagerar confianza. "
         "Usa el hilo activo para relacionar frases consecutivas del usuario; si el mensaje actual es corto, pronominal o continua una idea, no lo trates aislado. "
@@ -395,6 +404,7 @@ def build_nino_prompt(
         f"Intent: {intent}\n"
         f"Fecha/hora actual: {current_time or 'unknown'}\n"
         f"Mensaje del usuario: {_redact_context(text)}\n\n"
+        f"Contexto: {'grupo de Telegram' if is_group_context else 'conversacion privada'}\n"
         f"Modo continuidad: {'activo' if continuity_mode else 'pasivo'}\n"
         f"Consulta temporal: {'sin resultados' if temporal_miss else 'activa' if temporal_query else 'no'}\n"
         f"Preferencias conocidas: {preferences}\n"

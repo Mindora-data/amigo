@@ -22,12 +22,23 @@ GROUP_AMBIENT_COOLDOWN_SLOW_SECONDS = 900
 GROUP_AMBIENT_CUES = (
     "?",
     "¿",
+    "alguin sabe",
     "que opinais",
     "qué opináis",
     "que opinas",
     "qué opinas",
     "alguna idea",
     "alguien sabe",
+    "sabeis",
+    "sabéis",
+    "quien sabe",
+    "quién sabe",
+    "cual es",
+    "cuál es",
+    "donde esta",
+    "dónde está",
+    "como se",
+    "cómo se",
     "como lo veis",
     "cómo lo veis",
     "como estais",
@@ -413,9 +424,11 @@ class TelegramBotService:
 
     def _should_reply_ambiently_in_group(self, chat_id: int | str, text: str, now: datetime) -> bool:
         lowered = text.lower()
+        normalized = _slug(text).replace("-", " ")
         if any(cue in lowered for cue in GROUP_SENSITIVE_CUES):
             return False
-        if not any(cue in lowered for cue in (*GROUP_AMBIENT_CUES, *GROUP_PARTICIPATION_CUES)):
+        cues = (*GROUP_AMBIENT_CUES, *GROUP_PARTICIPATION_CUES)
+        if not any(cue in lowered or _slug(cue).replace("-", " ") in normalized for cue in cues):
             return False
         last = self._group_last_ambient_reply.get(str(chat_id))
         if last is not None and (now - last).total_seconds() < self._ambient_cooldown_seconds(chat_id):

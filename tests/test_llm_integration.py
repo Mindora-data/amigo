@@ -429,3 +429,16 @@ def test_llm_prompt_includes_honest_group_maturity_not_human_life() -> None:
     assert "Madurez grupal honesta:" in prompt
     assert "software_companion_no_human_life" in prompt
     assert "Historia compartida reciente:" in prompt
+
+
+def test_llm_prompt_tells_group_responses_not_to_always_extend_conversation() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick("telegram-group-100", {"intent": "group_chat", "text": "alguien sabe cual es la capital de españa"})
+
+    system = llm.prompts[-1]["system"]
+    prompt = llm.prompts[-1]["user"]
+    assert "Si sabes la respuesta a una pregunta general, contesta directo y breve" in system
+    assert "No termines siempre con una pregunta" in system
+    assert "Contexto: grupo de Telegram" in prompt
