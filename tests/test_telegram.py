@@ -240,6 +240,20 @@ def test_group_ambient_question_can_reply_without_private_memory(tmp_path) -> No
     assert "anaprivada" not in str(telegram.sent[-1]["text"]).lower()
 
 
+def test_group_social_question_can_get_ambient_reply(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "como estais", user_id=10))
+
+    assert backend.observations == []
+    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
+    assert backend.ticks[-1]["text"] == "como estais"
+    assert telegram.sent[-1]["chat_id"] == "-100"
+
+
 def test_group_ambient_replies_are_rate_limited(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()

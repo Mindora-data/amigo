@@ -30,6 +30,14 @@ GROUP_AMBIENT_CUES = (
     "alguien sabe",
     "como lo veis",
     "cómo lo veis",
+    "como estais",
+    "cómo estáis",
+    "como vais",
+    "cómo vais",
+    "que tal estais",
+    "qué tal estáis",
+    "que tal vais",
+    "qué tal vais",
     "consejo",
 )
 GROUP_SENSITIVE_CUES = (
