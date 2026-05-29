@@ -81,6 +81,20 @@ GROUP_SENSITIVE_CUES = (
     "direccion",
     "dirección",
 )
+GROUP_NEGATIVE_REACTION_CUES = (
+    "no te metas",
+    "pesado",
+    "calla",
+    "no insistas",
+    "no preguntes",
+)
+GROUP_POSITIVE_REACTION_CUES = (
+    "gracias",
+    "bien visto",
+    "exacto",
+    "eso era",
+    "correcto",
+)
 
 
 def _connect(path: str | Path) -> sqlite3.Connection:
@@ -157,6 +171,25 @@ class TelegramLinkStore:
             )
             """
         )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS telegram_social_decision (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id TEXT NOT NULL,
+                message_id TEXT,
+                sender_id TEXT,
+                text_preview TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                outcome TEXT,
+                outcome_at TEXT
+            )
+            """
+        )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_telegram_social_decision_chat_time ON telegram_social_decision(chat_id, created_at)"
+        )
         self.conn.commit()
 
     def create_code(self, user_id: str, now: datetime | None = None) -> str:
@@ -204,6 +237,48 @@ class TelegramLinkStore:
     def links(self) -> list[dict[str, str]]:
         rows = self.conn.execute("SELECT chat_id, user_id, created_at FROM telegram_link ORDER BY created_at").fetchall()
         return [{"chat_id": str(row["chat_id"]), "user_id": str(row["user_id"]), "created_at": str(row["created_at"])} for row in rows]
+
+    def record_social_decision(
+        self,
+        *,
+        chat_id: int | str,
+        message_id: int | str | None,
+        sender_id: int | str | None,
+        text: str,
+        decision: str,
+        reason: str,
+        now: datetime,
+    ) -> int:
+        cursor = self.conn.execute(
+            """
+            INSERT INTO telegram_social_decision (
+                chat_id, message_id, sender_id, text_preview, decision, reason, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (str(chat_id), None if message_id is None else str(message_id), None if sender_id is None else str(sender_id), text[:180], decision, reason, now.isoformat()),
+        )
+        self.conn.commit()
+        return int(cursor.lastrowid)
+
+    def pending_social_decision(self, chat_id: int | str) -> dict[str, str] | None:
+        row = self.conn.execute(
+            """
+            SELECT * FROM telegram_social_decision
+            WHERE chat_id = ? AND decision = 'reply' AND outcome IS NULL
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (str(chat_id),),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def mark_social_outcome(self, decision_id: int, outcome: str, now: datetime) -> None:
+        self.conn.execute(
+            "UPDATE telegram_social_decision SET outcome = ?, outcome_at = ? WHERE id = ? AND outcome IS NULL",
+            (outcome, now.isoformat(), decision_id),
+        )
+        self.conn.commit()
 
 
 class TelegramAPI(Protocol):
@@ -350,6 +425,7 @@ class TelegramBotService:
         self.offset: int | None = None
         self._group_last_ambient_reply: dict[str, datetime] = {}
         self._group_messages_since_ambient_reply: dict[str, int] = {}
+        self._group_social_scores: dict[str, int] = {}
 
     def _bot_username(self) -> str | None:
         if self.bot_username is None:
@@ -416,26 +492,66 @@ class TelegramBotService:
 
     def _ambient_cooldown_seconds(self, chat_id: int | str) -> int:
         count = self._group_messages_since_ambient_reply.get(str(chat_id), 0)
+        score = self._group_social_scores.get(str(chat_id), 0)
+        if score <= -2:
+            return max(GROUP_AMBIENT_COOLDOWN_SLOW_SECONDS, GROUP_AMBIENT_COOLDOWN_SECONDS * 2)
+        if score >= 2 and count >= 3:
+            return GROUP_AMBIENT_COOLDOWN_FAST_SECONDS
         if count >= 5:
             return GROUP_AMBIENT_COOLDOWN_FAST_SECONDS
         if count <= 1:
             return GROUP_AMBIENT_COOLDOWN_SLOW_SECONDS
         return GROUP_AMBIENT_COOLDOWN_SECONDS
 
-    def _should_reply_ambiently_in_group(self, chat_id: int | str, text: str, now: datetime) -> bool:
+    def _ambient_group_reason(self, chat_id: int | str, text: str, now: datetime) -> tuple[bool, str]:
         lowered = text.lower()
         normalized = _slug(text).replace("-", " ")
         if any(cue in lowered for cue in GROUP_SENSITIVE_CUES):
-            return False
+            return False, "sensitive"
         cues = (*GROUP_AMBIENT_CUES, *GROUP_PARTICIPATION_CUES)
         if not any(cue in lowered or _slug(cue).replace("-", " ") in normalized for cue in cues):
-            return False
+            return False, "no_social_opening"
         last = self._group_last_ambient_reply.get(str(chat_id))
         if last is not None and (now - last).total_seconds() < self._ambient_cooldown_seconds(chat_id):
-            return False
+            return False, "cooldown"
         self._group_last_ambient_reply[str(chat_id)] = now
         self._group_messages_since_ambient_reply[str(chat_id)] = 0
-        return True
+        if "?" in text or "¿" in text or any(cue in normalized for cue in ("alguien sabe", "alguin sabe", "cual es", "quien sabe", "sabeis")):
+            return True, "general_question"
+        if any(_slug(cue).replace("-", " ") in normalized for cue in ("hola", "buenas", "buenos dias", "buenas tardes", "buenas noches")):
+            return True, "greeting"
+        return True, "social_signal"
+
+    def _should_reply_ambiently_in_group(self, chat_id: int | str, text: str, now: datetime) -> bool:
+        should, _ = self._ambient_group_reason(chat_id, text, now)
+        return should
+
+    def _sender_id(self, message: dict[str, Any]) -> str | None:
+        sender = message.get("from") if isinstance(message.get("from"), dict) else {}
+        value = sender.get("id")
+        return None if value is None else str(value)
+
+    def _classify_group_reaction(self, chat_id: int | str, message: dict[str, Any], text: str, now: datetime) -> str | None:
+        pending = self.links.pending_social_decision(chat_id)
+        if not pending:
+            return None
+        sender_id = self._sender_id(message)
+        if sender_id and pending.get("sender_id") == sender_id:
+            return None
+        lowered = text.lower()
+        if any(cue in lowered for cue in GROUP_NEGATIVE_REACTION_CUES):
+            outcome = "negative"
+        elif any(cue in lowered for cue in GROUP_POSITIVE_REACTION_CUES):
+            outcome = "positive"
+        else:
+            outcome = "reacted"
+        self.links.mark_social_outcome(int(pending["id"]), outcome, now)
+        key = str(chat_id)
+        if outcome == "negative":
+            self._group_social_scores[key] = self._group_social_scores.get(key, 0) - 2
+        elif outcome == "positive":
+            self._group_social_scores[key] = self._group_social_scores.get(key, 0) + 1
+        return outcome
 
     def handle_update(self, update: dict[str, Any], now: datetime | None = None) -> None:
         self.offset = int(update.get("update_id", 0)) + 1
@@ -477,12 +593,34 @@ class TelegramBotService:
             return
         target_user_id = self._group_user_id(chat_id)
         context_text = self._with_public_sender_context(message, clean_text)
-        if not directed and not self._should_reply_ambiently_in_group(chat_id, clean_text, now):
+        reaction = self._classify_group_reaction(chat_id, message, clean_text, now)
+        if reaction:
+            self.backend.observe(target_user_id, f"social_feedback:{reaction}", now)
+        should_reply, reason = (True, "directed") if directed else self._ambient_group_reason(chat_id, clean_text, now)
+        if not should_reply:
+            self.links.record_social_decision(
+                chat_id=chat_id,
+                message_id=message.get("message_id"),
+                sender_id=self._sender_id(message),
+                text=clean_text,
+                decision="observe",
+                reason=reason,
+                now=now,
+            )
             self.backend.observe(target_user_id, context_text, now)
             return
         reply = self.backend.tick(target_user_id, context_text, now)
         if reply:
             self.telegram.send_message(chat_id, reply)
+            self.links.record_social_decision(
+                chat_id=chat_id,
+                message_id=message.get("message_id"),
+                sender_id=self._sender_id(message),
+                text=clean_text,
+                decision="reply",
+                reason=reason,
+                now=now,
+            )
 
     def push_proactivity_once(self, now: datetime | None = None) -> int:
         current_time = now or datetime.now(timezone.utc)

@@ -1681,6 +1681,21 @@ def test_group_maturity_is_honest_and_group_scoped(tmp_path) -> None:
     assert state["relation_state"]["group_maturity"]["identity"] == "software_companion_no_human_life"
 
 
+def test_group_social_feedback_updates_group_maturity(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/users/grupo/agents/nino/observe",
+        {"intent": "group_observation", "text": "social_feedback:negative", "now": "2026-05-29T13:00:00+02:00"},
+    )
+    dashboard = _request(app, "GET", "/users/grupo/agents/nino/relationship-dashboard")["dashboard"]
+
+    assert dashboard["group_maturity"]["social_outcomes"]["negative"] == 1
+    assert dashboard["group_maturity"]["last_social_outcome"] == "negative"
+
+
 def test_active_conversation_thread_connects_short_followups(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

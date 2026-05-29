@@ -296,6 +296,49 @@ def test_group_ambient_replies_are_rate_limited(tmp_path) -> None:
     assert len(telegram.sent) == 1
 
 
+def test_group_social_decision_records_reply_and_reason(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=10))
+
+    pending = links.pending_social_decision(-100)
+    assert pending is not None
+    assert pending["decision"] == "reply"
+    assert pending["reason"] == "general_question"
+    assert pending["text_preview"] == "alguien sabe cual es la capital de españa"
+
+
+def test_group_social_decision_records_observe_reason(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "mensaje normal", user_id=10))
+
+    rows = links.conn.execute("SELECT * FROM telegram_social_decision").fetchall()
+    assert len(rows) == 1
+    assert rows[0]["decision"] == "observe"
+    assert rows[0]["reason"] == "no_social_opening"
+
+
+def test_group_reaction_marks_social_outcome_and_observes_feedback(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=10, update_id=1))
+    bot.handle_update(_group_update(-100, "gracias, exacto", user_id=11, update_id=2))
+
+    row = links.conn.execute("SELECT outcome FROM telegram_social_decision WHERE decision = 'reply'").fetchone()
+    assert row["outcome"] == "positive"
+    assert any(item["text"] == "social_feedback:positive" for item in backend.observations)
+
+
 def test_group_ambient_cooldown_shortens_when_group_is_active(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()

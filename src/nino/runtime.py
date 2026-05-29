@@ -879,6 +879,30 @@ GROUP_TONE_MARKERS = {
 }
 
 
+def _apply_group_social_feedback(
+    relation_state: dict[str, Any],
+    text: str,
+    intent: str,
+    now: datetime,
+) -> dict[str, Any]:
+    if not intent.startswith("group_") or not text.startswith("social_feedback:"):
+        return relation_state
+    outcome = text.split(":", 1)[1].strip()
+    relation = dict(relation_state)
+    maturity = dict(relation.get("group_maturity", {}))
+    outcomes = dict(maturity.get("social_outcomes", {}))
+    outcomes[outcome] = int(outcomes.get(outcome, 0)) + 1
+    maturity["social_outcomes"] = outcomes
+    maturity["last_social_outcome"] = outcome
+    maturity["last_social_outcome_at"] = now.isoformat()
+    if outcome == "negative":
+        maturity["participation_guidance"] = "baja iniciativa; interviene solo si te mencionan o si la pregunta general es clara"
+    elif outcome in {"positive", "reacted"}:
+        maturity["participation_guidance"] = "puede participar con brevedad cuando aporte valor claro"
+    relation["group_maturity"] = maturity
+    return relation
+
+
 def _update_group_maturity(
     relation_state: dict[str, Any],
     text: str,
@@ -952,6 +976,8 @@ def _to_group_maturity_dashboard(relation_state: dict[str, Any]) -> dict[str, An
             for key, value in sorted(tone_counts.items(), key=lambda item: int(item[1]), reverse=True)[:8]
         ],
         "shared_history_count": len([item for item in maturity.get("shared_history", []) if isinstance(item, dict)]),
+        "social_outcomes": dict(maturity.get("social_outcomes", {})),
+        "last_social_outcome": maturity.get("last_social_outcome"),
         "last_observed_at": maturity.get("last_observed_at"),
         "privacy": "group_scope_only_no_private_chats_no_human_life",
     }
@@ -965,6 +991,7 @@ def _update_relation_from_percept(
     relation = dict(relation_state)
     intent = str(percept_frame.get("intent", "unknown"))
     text = str(percept_frame.get("text", "")).strip()
+    relation = _apply_group_social_feedback(relation, text, intent, now)
     relation["interaction_count"] = int(relation.get("interaction_count", 0)) + 1
     relation["last_interaction_at"] = now.isoformat()
     feedback = _detect_relationship_feedback(text)

@@ -988,3 +988,33 @@ Tests:
 - El grafo de un usuario no aparece en consultas de otro.
 - No se inventan aristas para entidades desconocidas.
 - El ciclo de sueño reconstruye enlaces desde episodios existentes.
+
+## Sprint 30 - Auditoria social de grupo
+
+Estado: hecho inicial.
+
+Objetivo: que amigo aprenda comportamiento social de grupo a partir de sus
+intervenciones reales: por que habló o calló, y si la intervención recibió reacción,
+silencio o rechazo.
+
+Hechos:
+
+- Telegram crea la tabla `telegram_social_decision` para auditar decisiones sociales
+  por grupo: `reply`/`observe`, motivo (`general_question`, `greeting`,
+  `social_signal`, `cooldown`, `sensitive`, `no_social_opening`, `directed`) y vista
+  corta del mensaje.
+- Las intervenciones quedan pendientes hasta que alguien distinto responde; entonces
+  se marca outcome `positive`, `negative` o `reacted`.
+- Las señales positivas/negativas ajustan un score local de grupo que modula el
+  cooldown: si molesta, baja iniciativa; si recibe buena reacción, puede participar
+  algo más cuando hay actividad.
+- El backend recibe `social_feedback:<outcome>` como observación de grupo y actualiza
+  `group_maturity.social_outcomes`, sin mezclar memoria privada ni subir texto al
+  modelo global.
+
+Tests:
+
+- Una pregunta general registra decision `reply` con motivo `general_question`.
+- Un mensaje normal registra `observe` con motivo `no_social_opening`.
+- Una respuesta posterior del grupo marca outcome positivo y lo observa en backend.
+- El dashboard de madurez grupal muestra `social_outcomes`.
