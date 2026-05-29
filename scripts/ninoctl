@@ -46,8 +46,9 @@ Commands:
   wait-health Wait until GET /health responds or timeout is reached.
   deep-health Request GET /health/deep.
   mode        Request GET /operations/mode.
-  claude      Show Claude configuration status without sending a prompt.
+  claude      Show LLM configuration status without sending a prompt.
   configure-claude Configure Claude in .env.local or macOS Keychain.
+  configure-deepseek Configure DeepSeek in .env.local.
   configure-password Configure the single-user password hash in .env.local.
   disable-claude Remove Claude settings from .env.local and optionally Keychain.
   agents      Request GET /agents.
@@ -82,7 +83,7 @@ Commands:
 
 Environment overrides:
   NINO_ENV_FILE, NINO_HOST, NINO_PORT, NINO_DB_PATH, NINO_SCHEDULER_INTERVAL, NINO_PYTHON
-  NINO_LLM_PROVIDER, NINO_CLAUDE_MODEL, ANTHROPIC_API_KEY
+  NINO_LLM_PROVIDER, NINO_CLAUDE_MODEL, ANTHROPIC_API_KEY, NINO_DEEPSEEK_API_KEY
 
 Local env:
   By default scripts/ninoctl loads $ROOT_DIR/.env.local when it exists.
@@ -328,6 +329,10 @@ post_json() {
 
 configure_claude() {
   "$ROOT_DIR/scripts/nino-configure-claude" "$@"
+}
+
+configure_deepseek() {
+  "$ROOT_DIR/scripts/nino-configure-deepseek" "$@"
 }
 
 configure_password() {
@@ -781,6 +786,7 @@ case "$command" in
   mode) request "/operations/mode" ;;
   claude) request "/operations/claude" ;;
   configure-claude) configure_claude "$@" ;;
+  configure-deepseek) configure_deepseek "$@" ;;
   configure-password) configure_password "$@" ;;
   disable-claude) disable_claude "$@" ;;
   agents) request "/agents" ;;

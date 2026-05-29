@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${NINO_ENV_FILE:-$ROOT_DIR/.env.local}"
+MODEL="${NINO_DEEPSEEK_MODEL:-deepseek-chat}"
+BASE_URL="${NINO_DEEPSEEK_BASE_URL:-https://api.deepseek.com/chat/completions}"
+KEY="${NINO_DEEPSEEK_API_KEY:-${DEEPSEEK_API_KEY:-}}"
+READ_STDIN=false
+
+usage() {
+  cat <<EOF
+Usage: scripts/nino-configure-deepseek [--model MODEL] [--base-url URL] [--key-stdin] [--env-file PATH]
+
+Writes DeepSeek settings to a local untracked env file with mode 600.
+The key is never printed. Prefer --key-stdin or an interactive prompt over
+passing secrets as command-line arguments.
+
+Examples:
+  scripts/ninoctl configure-deepseek
+  printf '%s' "\$NINO_DEEPSEEK_API_KEY" | scripts/ninoctl configure-deepseek --key-stdin
+  scripts/ninoctl configure-deepseek --model deepseek-chat
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model)
+      MODEL="${2:-}"
+      shift 2
+      ;;
+    --base-url)
+      BASE_URL="${2:-}"
+      shift 2
+      ;;
+    --env-file)
+      ENV_FILE="${2:-}"
+      shift 2
+      ;;
+    --key-stdin)
+      READ_STDIN=true
+      shift
+      ;;
+    -h|--help|help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$MODEL" ]]; then
+  echo "Model cannot be empty." >&2
+  exit 2
+fi
+if [[ "$MODEL" == *$'\n'* || "$MODEL" == *$'\r'* || "$MODEL" == *"="* ]]; then
+  echo "Model contains invalid characters." >&2
+  exit 2
+fi
+if [[ -z "$BASE_URL" ]]; then
+  echo "Base URL cannot be empty." >&2
+  exit 2
+fi
+if [[ "$BASE_URL" == *$'\n'* || "$BASE_URL" == *$'\r'* || "$BASE_URL" == *"="* ]]; then
+  echo "Base URL contains invalid characters." >&2
+  exit 2
+fi
+
+if [[ "$READ_STDIN" == true ]]; then
+  IFS= read -r KEY || true
+elif [[ -z "$KEY" ]]; then
+  if [[ -t 0 ]]; then
+    printf "NINO_DEEPSEEK_API_KEY: " >&2
+    stty -echo
+    IFS= read -r KEY || true
+    stty echo
+    printf "\n" >&2
+  else
+    echo "Set NINO_DEEPSEEK_API_KEY or pass --key-stdin." >&2
+    exit 2
+  fi
+fi
+
+if [[ -z "$KEY" ]]; then
+  echo "NINO_DEEPSEEK_API_KEY cannot be empty." >&2
+  exit 2
+fi
+
+mkdir -p "$(dirname "$ENV_FILE")"
+tmp="$(mktemp)"
+if [[ -f "$ENV_FILE" ]]; then
+  grep -vE '^(NINO_LLM_PROVIDER|NINO_CLAUDE_MODEL|ANTHROPIC_API_KEY|NINO_KEYCHAIN_SERVICE|NINO_DEEPSEEK_MODEL|NINO_DEEPSEEK_BASE_URL|NINO_DEEPSEEK_API_KEY|DEEPSEEK_API_KEY)=' "$ENV_FILE" > "$tmp" || true
+fi
+{
+  echo "NINO_LLM_PROVIDER=deepseek"
+  echo "NINO_DEEPSEEK_MODEL=$MODEL"
+  echo "NINO_DEEPSEEK_BASE_URL=$BASE_URL"
+  echo "NINO_DEEPSEEK_API_KEY=$KEY"
+} >> "$tmp"
+mv "$tmp" "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
+echo "DeepSeek configuration written: $ENV_FILE"
+echo "Provider: deepseek"
+echo "Model: $MODEL"
+echo "Base URL: $BASE_URL"
+echo "API key: present"

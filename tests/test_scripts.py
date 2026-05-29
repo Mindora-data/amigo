@@ -579,6 +579,7 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-readiness",
         "nino-product-audit",
         "nino-configure-claude",
+        "nino-configure-deepseek",
         "nino-disable-claude",
         "nino-eval",
         "nino-status",
@@ -618,6 +619,14 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
     subprocess.run([str(scripts_dir / "ninoctl"), "final-audit"], check=True, env=env, capture_output=True, text=True)
     subprocess.run(
         [str(scripts_dir / "ninoctl"), "configure-claude", "--key-stdin", "--model", "claude-test"],
+        check=True,
+        env=env,
+        input="secret\n",
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [str(scripts_dir / "ninoctl"), "configure-deepseek", "--key-stdin", "--model", "deepseek-test"],
         check=True,
         env=env,
         input="secret\n",
@@ -725,6 +734,7 @@ def test_ninoctl_dispatches_readiness_and_audit_commands(tmp_path) -> None:
         "nino-product-audit --require-launchd --require-claude-config --json",
         "nino-product-audit --require-launchd --require-claude-config --require-claude-live --json",
         "nino-configure-claude --key-stdin --model claude-test",
+        "nino-configure-deepseek --key-stdin --model deepseek-test",
         "nino-disable-claude --remove-keychain",
         "nino-eval --json",
         "nino-status --json",
@@ -894,6 +904,45 @@ def test_configure_claude_writes_untracked_env_without_printing_key(tmp_path) ->
     assert "NINO_LLM_PROVIDER=claude" in content
     assert "NINO_CLAUDE_MODEL=claude-test" in content
     assert "new-secret-key" not in result.stdout
+    assert oct(env_file.stat().st_mode & 0o777) == "0o600"
+
+
+def test_configure_deepseek_writes_untracked_env_without_printing_key(tmp_path) -> None:
+    env_file = tmp_path / ".env.local"
+    env_file.write_text(
+        "NINO_PORT=8010\n"
+        "NINO_LLM_PROVIDER=claude\n"
+        "NINO_CLAUDE_MODEL=claude-test\n"
+        "ANTHROPIC_API_KEY=old-key\n"
+        "NINO_KEYCHAIN_SERVICE=nino-anthropic\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            "scripts/nino-configure-deepseek",
+            "--env-file",
+            str(env_file),
+            "--model",
+            "deepseek-test",
+            "--key-stdin",
+        ],
+        check=True,
+        input="deepseek-secret\n",
+        capture_output=True,
+        text=True,
+    )
+    content = env_file.read_text(encoding="utf-8")
+
+    assert "deepseek-secret" in content
+    assert "old-key" not in content
+    assert "ANTHROPIC_API_KEY" not in content
+    assert "NINO_KEYCHAIN_SERVICE" not in content
+    assert "NINO_PORT=8010" in content
+    assert "NINO_LLM_PROVIDER=deepseek" in content
+    assert "NINO_DEEPSEEK_MODEL=deepseek-test" in content
+    assert "NINO_DEEPSEEK_BASE_URL=https://api.deepseek.com/chat/completions" in content
+    assert "deepseek-secret" not in result.stdout
     assert oct(env_file.stat().st_mode & 0o777) == "0o600"
 
 
