@@ -2418,21 +2418,44 @@ class NinoService:
         user_id = _identity_slug(str(payload.get("user_id", "mindora")), "mindora")
         public_agent_id = _identity_slug(str(payload.get("agent_id", "nino")), "nino")
         agent_id = _scoped_agent_id(user_id, public_agent_id)
+        full = str(payload.get("full", "")).strip().lower() in {"1", "true", "yes"}
+        state = self.get_state(agent_id)
+        relation = self.get_relation(agent_id)
+        relation_state = dict(relation.get("relation_state", {}))
+        relation_compact = {
+            key: value
+            for key, value in relation_state.items()
+            if key not in {"audit_log", "response_history"}
+        }
+        relation_compact["audit_log_count"] = len(relation_state.get("audit_log", []))
+        relation_compact["response_history_count"] = len(relation_state.get("response_history", []))
+        conversation = self.conversation(agent_id)
+        conversation["turns"] = conversation.get("turns", [])[-80:]
+        state_summary = {
+            "agent_id": state.get("agent_id"),
+            "tick": state.get("tick"),
+            "energy": state.get("energy"),
+            "drive_vector": state.get("drive_vector"),
+            "active_goals": state.get("active_goals"),
+            "cognitive_time": state.get("cognitive_time"),
+            "updated_at": state.get("updated_at"),
+        }
         return {
             "ok": True,
             "user_id": user_id,
             "agent_id": public_agent_id,
             "scoped_agent_id": agent_id,
+            "full": full,
             "users": self.user_overview(),
             "relationship_dashboard": self.relationship_dashboard(agent_id),
-            "state": self.get_state(agent_id),
+            "state": state if full else state_summary,
             "profile": self.get_profile(agent_id),
             "metrics": self.metrics(agent_id),
-            "relation": self.get_relation(agent_id),
+            "relation": relation if full else {"relation_state": relation_compact},
             "self_model": self.get_self_model(agent_id),
             "world_model": self.get_world_model(agent_id),
             "narrative": self.get_narrative(agent_id),
-            "conversation": self.conversation(agent_id),
+            "conversation": conversation,
             "memory_facts": self.list_memory_facts(agent_id, {"status": "all"}),
             "temporal_events": self.list_temporal_events(agent_id),
             "proactive_inbox": self.proactive_inbox(agent_id),

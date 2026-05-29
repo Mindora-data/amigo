@@ -763,6 +763,8 @@ Hechos:
   vinculados por Telegram y codigos de vinculacion pendientes.
 - `/dashboard-data` incluye `users`: lista por usuario con agentes, episodios,
   interacciones, memoria fria, primera/ultima actividad y `usage_span_seconds`.
+- `/dashboard-data` devuelve vista compacta por defecto para no bloquearse con
+  historiales largos; `full=1` conserva el paquete crudo completo para auditoria.
 - Los usuarios pendientes por codigo Telegram aparecen sin mezclar memoria ni crear
   actividad hasta que hablen de verdad.
 - La privacidad queda expresada como `private_user_scopes_never_shared`.
