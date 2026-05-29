@@ -318,6 +318,12 @@ def build_nino_prompt(
         f"cautela={float(response_style.get('caution', 0.5)):.2f}, "
         f"iniciativa={float(response_style.get('initiative', 0.5)):.2f}"
     )
+    journal_items = relation_state.get("learning_journal", [])
+    learning_journal = "\n".join(
+        f"- {_redact_context(str(item.get('title', 'aprendizaje')))}: {_redact_context(str(item.get('lesson', '')))}"
+        for item in list(journal_items)[:8]
+        if isinstance(item, dict) and item.get("status", "active") == "active" and item.get("lesson")
+    ) or "- No hay aprendizajes editables activos."
     group_maturity = relation_state.get("group_maturity", {})
     group_maturity_text = "- No group maturity context."
     if isinstance(group_maturity, dict) and group_maturity:
@@ -388,6 +394,7 @@ def build_nino_prompt(
         "No seas pesado: pregunta por la vida del usuario con tacto, recuerda lo importante y deja espacio si no quiere hablar. "
         f"{group_response_instruction} "
         "Adapta tu respuesta a las senales relacionales: si hay fallos, correcciones o limites recientes, responde mas breve, humilde y con menos iniciativa; "
+        "Usa la bitacora editable como criterios que el usuario ha moldeado. No la presentes como recuerdos vividos ni como hechos del mundo si solo son pautas de comportamiento. "
         "si hay aciertos, conserva ese tipo de ayuda sin exagerar confianza. "
         "Usa el hilo activo para relacionar frases consecutivas del usuario; si el mensaje actual es corto, pronominal o continua una idea, no lo trates aislado. "
         "No conviertas una hora suelta o una respuesta breve del usuario en recordatorio; solo hay recordatorio si el usuario lo pide explícitamente. "
@@ -409,6 +416,7 @@ def build_nino_prompt(
         f"Consulta temporal: {'sin resultados' if temporal_miss else 'activa' if temporal_query else 'no'}\n"
         f"Preferencias conocidas: {preferences}\n"
         f"Aprendizaje relacional agregado: {relation_learning}\n"
+        f"Bitácora editable de aprendizajes:\n{learning_journal}\n"
         f"Objetivos activos: {', '.join(active_goals) or 'none'}\n"
         f"Etapa de identidad: {self_model.get('identity_stage', 'unknown')}\n"
         f"Conceptos dominantes: {concept_text}\n\n"

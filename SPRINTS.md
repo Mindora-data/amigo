@@ -1039,3 +1039,40 @@ Tests:
 
 - Un reply a humano se observa sin respuesta visible y queda auditado como
   `human_reply_thread`.
+
+## Sprint 32 - Bitacora editable de aprendizajes
+
+Estado: hecho inicial.
+
+Objetivo: que amigo pueda convertir correcciones explicitas y lecciones del usuario
+en una bitacora privada editable, visible en `/dashboard`, para que el usuario pueda
+moldear conocimiento, criterios y comportamiento sin mezclarlo con memoria global.
+
+Hechos:
+
+- Nueva tabla privada `learning_journal_entries`, aislada por `agent_id`.
+- El runtime extrae entradas solo desde señales explicitas de alta confianza:
+  `aprende que...`, `leccion:`, `bitacora:`, `para la bitacora:`, `no vuelvas a...`
+  y reglas tipo `cuando X, haz/responde/actua Y`.
+- El usuario puede listar, añadir y editar entradas desde API:
+  `GET/POST /agents/{agent_id}/learning-journal` y
+  `PATCH /agents/{agent_id}/learning-journal/{entry_id}`, tambien bajo rutas
+  privadas `/users/{user_id}/agents/{agent_id}/...`.
+- `/dashboard-data` devuelve la bitacora y `/dashboard` incluye editor minimo para
+  crear/modificar titulo, texto y estado (`active`, `draft`, `archived`).
+- El prompt recibe solo entradas activas como criterios editables del usuario, no como
+  recuerdos vividos ni hechos del mundo.
+
+Privacidad:
+
+- La bitacora no se copia al modelo global anonimo.
+- Reset de agente borra tambien la bitacora privada.
+- Usuarios distintos no ven ni usan entradas de otros usuarios.
+
+Tests:
+
+- Extraccion automatica desde una leccion explicita.
+- Creacion manual, edicion y presencia en dashboard-data.
+- Aislamiento entre usuarios.
+- El prompt incluye entradas activas.
+- El modelo global no contiene el texto privado de la bitacora.

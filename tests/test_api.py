@@ -112,6 +112,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"/dashboard-data" in dashboard_body
     assert b"Datos completos" in dashboard_body
     assert b"Usuarios y uso" in dashboard_body
+    assert b"Bit\xc3\xa1cora editable" in dashboard_body
+    assert b"/learning-journal" in dashboard_body
     assert b"/internal/cycle" in body
     assert b"Salud" in body
     assert b"Perfil" in body
@@ -1744,8 +1746,52 @@ def test_dashboard_data_returns_complete_local_bundle(tmp_path) -> None:
     assert "world_model" in out
     assert "conversation" in out
     assert "memory_facts" in out
+    assert "learning_journal" in out
     assert "temporal_events" in out
     assert "proactive_inbox" in out
+
+
+def test_learning_journal_auto_manual_edit_and_isolation(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    tick = _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/tick",
+        {"intent": "chat", "text": "aprende que si digo bien varias veces no hace falta seguir preguntando"},
+    )
+    assert len(tick["learning_journal_updates"]) == 1
+
+    journal = _request(app, "GET", "/users/mindora/agents/nino/learning-journal")
+    assert journal["count"] == 1
+    entry = journal["entries"][0]
+    assert "no hace falta seguir preguntando" in entry["lesson"]
+    assert journal["privacy"] == "private_user_scope_editable_not_global"
+
+    created = _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal",
+        {"title": "Tono", "lesson": "Responde con calma y sin alargar por defecto", "tags": ["manual"]},
+    )
+    assert created["ok"] is True
+    patched = _request(
+        app,
+        "PATCH",
+        f"/users/mindora/agents/nino/learning-journal/{created['entry']['entry_id']}",
+        {"lesson": "Responde con calma, breve, y sin alargar por defecto", "status": "active"},
+    )
+    assert patched["entry"]["lesson"] == "Responde con calma, breve, y sin alargar por defecto"
+
+    dashboard = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
+    assert dashboard["learning_journal"]["count"] == 2
+    assert dashboard["relationship_dashboard"]["dashboard"]["learning_journal"]["active_count"] == 2
+
+    other = _request(app, "GET", "/users/maria/agents/nino/learning-journal")
+    assert other["count"] == 0
+
+    global_model = _request(app, "GET", "/operations/global-model")
+    assert "no hace falta seguir preguntando" not in json.dumps(global_model)
 
 
 def test_dashboard_data_counts_telegram_users_and_pending_links(tmp_path) -> None:

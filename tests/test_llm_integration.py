@@ -402,6 +402,24 @@ def test_llm_prompt_includes_recent_turns_cold_facts_and_redacts_sensitive_conte
     assert "pablo@example.com" not in prompt
 
 
+def test_llm_prompt_includes_active_learning_journal_entries() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.add_learning_journal_entry(
+        "agent-llm",
+        {"title": "No insistir", "lesson": "Si el usuario responde bien varias veces, deja espacio."},
+    )
+    runtime.tick("agent-llm", {"intent": "chat", "text": "hola"})
+
+    system = llm.prompts[-1]["system"]
+    prompt = llm.prompts[-1]["user"]
+    assert "bitacora editable" in system
+    assert "Bitácora editable de aprendizajes:" in prompt
+    assert "No insistir" in prompt
+    assert "deja espacio" in prompt
+
+
 def test_llm_prompt_includes_onboarding_profile() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

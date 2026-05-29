@@ -21,6 +21,12 @@ from .contracts import (
 )
 from .llm import LLMClient, build_configured_llm, build_nino_prompt
 from .learning import distill_to_global, pattern_context_for_candidate, starting_prior
+from .learning_journal import (
+    InMemoryLearningJournalStore,
+    LearningJournalEntry,
+    extract_learning_journal_entries,
+    make_manual_learning_entry,
+)
 from .memory import Episode, InMemoryEpisodeStore, MemoryRetriever
 from .memory_graph import InMemoryGraphStore, graph_candidates, ingest_episodes_graph
 from .proactivity import (
@@ -1401,6 +1407,7 @@ class NinoRuntime:
         global_model_store: InMemoryGlobalModelStore | None = None,
         proactive_candidate_store: InMemoryProactiveCandidateStore | None = None,
         graph_store: InMemoryGraphStore | None = None,
+        learning_journal_store: InMemoryLearningJournalStore | None = None,
         llm_client: LLMClient | None = None,
     ) -> None:
         self.state_store = state_store
@@ -1411,6 +1418,7 @@ class NinoRuntime:
         self.consolidator = Consolidator(self.cold_store)
         self.proactive_candidate_store = proactive_candidate_store or InMemoryProactiveCandidateStore()
         self.graph_store = graph_store or InMemoryGraphStore()
+        self.learning_journal_store = learning_journal_store or InMemoryLearningJournalStore()
         self.llm_client = llm_client if llm_client is not None else build_configured_llm()
         self.proactivity = ProactivityEngine(
             self.episode_store,
@@ -1615,6 +1623,8 @@ class NinoRuntime:
             deleted["proactive_candidates"] = self.proactive_candidate_store.delete_for_agent(agent_id)
         if hasattr(self.graph_store, "delete_for_agent"):
             deleted["memory_graph"] = self.graph_store.delete_for_agent(agent_id)
+        if hasattr(self.learning_journal_store, "delete_for_agent"):
+            deleted["learning_journal"] = self.learning_journal_store.delete_for_agent(agent_id)
         return deleted
 
     def list_agents(self) -> list[str]:
@@ -1711,6 +1721,76 @@ class NinoRuntime:
             self.state_store.put(state)
         return {"agent_id": agent_id, "event_id": event_id, "deleted": deleted}
 
+    def list_learning_journal(self, agent_id: str, status: str = "all") -> list[LearningJournalEntry]:
+        return self.learning_journal_store.list_for_agent(agent_id, status=status)
+
+    def add_learning_journal_entry(
+        self,
+        agent_id: str,
+        payload: dict[str, Any],
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        entry = make_manual_learning_entry(
+            agent_id=agent_id,
+            lesson=str(payload.get("lesson", "")),
+            title=str(payload.get("title", "")).strip() or None,
+            tags=[str(tag) for tag in payload.get("tags", ["manual"]) if str(tag).strip()]
+            if isinstance(payload.get("tags", ["manual"]), list)
+            else ["manual"],
+            status=str(payload.get("status", "active")),
+            now=now,
+        )
+        self.learning_journal_store.upsert(entry)
+        state = self.load_or_init_state(agent_id)
+        state.relation_state = _append_audit_event(
+            state.relation_state,
+            now=now,
+            event_type="learning_journal_added",
+            payload={"entry_id": entry.entry_id, "source": entry.source, "status": entry.status},
+        )
+        state.updated_at = now
+        self.state_store.put(state)
+        return {"ok": True, "entry": asdict(entry)}
+
+    def update_learning_journal_entry(
+        self,
+        agent_id: str,
+        entry_id: str,
+        patch: dict[str, Any],
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        entry = self.learning_journal_store.get(agent_id, entry_id)
+        if entry is None:
+            return {"ok": False, "error": "learning_journal_entry_not_found", "entry_id": entry_id}
+        allowed_status = {"active", "draft", "archived"}
+        if "title" in patch:
+            entry.title = str(patch["title"]).strip()[:90] or entry.title
+        if "lesson" in patch:
+            lesson = str(patch["lesson"]).strip()
+            if lesson:
+                entry.lesson = lesson[:500]
+        if "status" in patch:
+            status = str(patch["status"])
+            if status not in allowed_status:
+                return {"ok": False, "error": "invalid_learning_journal_status", "entry_id": entry_id}
+            entry.status = status
+        if "tags" in patch and isinstance(patch["tags"], list):
+            entry.tags = [str(tag)[:40] for tag in patch["tags"] if str(tag).strip()][:6]
+        entry.updated_at = now
+        self.learning_journal_store.upsert(entry)
+        state = self.load_or_init_state(agent_id)
+        state.relation_state = _append_audit_event(
+            state.relation_state,
+            now=now,
+            event_type="learning_journal_updated",
+            payload={"entry_id": entry.entry_id, "status": entry.status},
+        )
+        state.updated_at = now
+        self.state_store.put(state)
+        return {"ok": True, "entry": asdict(entry)}
+
     def retrieve_memory(self, agent_id: str, request: RetrieveRequest) -> RetrieveResponse:
         out = self.retriever.retrieve(agent_id=agent_id, request=request, top_k=5)
         graph = graph_candidates(self.graph_store, self.episode_store, agent_id, request.query_intent, limit=3)
@@ -1792,6 +1872,8 @@ class NinoRuntime:
         proactivity = dict(relation.get("proactivity", {}))
         inbox = self.list_proactive_inbox(agent_id)
         open_questions = list(state.world_model.get("open_questions", []))
+        journal_entries = self.learning_journal_store.list_for_agent(agent_id, status="all")
+        active_journal = [entry for entry in journal_entries if entry.status == "active"]
         return {
             "agent_id": agent_id,
             "privacy": {
@@ -1820,8 +1902,15 @@ class NinoRuntime:
             "memory": {
                 "episode_count": metrics["episode_count"],
                 "cold_memory_count": metrics["cold_memory_count"],
+                "learning_journal_count": len(active_journal),
                 "preference_count": metrics["preference_count"],
                 "dominant_concepts": self.build_narrative(agent_id)["dominant_concepts"],
+            },
+            "learning_journal": {
+                "active_count": len(active_journal),
+                "total_count": len(journal_entries),
+                "recent_entries": [asdict(entry) for entry in journal_entries[:8]],
+                "scope": "private_editable_user_journal",
             },
             "proactivity": {
                 "consent": proactivity.get("consent", "unknown"),
@@ -2720,11 +2809,18 @@ class NinoRuntime:
         llm_provider = self._llm_provider()
         if self.llm_client is not None and text.strip() and not force_policy_response:
             try:
+                prompt_relation_state = {
+                    **state.relation_state,
+                    "learning_journal": [
+                        asdict(entry)
+                        for entry in self.learning_journal_store.list_for_agent(agent_id, status="active")[:8]
+                    ],
+                }
                 prompt = build_nino_prompt(
                     agent_id=agent_id,
                     text=text,
                     intent=intent,
-                    relation_state=state.relation_state,
+                    relation_state=prompt_relation_state,
                     self_model=state.self_model,
                     world_model=state.world_model,
                     active_goals=list(state.active_goals),
@@ -2756,6 +2852,16 @@ class NinoRuntime:
             confidence=_clamp01(float(percept_frame.get("confidence", 0.8))),
         )
         self.episode_store.append(episode)
+        journal_updates: list[LearningJournalEntry] = []
+        if text.strip() and not intent.startswith("onboarding:"):
+            journal_updates = extract_learning_journal_entries(
+                text,
+                agent_id=agent_id,
+                source_episode_id=episode.episode_id,
+                now=now,
+            )
+            for entry in journal_updates:
+                self.learning_journal_store.upsert(entry)
         if text.strip():
             for candidate in extract_followups(text, now, self.llm_client):
                 candidate["source_ref"] = episode.episode_id
@@ -2808,6 +2914,7 @@ class NinoRuntime:
                 "llm_error": llm_error,
                 "retrieved_memory_count": len(retrieved.memory_candidates),
                 "auto_consolidated_count": len(auto_consolidation["cold_memory_updates"]),
+                "learning_journal_updates": len(journal_updates),
             },
         )
         _regulate_drives(state, percept_frame)
@@ -2825,6 +2932,7 @@ class NinoRuntime:
             "retrieved_memory_count": len(retrieved.memory_candidates),
             "auto_consolidated_count": len(auto_consolidation["cold_memory_updates"]),
             "auto_consolidation": auto_consolidation,
+            "learning_journal_updates": [asdict(entry) for entry in journal_updates],
             "maturity": state.cognitive_time["maturity"],
             "active_goals": list(state.active_goals),
             "llm_provider": llm_provider,

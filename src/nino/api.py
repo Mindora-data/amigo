@@ -1828,7 +1828,8 @@ DASHBOARD_HTML = """<!doctype html>
     h1 { margin: 0; font-size: 24px; letter-spacing: 0; }
     .controls { display: grid; grid-template-columns: 160px 160px auto; gap: 8px; align-items: end; }
     label { display: grid; gap: 4px; font-size: 12px; color: #53646d; }
-    input, button { font: inherit; border: 1px solid #b9c5cc; border-radius: 6px; padding: 9px 10px; }
+    input, textarea, select, button { font: inherit; border: 1px solid #b9c5cc; border-radius: 6px; padding: 9px 10px; }
+    textarea { resize: vertical; min-height: 72px; width: 100%; }
     button { background: #1f6f78; color: #fff; border-color: #1f6f78; cursor: pointer; min-height: 38px; }
     .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .panel { background: #fff; border: 1px solid #cfd8df; border-radius: 8px; padding: 14px; }
@@ -1837,6 +1838,9 @@ DASHBOARD_HTML = """<!doctype html>
     .metric strong { display: block; margin-top: 4px; font-size: 24px; }
     pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.45; max-height: 360px; overflow: auto; }
     .wide { grid-column: 1 / -1; }
+    .journal-list { display: grid; gap: 10px; }
+    .journal-entry { display: grid; gap: 8px; border-top: 1px solid #e1e7eb; padding-top: 10px; }
+    .journal-row { display: grid; grid-template-columns: 1fr 130px auto; gap: 8px; align-items: start; }
     .muted { color: #667781; font-size: 13px; }
     @media (max-width: 720px) {
       body { padding: 14px; }
@@ -1873,6 +1877,15 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel"><h2>Proactividad</h2><pre id="proactivity">{}</pre></div>
       <div class="panel"><h2>Hilo activo</h2><pre id="thread">{}</pre></div>
       <div class="panel"><h2>Señales recientes</h2><pre id="signals">[]</pre></div>
+      <div class="panel wide"><h2>Bitácora editable</h2>
+        <div class="journal-row">
+          <input id="journalTitle" placeholder="Título">
+          <select id="journalStatus"><option value="active">active</option><option value="draft">draft</option><option value="archived">archived</option></select>
+          <button id="journalAdd">Añadir</button>
+        </div>
+        <textarea id="journalLesson" placeholder="Aprendizaje, pauta o comportamiento que quieres moldear"></textarea>
+        <div id="journalList" class="journal-list"></div>
+      </div>
       <div class="panel"><h2>Perfil</h2><pre id="profile">{}</pre></div>
       <div class="panel"><h2>Self</h2><pre id="selfModel">{}</pre></div>
       <div class="panel"><h2>Mundo</h2><pre id="worldModel">{}</pre></div>
@@ -1884,15 +1897,57 @@ DASHBOARD_HTML = """<!doctype html>
     const $ = (id) => document.getElementById(id);
     const fmt = (value) => Number.isFinite(Number(value)) ? Number(value).toFixed(3).replace(/0+$/, "").replace(/[.]$/, "") : "0";
     const print = (id, value) => { $(id).textContent = JSON.stringify(value, null, 2); };
+    let lastJournal = [];
+    async function requestJson(path, options = {}) {
+      const res = await fetch(path, {cache: "no-store", credentials: "same-origin", ...options});
+      const out = await res.json();
+      if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
+      return out;
+    }
+    function currentAgentPath(suffix) {
+      const user = ($("userId").value || "mindora").trim();
+      const agent = ($("agentId").value || "nino").trim();
+      return `/users/${encodeURIComponent(user)}/agents/${encodeURIComponent(agent)}${suffix}`;
+    }
+    function renderJournal(entries) {
+      lastJournal = entries || [];
+      $("journalList").replaceChildren(...lastJournal.map((entry) => {
+        const wrap = document.createElement("div");
+        wrap.className = "journal-entry";
+        const row = document.createElement("div");
+        row.className = "journal-row";
+        const title = document.createElement("input");
+        title.value = entry.title || "";
+        const status = document.createElement("select");
+        for (const value of ["active", "draft", "archived"]) {
+          const opt = document.createElement("option");
+          opt.value = value; opt.textContent = value; opt.selected = value === entry.status;
+          status.appendChild(opt);
+        }
+        const save = document.createElement("button");
+        save.textContent = "Guardar";
+        const lesson = document.createElement("textarea");
+        lesson.value = entry.lesson || "";
+        save.onclick = async () => {
+          await requestJson(currentAgentPath(`/learning-journal/${encodeURIComponent(entry.entry_id)}`), {
+            method: "PATCH",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({title: title.value, lesson: lesson.value, status: status.value})
+          });
+          await loadDashboard();
+        };
+        row.append(title, status, save);
+        wrap.append(row, lesson);
+        return wrap;
+      }));
+    }
     async function loadDashboard() {
       const user = ($("userId").value || "mindora").trim();
       const agent = ($("agentId").value || "nino").trim();
       localStorage.setItem("nino_user_id", user);
       localStorage.setItem("nino_agent_id", agent);
       const path = `/dashboard-data?user_id=${encodeURIComponent(user)}&agent_id=${encodeURIComponent(agent)}`;
-      const res = await fetch(path, {cache: "no-store", credentials: "same-origin"});
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const out = await res.json();
+      const out = await requestJson(path);
       const dash = out.relationship_dashboard?.dashboard || out.dashboard || {};
       const counts = dash.relationship_learning?.counts || {};
       $("maturity").textContent = fmt(dash.maturity?.maturity);
@@ -1909,6 +1964,7 @@ DASHBOARD_HTML = """<!doctype html>
       print("proactivity", dash.proactivity || {});
       print("thread", dash.active_conversation_thread || {});
       print("signals", dash.relationship_learning?.recent_signals || []);
+      renderJournal(out.learning_journal?.entries || dash.learning_journal?.recent_entries || []);
       print("profile", out.profile || {});
       print("selfModel", out.self_model || {});
       print("worldModel", out.world_model || {});
@@ -1917,6 +1973,16 @@ DASHBOARD_HTML = """<!doctype html>
       $("status").textContent = `Actualizado: ${new Date().toLocaleTimeString()}`;
     }
     $("refresh").onclick = () => loadDashboard().catch((err) => $("status").textContent = `Error: ${err.message}`);
+    $("journalAdd").onclick = async () => {
+      await requestJson(currentAgentPath("/learning-journal"), {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({title: $("journalTitle").value, lesson: $("journalLesson").value, status: $("journalStatus").value, tags: ["manual"]})
+      });
+      $("journalTitle").value = "";
+      $("journalLesson").value = "";
+      await loadDashboard();
+    };
     $("userId").value = localStorage.getItem("nino_user_id") || $("userId").value;
     $("agentId").value = localStorage.getItem("nino_agent_id") || $("agentId").value;
     loadDashboard().catch((err) => $("status").textContent = `Error: ${err.message}`);
@@ -1969,6 +2035,9 @@ API_ENDPOINTS = [
     "GET /users/{user_id}/agents/{agent_id}/state",
     "GET /users/{user_id}/agents/{agent_id}/conversation",
     "GET /users/{user_id}/agents/{agent_id}/memory/facts",
+    "GET /users/{user_id}/agents/{agent_id}/learning-journal",
+    "POST /users/{user_id}/agents/{agent_id}/learning-journal",
+    "PATCH /users/{user_id}/agents/{agent_id}/learning-journal/{entry_id}",
     "POST /users/{user_id}/agents/{agent_id}/memory/search",
     "GET /users/{user_id}/agents/{agent_id}/profile",
     "GET /users/{user_id}/agents/{agent_id}/metrics",
@@ -1983,6 +2052,9 @@ API_ENDPOINTS = [
     "GET /agents/{agent_id}/llm/status",
     "POST /agents/{agent_id}/llm/probe",
     "GET /agents/{agent_id}/memory/facts",
+    "GET /agents/{agent_id}/learning-journal",
+    "POST /agents/{agent_id}/learning-journal",
+    "PATCH /agents/{agent_id}/learning-journal/{entry_id}",
     "DELETE /agents/{agent_id}/memory/facts/{fact_id}",
     "GET /agents/{agent_id}/temporal-events",
     "PATCH /agents/{agent_id}/temporal-events/{event_id}",
@@ -2184,7 +2256,7 @@ def _openapi_document() -> dict[str, Any]:
         if path == "/app":
             continue
         parameters = []
-        for name in ("user_id", "agent_id", "item_id", "episode_id", "fact_id", "event_id", "report_name"):
+        for name in ("user_id", "agent_id", "item_id", "episode_id", "fact_id", "event_id", "entry_id", "report_name"):
             if "{" + name + "}" in path:
                 parameters.append({
                     "name": name,
@@ -2476,6 +2548,7 @@ class NinoService:
             "narrative": self.get_narrative(agent_id),
             "conversation": conversation,
             "memory_facts": self.list_memory_facts(agent_id, {"status": "all"}),
+            "learning_journal": self.list_learning_journal(agent_id, {"status": "all"}),
             "temporal_events": self.list_temporal_events(agent_id),
             "proactive_inbox": self.proactive_inbox(agent_id),
             "llm": self.llm_status(agent_id),
@@ -3546,6 +3619,23 @@ class NinoService:
     def relationship_dashboard(self, agent_id: str) -> dict[str, Any]:
         return {"dashboard": _to_jsonable(self.runtime.relationship_dashboard(agent_id))}
 
+    def list_learning_journal(self, agent_id: str, filters: dict[str, Any] | None = None) -> dict[str, Any]:
+        filters = filters or {}
+        status = str(filters.get("status", "all") or "all")
+        entries = self.runtime.list_learning_journal(agent_id, status=status)
+        return {
+            "entries": _to_jsonable(entries),
+            "count": len(entries),
+            "status": status,
+            "privacy": "private_user_scope_editable_not_global",
+        }
+
+    def add_learning_journal_entry(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.add_learning_journal_entry(agent_id, payload))
+
+    def update_learning_journal_entry(self, agent_id: str, entry_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.update_learning_journal_entry(agent_id, entry_id, payload))
+
     def proactive_inbox(self, agent_id: str) -> dict[str, Any]:
         return {"inbox": _to_jsonable(self.runtime.list_proactive_inbox(agent_id))}
 
@@ -3831,6 +3921,12 @@ class NinoHttpApp:
             return "200 OK", self.service.delete_episode(agent_id, tail[1])
         if method == "GET" and tail == ["memory", "facts"]:
             return "200 OK", self.service.list_memory_facts(agent_id, payload)
+        if method == "GET" and tail == ["learning-journal"]:
+            return "200 OK", self.service.list_learning_journal(agent_id, payload)
+        if method == "POST" and tail == ["learning-journal"]:
+            return "200 OK", self.service.add_learning_journal_entry(agent_id, payload)
+        if method == "PATCH" and len(tail) == 2 and tail[0] == "learning-journal":
+            return "200 OK", self.service.update_learning_journal_entry(agent_id, tail[1], payload)
         if method == "GET" and tail == ["public-context"]:
             return "200 OK", self.service.public_context(agent_id)
         if method == "DELETE" and len(tail) == 3 and tail[:2] == ["memory", "facts"]:

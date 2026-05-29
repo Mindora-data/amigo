@@ -7,6 +7,7 @@ import sqlite3
 
 from .consolidation import MemoryFact
 from .contracts import AgentState
+from .learning_journal import LearningJournalEntry
 from .memory import Episode
 from .memory_graph import GraphEdge, GraphNode
 from .proactivity import InMemoryProactiveCandidateStore
@@ -442,6 +443,106 @@ class SQLiteGraphStore:
         return edge_cursor.rowcount + node_cursor.rowcount
 
 
+class SQLiteLearningJournalStore:
+    def __init__(self, path: str | Path) -> None:
+        self.conn = _connect(path)
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS learning_journal_entries (
+                entry_id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                lesson TEXT NOT NULL,
+                source TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                source_episode_id TEXT,
+                tags_json TEXT NOT NULL
+            )
+            """
+        )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_learning_journal_agent_status ON learning_journal_entries(agent_id, status, updated_at)"
+        )
+        self.conn.commit()
+
+    def upsert(self, entry: LearningJournalEntry) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO learning_journal_entries (
+                entry_id, agent_id, title, lesson, source, status,
+                created_at, updated_at, source_episode_id, tags_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(entry_id) DO UPDATE SET
+                title = excluded.title,
+                lesson = excluded.lesson,
+                source = excluded.source,
+                status = excluded.status,
+                updated_at = excluded.updated_at,
+                source_episode_id = excluded.source_episode_id,
+                tags_json = excluded.tags_json
+            """,
+            (
+                entry.entry_id,
+                entry.agent_id,
+                entry.title,
+                entry.lesson,
+                entry.source,
+                entry.status,
+                entry.created_at.isoformat(),
+                entry.updated_at.isoformat(),
+                entry.source_episode_id,
+                json.dumps(entry.tags or [], sort_keys=True),
+            ),
+        )
+        self.conn.commit()
+
+    def _row_to_entry(self, row: sqlite3.Row) -> LearningJournalEntry:
+        return LearningJournalEntry(
+            entry_id=row["entry_id"],
+            agent_id=row["agent_id"],
+            title=row["title"],
+            lesson=row["lesson"],
+            source=row["source"],
+            status=row["status"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+            source_episode_id=row["source_episode_id"],
+            tags=json.loads(row["tags_json"]),
+        )
+
+    def list_for_agent(self, agent_id: str, status: str = "all") -> list[LearningJournalEntry]:
+        if status == "all":
+            rows = self.conn.execute(
+                "SELECT * FROM learning_journal_entries WHERE agent_id = ? ORDER BY updated_at DESC, entry_id",
+                (agent_id,),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                """
+                SELECT * FROM learning_journal_entries
+                WHERE agent_id = ? AND status = ?
+                ORDER BY updated_at DESC, entry_id
+                """,
+                (agent_id, status),
+            ).fetchall()
+        return [self._row_to_entry(row) for row in rows]
+
+    def get(self, agent_id: str, entry_id: str) -> LearningJournalEntry | None:
+        row = self.conn.execute(
+            "SELECT * FROM learning_journal_entries WHERE agent_id = ? AND entry_id = ?",
+            (agent_id, entry_id),
+        ).fetchone()
+        return self._row_to_entry(row) if row is not None else None
+
+    def delete_for_agent(self, agent_id: str) -> int:
+        cursor = self.conn.execute("DELETE FROM learning_journal_entries WHERE agent_id = ?", (agent_id,))
+        self.conn.commit()
+        return cursor.rowcount
+
+
 class SQLiteGlobalModelStore:
     def __init__(self, path: str | Path) -> None:
         self.conn = _connect(path)
@@ -764,4 +865,5 @@ def create_persistent_runtime(path: str | Path) -> NinoRuntime:
         global_model_store=SQLiteGlobalModelStore(db_path),
         proactive_candidate_store=SQLiteProactiveCandidateStore(db_path),
         graph_store=SQLiteGraphStore(db_path),
+        learning_journal_store=SQLiteLearningJournalStore(db_path),
     )
