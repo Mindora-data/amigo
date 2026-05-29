@@ -1841,6 +1841,9 @@ DASHBOARD_HTML = """<!doctype html>
     .journal-list { display: grid; gap: 10px; }
     .journal-entry { display: grid; gap: 8px; border-top: 1px solid #e1e7eb; padding-top: 10px; }
     .journal-row { display: grid; grid-template-columns: 1fr 130px 150px auto; gap: 8px; align-items: start; }
+    .stance-list { display: grid; gap: 12px; }
+    .stance-entry { display: grid; gap: 8px; border-top: 1px solid #e1e7eb; padding-top: 10px; }
+    .stance-row { display: grid; grid-template-columns: 150px 1fr auto; gap: 8px; align-items: start; }
     .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
     .tab { background: #eef3f4; color: #223036; border-color: #c7d4d8; min-height: 34px; }
     .tab.active { background: #1f6f78; color: #fff; border-color: #1f6f78; }
@@ -1893,6 +1896,7 @@ DASHBOARD_HTML = """<!doctype html>
         <div id="journalTabs" class="tabs"></div>
         <div id="journalList" class="journal-list"></div>
       </div>
+      <div class="panel wide"><h2>Opiniones derivadas</h2><div id="stanceList" class="stance-list"></div></div>
       <div class="panel"><h2>Perfil</h2><pre id="profile">{}</pre></div>
       <div class="panel"><h2>Self</h2><pre id="selfModel">{}</pre></div>
       <div class="panel"><h2>Mundo</h2><pre id="worldModel">{}</pre></div>
@@ -1994,6 +1998,36 @@ DASHBOARD_HTML = """<!doctype html>
         return wrap;
       }));
     }
+    function renderStances(stances) {
+      $("stanceList").replaceChildren(...(stances || []).map((stance) => {
+        const wrap = document.createElement("div");
+        wrap.className = "stance-entry";
+        const row = document.createElement("div");
+        row.className = "stance-row";
+        const label = document.createElement("div");
+        label.textContent = `${stance.theme} · ${stance.source}`;
+        label.className = "muted";
+        const text = document.createElement("textarea");
+        text.value = stance.text || "";
+        text.placeholder = "Postura derivada pendiente de evidencia";
+        const save = document.createElement("button");
+        save.textContent = "Guardar";
+        save.onclick = async () => {
+          await requestJson(currentAgentPath(`/learning-stances/${encodeURIComponent(stance.theme)}`), {
+            method: "PATCH",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({text: text.value, active: Boolean(text.value.trim())})
+          });
+          await loadDashboard();
+        };
+        const meta = document.createElement("div");
+        meta.className = "muted";
+        meta.textContent = `evidencias: ${stance.evidence_count || 0} · ${(stance.evidence_titles || []).join(", ")}`;
+        row.append(label, text, save);
+        wrap.append(row, meta);
+        return wrap;
+      }));
+    }
     async function loadDashboard() {
       const user = ($("userId").value || "mindora").trim();
       const agent = ($("agentId").value || "nino").trim();
@@ -2020,6 +2054,7 @@ DASHBOARD_HTML = """<!doctype html>
       print("thread", dash.active_conversation_thread || {});
       print("signals", dash.relationship_learning?.recent_signals || []);
       renderJournal(out.learning_journal?.entries || dash.learning_journal?.recent_entries || []);
+      renderStances(out.learning_stances?.stances || dash.learning_stances?.stances || []);
       print("profile", out.profile || {});
       print("selfModel", out.self_model || {});
       print("worldModel", out.world_model || {});
@@ -2093,6 +2128,8 @@ API_ENDPOINTS = [
     "GET /users/{user_id}/agents/{agent_id}/learning-journal",
     "POST /users/{user_id}/agents/{agent_id}/learning-journal",
     "PATCH /users/{user_id}/agents/{agent_id}/learning-journal/{entry_id}",
+    "GET /users/{user_id}/agents/{agent_id}/learning-stances",
+    "PATCH /users/{user_id}/agents/{agent_id}/learning-stances/{theme}",
     "POST /users/{user_id}/agents/{agent_id}/memory/search",
     "GET /users/{user_id}/agents/{agent_id}/profile",
     "GET /users/{user_id}/agents/{agent_id}/metrics",
@@ -2110,6 +2147,8 @@ API_ENDPOINTS = [
     "GET /agents/{agent_id}/learning-journal",
     "POST /agents/{agent_id}/learning-journal",
     "PATCH /agents/{agent_id}/learning-journal/{entry_id}",
+    "GET /agents/{agent_id}/learning-stances",
+    "PATCH /agents/{agent_id}/learning-stances/{theme}",
     "DELETE /agents/{agent_id}/memory/facts/{fact_id}",
     "GET /agents/{agent_id}/temporal-events",
     "PATCH /agents/{agent_id}/temporal-events/{event_id}",
@@ -2311,7 +2350,7 @@ def _openapi_document() -> dict[str, Any]:
         if path == "/app":
             continue
         parameters = []
-        for name in ("user_id", "agent_id", "item_id", "episode_id", "fact_id", "event_id", "entry_id", "report_name"):
+        for name in ("user_id", "agent_id", "item_id", "episode_id", "fact_id", "event_id", "entry_id", "theme", "report_name"):
             if "{" + name + "}" in path:
                 parameters.append({
                     "name": name,
@@ -2604,6 +2643,7 @@ class NinoService:
             "conversation": conversation,
             "memory_facts": self.list_memory_facts(agent_id, {"status": "all"}),
             "learning_journal": self.list_learning_journal(agent_id, {"status": "all"}),
+            "learning_stances": self.learning_stances(agent_id),
             "temporal_events": self.list_temporal_events(agent_id),
             "proactive_inbox": self.proactive_inbox(agent_id),
             "llm": self.llm_status(agent_id),
@@ -3691,6 +3731,12 @@ class NinoService:
     def update_learning_journal_entry(self, agent_id: str, entry_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.update_learning_journal_entry(agent_id, entry_id, payload))
 
+    def learning_stances(self, agent_id: str) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.learning_stances(agent_id))
+
+    def update_learning_stance(self, agent_id: str, theme: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.update_learning_stance(agent_id, theme, payload))
+
     def proactive_inbox(self, agent_id: str) -> dict[str, Any]:
         return {"inbox": _to_jsonable(self.runtime.list_proactive_inbox(agent_id))}
 
@@ -3982,6 +4028,10 @@ class NinoHttpApp:
             return "200 OK", self.service.add_learning_journal_entry(agent_id, payload)
         if method == "PATCH" and len(tail) == 2 and tail[0] == "learning-journal":
             return "200 OK", self.service.update_learning_journal_entry(agent_id, tail[1], payload)
+        if method == "GET" and tail == ["learning-stances"]:
+            return "200 OK", self.service.learning_stances(agent_id)
+        if method == "PATCH" and len(tail) == 2 and tail[0] == "learning-stances":
+            return "200 OK", self.service.update_learning_stance(agent_id, tail[1], payload)
         if method == "GET" and tail == ["public-context"]:
             return "200 OK", self.service.public_context(agent_id)
         if method == "DELETE" and len(tail) == 3 and tail[:2] == ["memory", "facts"]:

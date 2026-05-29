@@ -420,6 +420,24 @@ def test_llm_prompt_includes_active_learning_journal_entries() -> None:
     assert "deja espacio" in prompt
 
 
+def test_llm_prompt_includes_derived_learning_stances() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.add_learning_journal_entry(
+        "agent-llm",
+        {"title": "John Byrne", "lesson": "Es mi autor favorito de comics", "tags": ["cultura"]},
+    )
+    runtime.tick("agent-llm", {"intent": "chat", "text": "qué opinas de Superman?"})
+
+    system = llm.prompts[-1]["system"]
+    prompt = llm.prompts[-1]["user"]
+    assert "por lo que he aprendido contigo" in system
+    assert "Posturas derivadas activas:" in prompt
+    assert "cultura" in prompt
+    assert "Por lo que he aprendido contigo" in prompt
+
+
 def test_llm_prompt_includes_onboarding_profile() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

@@ -22,8 +22,10 @@ from .contracts import (
 from .llm import LLMClient, build_configured_llm, build_nino_prompt
 from .learning import distill_to_global, pattern_context_for_candidate, starting_prior
 from .learning_journal import (
+    THEMES,
     InMemoryLearningJournalStore,
     LearningJournalEntry,
+    classify_learning_theme,
     extract_detected_learning_journal_entries,
     extract_learning_journal_entries,
     make_manual_learning_entry,
@@ -1399,6 +1401,31 @@ def _permission_decision(relation_state: dict[str, Any], action: dict[str, Any])
         "reason": "permission_allowed" if allowed else "permission_denied",
     }
 
+
+def _derive_stance_text(theme: str, entries: list[LearningJournalEntry]) -> str:
+    titles = [entry.title.strip() for entry in entries if entry.title.strip()][:3]
+    lessons = " ".join(entry.lesson.lower() for entry in entries[:5])
+    if theme == "cultura":
+        if "comic" in lessons or "cómic" in lessons or "superman" in lessons:
+            return (
+                "Por lo que he aprendido contigo, mi criterio en cultura tira hacia obras con autores reconocibles, "
+                "personajes bien construidos y continuidad emocional; no solo datos sueltos."
+            )
+        return "Por lo que he aprendido contigo, en cultura valoro referencias concretas y criterio, no respuestas neutras."
+    if theme == "amistad":
+        return "Por lo que he aprendido contigo, una buena amistad aqui significa confianza, discrecion y presencia sin invadir."
+    if theme == "trabajo":
+        return "Por lo que he aprendido contigo, en trabajo conviene ser claro, concreto y avanzar por pasos verificables."
+    if theme == "comportamiento":
+        return "Por lo que he aprendido contigo, debo responder con naturalidad, no insistir de mas y corregir rapido cuando me equivoco."
+    if theme == "salud":
+        return "Por lo que he aprendido contigo, los temas de bienestar piden tacto, calma y nada de dramatizar."
+    if theme == "vida":
+        return "Por lo que he aprendido contigo, las cosas de vida importan por el contexto y la continuidad, no por sacar charla a toda costa."
+    joined = "; ".join(titles)
+    return f"Por lo que he aprendido contigo, mi postura en este tema se apoya en: {joined}." if joined else ""
+
+
 class NinoRuntime:
     def __init__(
         self,
@@ -1795,6 +1822,70 @@ class NinoRuntime:
         self.state_store.put(state)
         return {"ok": True, "entry": asdict(entry)}
 
+    def learning_stances(self, agent_id: str) -> dict[str, Any]:
+        state = self.load_or_init_state(agent_id)
+        edited = dict(state.relation_state.get("learning_stances", {}))
+        active_entries = self.learning_journal_store.list_for_agent(agent_id, status="active")
+        by_theme: dict[str, list[LearningJournalEntry]] = {theme: [] for theme in sorted(THEMES)}
+        for entry in active_entries:
+            theme = classify_learning_theme(entry.title, entry.lesson, entry.tags)
+            by_theme.setdefault(theme, []).append(entry)
+        stances: list[dict[str, Any]] = []
+        for theme in ["vida", "cultura", "amistad", "trabajo", "comportamiento", "salud", "otros"]:
+            override = edited.get(theme) if isinstance(edited.get(theme), dict) else {}
+            entries = by_theme.get(theme, [])
+            stance_text = str(override.get("text", "")).strip()
+            source = "edited" if stance_text else "derived"
+            if not stance_text and entries:
+                stance_text = _derive_stance_text(theme, entries)
+            stances.append(
+                {
+                    "theme": theme,
+                    "text": stance_text,
+                    "source": source,
+                    "active": bool(override.get("active", True)) and bool(stance_text),
+                    "evidence_count": len(entries),
+                    "evidence_titles": [entry.title for entry in entries[:5]],
+                    "updated_at": str(override.get("updated_at", "")),
+                }
+            )
+        return {
+            "agent_id": agent_id,
+            "stances": stances,
+            "privacy": "private_user_scope_derived_from_active_learning_journal",
+        }
+
+    def update_learning_stance(
+        self,
+        agent_id: str,
+        theme: str,
+        payload: dict[str, Any],
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        if theme not in THEMES:
+            return {"ok": False, "error": "invalid_learning_stance_theme", "theme": theme}
+        now = now or datetime.now(timezone.utc)
+        state = self.load_or_init_state(agent_id)
+        stances = dict(state.relation_state.get("learning_stances", {}))
+        text = str(payload.get("text", "")).strip()[:700]
+        active = bool(payload.get("active", True))
+        if not text and not active:
+            stances[theme] = {"text": "", "active": False, "updated_at": now.isoformat()}
+        elif text:
+            stances[theme] = {"text": text, "active": active, "updated_at": now.isoformat()}
+        else:
+            stances.pop(theme, None)
+        state.relation_state = {**state.relation_state, "learning_stances": stances}
+        state.relation_state = _append_audit_event(
+            state.relation_state,
+            now=now,
+            event_type="learning_stance_updated",
+            payload={"theme": theme, "active": active, "edited": bool(text)},
+        )
+        state.updated_at = now
+        self.state_store.put(state)
+        return {"ok": True, "stance": self.learning_stances(agent_id)}
+
     def retrieve_memory(self, agent_id: str, request: RetrieveRequest) -> RetrieveResponse:
         out = self.retriever.retrieve(agent_id=agent_id, request=request, top_k=5)
         graph = graph_candidates(self.graph_store, self.episode_store, agent_id, request.query_intent, limit=3)
@@ -1918,6 +2009,7 @@ class NinoRuntime:
                 "recent_entries": [asdict(entry) for entry in journal_entries[:8]],
                 "scope": "private_editable_user_journal",
             },
+            "learning_stances": self.learning_stances(agent_id),
             "proactivity": {
                 "consent": proactivity.get("consent", "unknown"),
                 "pending_inbox_count": len([item for item in inbox if not item.get("delivered", False)]),
@@ -2821,6 +2913,7 @@ class NinoRuntime:
                         asdict(entry)
                         for entry in self.learning_journal_store.list_for_agent(agent_id, status="active")[:8]
                     ],
+                    "learning_stances": self.learning_stances(agent_id)["stances"],
                 }
                 prompt = build_nino_prompt(
                     agent_id=agent_id,

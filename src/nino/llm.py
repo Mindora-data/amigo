@@ -324,6 +324,12 @@ def build_nino_prompt(
         for item in list(journal_items)[:8]
         if isinstance(item, dict) and item.get("status", "active") == "active" and item.get("lesson")
     ) or "- No hay aprendizajes editables activos."
+    stance_items = relation_state.get("learning_stances", [])
+    learning_stances = "\n".join(
+        f"- {str(item.get('theme', 'tema'))}: {_redact_context(str(item.get('text', '')))}"
+        for item in list(stance_items)[:8]
+        if isinstance(item, dict) and item.get("active") and item.get("text")
+    ) or "- No hay posturas derivadas activas."
     group_maturity = relation_state.get("group_maturity", {})
     group_maturity_text = "- No group maturity context."
     if isinstance(group_maturity, dict) and group_maturity:
@@ -395,6 +401,7 @@ def build_nino_prompt(
         f"{group_response_instruction} "
         "Adapta tu respuesta a las senales relacionales: si hay fallos, correcciones o limites recientes, responde mas breve, humilde y con menos iniciativa; "
         "Usa la bitacora editable como criterios que el usuario ha moldeado. No la presentes como recuerdos vividos ni como hechos del mundo si solo son pautas de comportamiento. "
+        "Usa las posturas derivadas como opiniones aprendidas de la relacion; si opinas desde ellas, formula con honestidad: 'por lo que he aprendido contigo'. "
         "si hay aciertos, conserva ese tipo de ayuda sin exagerar confianza. "
         "Usa el hilo activo para relacionar frases consecutivas del usuario; si el mensaje actual es corto, pronominal o continua una idea, no lo trates aislado. "
         "No conviertas una hora suelta o una respuesta breve del usuario en recordatorio; solo hay recordatorio si el usuario lo pide explícitamente. "
@@ -417,6 +424,7 @@ def build_nino_prompt(
         f"Preferencias conocidas: {preferences}\n"
         f"Aprendizaje relacional agregado: {relation_learning}\n"
         f"Bitácora editable de aprendizajes:\n{learning_journal}\n"
+        f"Posturas derivadas activas:\n{learning_stances}\n"
         f"Objetivos activos: {', '.join(active_goals) or 'none'}\n"
         f"Etapa de identidad: {self_model.get('identity_stage', 'unknown')}\n"
         f"Conceptos dominantes: {concept_text}\n\n"

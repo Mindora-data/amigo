@@ -117,6 +117,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"Detectados" in dashboard_body
     assert b"journalTabs" in dashboard_body
     assert b"cultura" in dashboard_body
+    assert b"Opiniones derivadas" in dashboard_body
+    assert b"/learning-stances/" in dashboard_body
     assert b"/internal/cycle" in body
     assert b"Salud" in body
     assert b"Perfil" in body
@@ -409,6 +411,8 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "POST /session/logout" in root["endpoints"]
     assert "POST /agents/{agent_id}/tasks/run-next" in root["endpoints"]
     assert "GET /agents/{agent_id}/relationship-dashboard" in root["endpoints"]
+    assert "GET /agents/{agent_id}/learning-stances" in root["endpoints"]
+    assert "PATCH /agents/{agent_id}/learning-stances/{theme}" in root["endpoints"]
     assert "GET /agents/{agent_id}/temporal-events" in root["endpoints"]
     assert "PATCH /agents/{agent_id}/temporal-events/{event_id}" in root["endpoints"]
     assert "DELETE /agents/{agent_id}/temporal-events/{event_id}" in root["endpoints"]
@@ -422,6 +426,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "/agents/{agent_id}/temporal-events/{event_id}" in openapi["paths"]
     assert "patch" in openapi["paths"]["/agents/{agent_id}/temporal-events/{event_id}"]
     assert "/agents/{agent_id}/relationship-dashboard" in openapi["paths"]
+    assert "/agents/{agent_id}/learning-stances/{theme}" in openapi["paths"]
     assert "/operations/claude" in openapi["paths"]
     assert "/operations/claude/configure" in openapi["paths"]
     assert "/operations/claude/disable" in openapi["paths"]
@@ -1829,6 +1834,44 @@ def test_learning_journal_detects_draft_candidates_from_conversation(tmp_path) -
     )
     approved = _request(app, "GET", "/users/mindora/agents/nino/learning-journal?status=active")
     assert approved["count"] == 1
+
+
+def test_learning_stances_derive_from_active_journal_and_can_be_edited(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal",
+        {
+            "title": "John Byrne",
+            "lesson": "Es mi autor favorito de comics y Superman me encanta",
+            "tags": ["cultura", "manual"],
+        },
+    )
+
+    stances = _request(app, "GET", "/users/mindora/agents/nino/learning-stances")
+    cultura = next(item for item in stances["stances"] if item["theme"] == "cultura")
+    assert cultura["source"] == "derived"
+    assert cultura["active"] is True
+    assert cultura["evidence_count"] == 1
+    assert "Por lo que he aprendido contigo" in cultura["text"]
+
+    edited = _request(
+        app,
+        "PATCH",
+        "/users/mindora/agents/nino/learning-stances/cultura",
+        {"text": "Por lo que he aprendido contigo, en comics valoro autores con voz propia.", "active": True},
+    )
+    edited_cultura = next(item for item in edited["stance"]["stances"] if item["theme"] == "cultura")
+    assert edited_cultura["source"] == "edited"
+    assert "voz propia" in edited_cultura["text"]
+
+    dashboard = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
+    dash_cultura = next(
+        item for item in dashboard["relationship_dashboard"]["dashboard"]["learning_stances"]["stances"]
+        if item["theme"] == "cultura"
+    )
+    assert dash_cultura["source"] == "edited"
 
 
 def test_dashboard_data_counts_telegram_users_and_pending_links(tmp_path) -> None:

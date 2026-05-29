@@ -1108,3 +1108,37 @@ Tests:
 - Una correccion/preferencia implicita crea aprendizaje `detected` en `draft`.
 - El usuario puede aprobarlo cambiando `status` a `active`.
 - El dashboard expone el contador de detectados.
+
+## Sprint 34 - Posturas derivadas editables
+
+Estado: hecho inicial.
+
+Objetivo: que amigo forme opiniones propias honestas a partir de aprendizajes activos,
+sin fingir vida humana ni convertir una ocurrencia en criterio estable.
+
+Hechos:
+
+- Se derivan posturas por tema (`vida`, `cultura`, `amistad`, `trabajo`,
+  `comportamiento`, `salud`, `otros`) desde la bitacora activa.
+- Cada postura incluye fuente (`derived` o `edited`), evidencia usada y estado activo.
+- El usuario puede editar cada postura desde `/dashboard`; una postura editada manda
+  sobre la derivada.
+- API nueva:
+  `GET /agents/{agent_id}/learning-stances` y
+  `PATCH /agents/{agent_id}/learning-stances/{theme}`, tambien bajo rutas privadas
+  `/users/{user_id}/agents/{agent_id}/...`.
+- El prompt recibe solo posturas activas y obliga a formularlas honestamente como
+  opiniones aprendidas de la relacion: "por lo que he aprendido contigo...".
+
+Privacidad:
+
+- Las posturas son privadas por `agent_id`.
+- No se copian al modelo global anonimo.
+- No son recuerdos vividos ni experiencias humanas inventadas.
+
+Tests:
+
+- Una entrada activa de cultura deriva postura de cultura.
+- La postura se puede editar y la version editada prevalece.
+- `/dashboard-data` expone posturas.
+- El prompt incluye posturas activas.
