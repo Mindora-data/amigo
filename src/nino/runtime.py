@@ -2641,3 +2641,34 @@ class NinoRuntime:
                 llm_retrieved=llm_retrieved,
             ),
         }
+
+    def observe(self, agent_id: str, percept_frame: dict[str, Any]) -> dict[str, Any]:
+        state = self.load_or_init_state(agent_id)
+        now = _now_from_percept(percept_frame)
+        intent = str(percept_frame.get("intent", "group_observation"))
+        text = str(percept_frame.get("text", ""))
+        episode = Episode(
+            episode_id=str(uuid4()),
+            agent_id=agent_id,
+            timestamp=now,
+            text=text,
+            intent=intent,
+            salience=_clamp01(float(percept_frame.get("salience", 0.35))),
+            confidence=_clamp01(float(percept_frame.get("confidence", 0.7))),
+        )
+        self.episode_store.append(episode)
+        state.tick += 1
+        state.updated_at = now
+        state.relation_state = _update_relation_from_percept(state.relation_state, percept_frame, now)
+        state.relation_state = _append_audit_event(
+            state.relation_state,
+            now=now,
+            event_type="observation",
+            payload={"intent": intent, "text_present": bool(text.strip())},
+        )
+        _update_cognitive_models(state, percept_frame, now)
+        self.global_model_store.put(_update_global_model(self.global_model_store.get(), percept_frame, now))
+        state.active_goals = _derive_active_goals(state)
+        state.energy = _clamp01(state.drive_vector.get("energy", state.energy))
+        self.state_store.put(state)
+        return {"ok": True, "tick": state.tick, "episode_id": episode.episode_id}

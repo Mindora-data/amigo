@@ -606,6 +606,22 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert tasks_after_run["tasks"][0]["status"] == "completed"
 
 
+def test_http_api_observe_records_episode_without_response(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    observed = _request(
+        app,
+        "POST",
+        "/users/grupo/agents/nino/observe",
+        {"intent": "group_observation", "text": "hola desde el grupo", "now": "2026-05-29T13:00:00+02:00"},
+    )
+    episodes = _request(app, "GET", "/users/grupo/agents/nino/episodes")
+
+    assert observed["ok"] is True
+    assert episodes["episodes"][0]["text"] == "hola desde el grupo"
+    assert episodes["episodes"][0]["intent"] == "group_observation"
+
+
 def test_http_api_scopes_memory_by_logged_user(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

@@ -798,3 +798,28 @@ Tests:
 - Mensaje Telegram con fecha UTC llega al backend con zona `Europe/Madrid`.
 - Los usuarios `*-smoke`, `test-*`, `demo`, `local` y similares quedan fuera del
   contador principal y visibles solo como internos.
+
+## Sprint 24 - Telegram en grupos como canal ambiental
+
+Estado: hecho.
+
+Objetivo: que amigo pueda convivir en un grupo sin exigir mencionarlo siempre, pero
+sin invadir ni mezclar memorias privadas.
+
+Hechos:
+
+- Los mensajes normales de grupo se observan en una memoria separada
+  `telegram-group-<chat_id>` mediante `/observe`, sin generar respuesta visible.
+- Si el grupo plantea una pregunta o pide opinión, amigo puede responder de forma
+  ambiental con cooldown de 10 minutos.
+- Mensajes dirigidos por mencion, respuesta o la palabra "amigo" siguen contestando
+  directamente en la memoria del grupo.
+- Preguntas ambientales con datos sensibles se observan sin responder.
+- La memoria privada de chats individuales no se lee ni se vuelca en grupos.
+
+Tests:
+
+- Mensaje de grupo no dirigido se guarda sin respuesta.
+- Pregunta ambiental responde usando solo memoria de grupo.
+- Las respuestas ambientales tienen limite de frecuencia.
+- Una pregunta sensible se observa sin respuesta.

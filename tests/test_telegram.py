@@ -33,6 +33,7 @@ class TimeoutTelegram(FakeTelegram):
 class FakeBackend:
     def __init__(self) -> None:
         self.ticks: list[dict[str, object]] = []
+        self.observations: list[dict[str, object]] = []
         self.proactive: dict[str, str | None] = {}
         self.sessions: dict[str, str] = {}
 
@@ -48,6 +49,10 @@ class FakeBackend:
     def evaluate_proactivity(self, user_id: str, now: datetime) -> str | None:
         self.session_for(user_id)
         return self.proactive.get(user_id)
+
+    def observe(self, user_id: str, text: str, now: datetime) -> None:
+        self.session_for(user_id)
+        self.observations.append({"user_id": user_id, "text": text, "now": now.isoformat()})
 
 
 def _update(chat_id: int, text: str, update_id: int = 1) -> dict[str, object]:
@@ -200,7 +205,7 @@ def test_link_code_cli_path_does_not_require_telegram_token(tmp_path, capsys) ->
     assert len(code) >= 8
 
 
-def test_group_message_not_directed_to_bot_is_ignored(tmp_path) -> None:
+def test_group_message_not_directed_to_bot_is_observed_without_reply(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()
     backend = FakeBackend()
@@ -209,6 +214,49 @@ def test_group_message_not_directed_to_bot_is_ignored(tmp_path) -> None:
     bot.handle_update(_group_update(-100, "hola grupo"))
 
     assert backend.ticks == []
+    assert backend.observations == [{"user_id": "telegram-group-100", "text": "hola grupo", "now": "2026-05-28T16:13:20+02:00"}]
+    assert telegram.sent == []
+
+
+def test_group_ambient_question_can_reply_without_private_memory(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code("user:10", links.create_code("AnaPrivada"))
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "¿qué opináis de esta idea?", user_id=10))
+
+    assert backend.observations == []
+    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
+    assert backend.ticks[-1]["text"] == "¿qué opináis de esta idea?"
+    assert "anaprivada" not in str(telegram.sent[-1]["text"]).lower()
+
+
+def test_group_ambient_replies_are_rate_limited(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "¿qué opináis de esto?", update_id=1))
+    bot.handle_update(_group_update(-100, "¿alguna idea más?", update_id=2))
+
+    assert len(backend.ticks) == 1
+    assert backend.observations[-1]["text"] == "¿alguna idea más?"
+    assert len(telegram.sent) == 1
+
+
+def test_group_sensitive_ambient_question_is_observed_without_reply(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "¿alguien sabe mi contraseña?", update_id=1))
+
+    assert backend.ticks == []
+    assert backend.observations[-1]["user_id"] == "telegram-group-100"
     assert telegram.sent == []
 
 

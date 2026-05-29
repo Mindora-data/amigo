@@ -16,6 +16,31 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 AGENT_ID = "nino"
+GROUP_AMBIENT_COOLDOWN_SECONDS = 600
+GROUP_AMBIENT_CUES = (
+    "?",
+    "¿",
+    "que opinais",
+    "qué opináis",
+    "que opinas",
+    "qué opinas",
+    "alguna idea",
+    "alguien sabe",
+    "como lo veis",
+    "cómo lo veis",
+    "consejo",
+)
+GROUP_SENSITIVE_CUES = (
+    "contraseña",
+    "password",
+    "dni",
+    "tarjeta",
+    "cuenta bancaria",
+    "telefono",
+    "teléfono",
+    "direccion",
+    "dirección",
+)
 
 
 def _connect(path: str | Path) -> sqlite3.Connection:
@@ -234,6 +259,15 @@ class BackendClient:
         payload = action.get("payload") if isinstance(action, dict) else None
         return str(payload.get("text") or "").strip() if isinstance(payload, dict) else ""
 
+    def observe(self, user_id: str, text: str, now: datetime) -> None:
+        user = _slug(user_id)
+        self._json(
+            "POST",
+            f"/users/{parse.quote(user)}/agents/{AGENT_ID}/observe",
+            {"intent": "group_observation", "text": text, "salience": 0.35, "confidence": 0.7, "now": now.isoformat()},
+            user_id=user,
+        )
+
     def evaluate_proactivity(self, user_id: str, now: datetime) -> str | None:
         user = _slug(user_id)
         out = self._json(
@@ -268,6 +302,7 @@ class TelegramBotService:
         self.bot_username = bot_username.lower().lstrip("@") if bot_username else None
         self.local_tz = local_tz or telegram_local_timezone()
         self.offset: int | None = None
+        self._group_last_ambient_reply: dict[str, datetime] = {}
 
     def _bot_username(self) -> str | None:
         if self.bot_username is None:
@@ -288,6 +323,8 @@ class TelegramBotService:
         username = self._bot_username()
         if username and f"@{username}" in text.lower():
             return True
+        if "amigo" in text.lower():
+            return True
         reply_to = message.get("reply_to_message") if isinstance(message.get("reply_to_message"), dict) else {}
         reply_from = reply_to.get("from") if isinstance(reply_to.get("from"), dict) else {}
         if reply_from.get("is_bot") and username and str(reply_from.get("username", "")).lower() == username:
@@ -306,6 +343,18 @@ class TelegramBotService:
 
     def _group_user_id(self, chat_id: int | str) -> str:
         return f"telegram-group-{_slug(str(chat_id))}"
+
+    def _should_reply_ambiently_in_group(self, chat_id: int | str, text: str, now: datetime) -> bool:
+        lowered = text.lower()
+        if any(cue in lowered for cue in GROUP_SENSITIVE_CUES):
+            return False
+        if not any(cue in lowered for cue in GROUP_AMBIENT_CUES):
+            return False
+        last = self._group_last_ambient_reply.get(str(chat_id))
+        if last is not None and (now - last).total_seconds() < GROUP_AMBIENT_COOLDOWN_SECONDS:
+            return False
+        self._group_last_ambient_reply[str(chat_id)] = now
+        return True
 
     def handle_update(self, update: dict[str, Any], now: datetime | None = None) -> None:
         self.offset = int(update.get("update_id", 0)) + 1
@@ -338,13 +387,16 @@ class TelegramBotService:
             self.telegram.send_message(chat_id, reply)
 
     def _handle_group_message(self, message: dict[str, Any], chat_id: int | str, text: str, now: datetime) -> None:
-        if not self._is_directed_at_bot(message, text):
-            return
+        directed = self._is_directed_at_bot(message, text)
         clean_text = self._clean_group_text(text)
         if not clean_text:
-            self.telegram.send_message(chat_id, "Estoy aquí. Escríbeme la pregunta en el mismo mensaje o respóndeme directamente.")
+            if directed:
+                self.telegram.send_message(chat_id, "Estoy aquí. Escríbeme la pregunta en el mismo mensaje o respóndeme directamente.")
             return
         target_user_id = self._group_user_id(chat_id)
+        if not directed and not self._should_reply_ambiently_in_group(chat_id, clean_text, now):
+            self.backend.observe(target_user_id, clean_text, now)
+            return
         reply = self.backend.tick(target_user_id, clean_text, now)
         if reply:
             self.telegram.send_message(chat_id, reply)

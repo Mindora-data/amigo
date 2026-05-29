@@ -3427,6 +3427,9 @@ class NinoService:
     def tick(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.tick(agent_id, payload))
 
+    def observe(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.observe(agent_id, payload))
+
     def get_state(self, agent_id: str) -> dict[str, Any]:
         return _to_jsonable(self.runtime.load_or_init_state(agent_id))
 
@@ -3778,6 +3781,8 @@ class NinoHttpApp:
     def _route_agent_tail(self, method: str, agent_id: str, tail: list[str], payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         if method == "POST" and tail == ["tick"]:
             return "200 OK", self.service.tick(agent_id, payload)
+        if method == "POST" and tail == ["observe"]:
+            return "200 OK", self.service.observe(agent_id, payload)
         if method == "GET" and tail == ["state"]:
             return "200 OK", self.service.get_state(agent_id)
         if method == "GET" and tail == ["conversation"]:
