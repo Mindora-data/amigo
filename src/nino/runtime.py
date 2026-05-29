@@ -2967,6 +2967,7 @@ class NinoRuntime:
                     source_episode_id=episode.episode_id,
                     now=now,
                     existing_lessons=existing_lessons,
+                    is_group_context=agent_id.startswith("telegram-group-") or intent.startswith("group_"),
                 )
             for entry in journal_updates:
                 self.learning_journal_store.upsert(entry)

@@ -1142,3 +1142,27 @@ Tests:
 - La postura se puede editar y la version editada prevalece.
 - `/dashboard-data` expone posturas.
 - El prompt incluye posturas activas.
+
+## Sprint 35 - Separar preferencia personal de aprendizaje de amigo
+
+Estado: hecho inicial.
+
+Objetivo: evitar que una preferencia personal dicha por alguien, especialmente en un
+grupo, se convierta en aprendizaje general de amigo.
+
+Hechos:
+
+- El detector distingue entre `no me gusta X` o `no me gusta que llueva` y una pauta
+  sobre amigo.
+- En grupos, solo se crea aprendizaje si la señal apunta claramente a amigo o a su
+  comportamiento (`amigo`, `respondes`, `preguntas`, `insistes`, `interpretas`,
+  `recuerdas`, etc.).
+- Una preferencia del hablante debe ir, como mucho, a memoria/perfil de esa persona si
+  está identificada y vinculada, no a bitacora global de comportamiento.
+- Las pautas del tipo `no me gusta que amigo insista cuando nadie le contesta` sí se
+  proponen como `draft`.
+
+Tests:
+
+- `no me gusta que llueva los domingos` en grupo no crea aprendizaje.
+- `no me gusta que amigo insista...` en grupo sí crea un `draft`.

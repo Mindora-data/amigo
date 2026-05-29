@@ -1836,6 +1836,31 @@ def test_learning_journal_detects_draft_candidates_from_conversation(tmp_path) -
     assert approved["count"] == 1
 
 
+def test_group_personal_preference_does_not_become_friend_learning(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    personal = _request(
+        app,
+        "POST",
+        "/agents/telegram-group-100/tick",
+        {"intent": "group_chat", "text": "no me gusta que llueva los domingos"},
+    )
+    assert personal["learning_journal_updates"] == []
+
+    behavior = _request(
+        app,
+        "POST",
+        "/agents/telegram-group-100/tick",
+        {"intent": "group_chat", "text": "no me gusta que amigo insista cuando nadie le contesta"},
+    )
+    assert len(behavior["learning_journal_updates"]) == 1
+    assert behavior["learning_journal_updates"][0]["status"] == "draft"
+
+    journal = _request(app, "GET", "/agents/telegram-group-100/learning-journal")
+    assert journal["count"] == 1
+    assert "insista" in journal["entries"][0]["lesson"]
+
+
 def test_learning_stances_derive_from_active_journal_and_can_be_edited(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     _request(

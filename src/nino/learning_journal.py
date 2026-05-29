@@ -111,6 +111,47 @@ DETECTED_LESSON_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
     ),
 )
 
+FRIEND_BEHAVIOR_TERMS = (
+    "amigo",
+    "contestas",
+    "contestes",
+    "respondes",
+    "respondas",
+    "preguntas",
+    "preguntes",
+    "insistes",
+    "insistas",
+    "interpretas",
+    "interpretes",
+    "recuerdas",
+    "recuerdes",
+    "avisas",
+    "avises",
+    "hables",
+    "hablas",
+    "termines",
+    "alargues",
+)
+PERSONAL_PREFERENCE_OBJECTS = (
+    "cafe",
+    "café",
+    "pizza",
+    "futbol",
+    "fútbol",
+    "musica",
+    "música",
+    "cine",
+    "serie",
+    "libro",
+    "comic",
+    "cómic",
+    "calor",
+    "frio",
+    "frío",
+    "llueva",
+    "lluvia",
+)
+
 
 def _clean_lesson(value: str) -> str:
     value = re.sub(r"\s+", " ", value).strip(" .\n\t")
@@ -121,6 +162,22 @@ def _norm_lesson(value: str) -> str:
     value = value.lower()
     value = value.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ñ", "n")
     return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", value)).strip()
+
+
+def _looks_like_friend_behavior(detail: str) -> bool:
+    text = _norm_lesson(detail)
+    if not text:
+        return False
+    if any(term in text.split() for term in ("tu", "amigo")):
+        return True
+    return any(term in text for term in FRIEND_BEHAVIOR_TERMS)
+
+
+def _looks_like_personal_preference(detail: str) -> bool:
+    text = _norm_lesson(detail)
+    if not text:
+        return False
+    return any(term in text for term in PERSONAL_PREFERENCE_OBJECTS) and not _looks_like_friend_behavior(detail)
 
 
 def _title_from_lesson(lesson: str, tag: str) -> str:
@@ -234,6 +291,7 @@ def extract_detected_learning_journal_entries(
     source_episode_id: str,
     now: datetime,
     existing_lessons: list[str] | None = None,
+    is_group_context: bool = False,
 ) -> list[LearningJournalEntry]:
     if len(text.strip()) < 12:
         return []
@@ -247,9 +305,16 @@ def extract_detected_learning_journal_entries(
         if "{detail}" in template:
             if not detail:
                 continue
+            if tag in {"preference", "boundary", "behavior"}:
+                if _looks_like_personal_preference(detail):
+                    continue
+                if is_group_context and not _looks_like_friend_behavior(detail):
+                    continue
             lesson = template.format(detail=detail)
         else:
             lesson = template
+        if is_group_context and tag == "correction" and "amigo" not in _norm_lesson(text):
+            continue
         if _norm_lesson(lesson) in existing:
             continue
         existing.add(_norm_lesson(lesson))
