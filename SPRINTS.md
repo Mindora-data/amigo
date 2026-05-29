@@ -749,3 +749,26 @@ Tests:
 - `/dashboard` contiene la pantalla de datos completos.
 - `/dashboard-data` devuelve el paquete operativo completo.
 - `/dashboard-data` no se expone en `NINO_ENV=prod`.
+
+## Sprint 22 - Auditoria multiusuario en dashboard
+
+Estado: hecho.
+
+Objetivo: ver claramente cuantos usuarios estan usando amigo y cuanto uso tiene cada
+uno, manteniendo aislamiento privado por usuario.
+
+Hechos:
+
+- `/dashboard` muestra metricas de usuarios totales, usuarios activos, usuarios
+  vinculados por Telegram y codigos de vinculacion pendientes.
+- `/dashboard-data` incluye `users`: lista por usuario con agentes, episodios,
+  interacciones, memoria fria, primera/ultima actividad y `usage_span_seconds`.
+- Los usuarios pendientes por codigo Telegram aparecen sin mezclar memoria ni crear
+  actividad hasta que hablen de verdad.
+- La privacidad queda expresada como `private_user_scopes_never_shared`.
+
+Tests:
+
+- El dashboard contiene el bloque `Usuarios y uso`.
+- El paquete completo cuenta usuarios activos, vinculados y pendientes.
+- Un usuario Telegram vinculado sin mensajes aparece con uso cero y aislado.

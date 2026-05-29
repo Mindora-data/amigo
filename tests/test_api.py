@@ -111,6 +111,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"Dashboard de amigo" in dashboard_body
     assert b"/dashboard-data" in dashboard_body
     assert b"Datos completos" in dashboard_body
+    assert b"Usuarios y uso" in dashboard_body
     assert b"/internal/cycle" in body
     assert b"Salud" in body
     assert b"Perfil" in body
@@ -1635,6 +1636,9 @@ def test_dashboard_data_returns_complete_local_bundle(tmp_path) -> None:
     assert out["user_id"] == "mindora"
     assert out["agent_id"] == "nino"
     assert out["relationship_dashboard"]["dashboard"]["agent_id"] == "user::mindora::agent::nino"
+    assert out["users"]["user_count"] >= 1
+    assert out["users"]["active_user_count"] >= 1
+    assert out["users"]["users"][0]["usage_span_seconds"] >= 0
     assert "state" in out
     assert "profile" in out
     assert "metrics" in out
@@ -1645,6 +1649,28 @@ def test_dashboard_data_returns_complete_local_bundle(tmp_path) -> None:
     assert "memory_facts" in out
     assert "temporal_events" in out
     assert "proactive_inbox" in out
+
+
+def test_dashboard_data_counts_telegram_users_and_pending_links(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": "hola"})
+    from nino.telegram import TelegramLinkStore
+
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("MariaBlue1974"))
+    links.create_code("Invitada")
+
+    out = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
+    users = out["users"]
+
+    assert users["user_count"] == 3
+    assert users["telegram_link_count"] == 1
+    assert users["telegram_pending_link_count"] == 1
+    maria = next(item for item in users["users"] if item["user_id"] == "mariablue1974")
+    assert maria["telegram_linked"] is True
+    assert maria["episode_count"] == 0
+    invited = next(item for item in users["users"] if item["user_id"] == "invitada")
+    assert invited["telegram_pending_link"] is True
 
 
 def test_continuity_correction_is_counted_as_learning_signal(tmp_path) -> None:

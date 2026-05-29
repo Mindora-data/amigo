@@ -1863,6 +1863,11 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel metric"><span>Interacciones</span><strong id="interactions">0</strong></div>
       <div class="panel metric"><span>Aciertos</span><strong id="positive">0</strong></div>
       <div class="panel metric"><span>Fallos/límites</span><strong id="misses">0</strong></div>
+      <div class="panel metric"><span>Usuarios</span><strong id="users">0</strong></div>
+      <div class="panel metric"><span>Usuarios activos</span><strong id="activeUsers">0</strong></div>
+      <div class="panel metric"><span>Telegram</span><strong id="telegramUsers">0</strong></div>
+      <div class="panel metric"><span>Pendientes</span><strong id="pendingUsers">0</strong></div>
+      <div class="panel wide"><h2>Usuarios y uso</h2><pre id="userOverview">{}</pre></div>
       <div class="panel"><h2>Estilo</h2><pre id="style">{}</pre></div>
       <div class="panel"><h2>Memoria</h2><pre id="memory">{}</pre></div>
       <div class="panel"><h2>Proactividad</h2><pre id="proactivity">{}</pre></div>
@@ -1894,6 +1899,11 @@ DASHBOARD_HTML = """<!doctype html>
       $("interactions").textContent = dash.maturity?.interaction_count ?? 0;
       $("positive").textContent = counts.positive ?? 0;
       $("misses").textContent = (counts.negative ?? 0) + (counts.correction ?? 0) + (counts.stop ?? 0) + (counts.continuity_miss ?? 0);
+      $("users").textContent = out.users?.user_count ?? 0;
+      $("activeUsers").textContent = out.users?.active_user_count ?? 0;
+      $("telegramUsers").textContent = out.users?.telegram_link_count ?? 0;
+      $("pendingUsers").textContent = out.users?.telegram_pending_link_count ?? 0;
+      print("userOverview", out.users || {});
       print("style", dash.response_style || {});
       print("memory", dash.memory || {});
       print("proactivity", dash.proactivity || {});
@@ -2092,6 +2102,16 @@ def _public_agent_id(scoped_agent_id: str, user_id: str) -> str | None:
     return scoped_agent_id[len(prefix):]
 
 
+def _user_id_from_scoped_agent(scoped_agent_id: str) -> str | None:
+    match = re.match(r"^user::([^:]+)::agent::([^:]+)$", scoped_agent_id)
+    return match.group(1) if match else None
+
+
+def _agent_public_from_scoped(scoped_agent_id: str) -> str | None:
+    match = re.match(r"^user::([^:]+)::agent::([^:]+)$", scoped_agent_id)
+    return match.group(2) if match else None
+
+
 def _attach_current_report_summary(report: dict[str, Any]) -> None:
     report_file = report.get("report_file", {})
     path = report_file.get("path")
@@ -2284,6 +2304,116 @@ class NinoService:
     def list_agents(self) -> dict[str, Any]:
         return {"agents": self.runtime.list_agents()}
 
+    def user_overview(self) -> dict[str, Any]:
+        users: dict[str, dict[str, Any]] = {}
+        for agent_id in self.runtime.list_agents():
+            user_id = _user_id_from_scoped_agent(agent_id)
+            public_agent = _agent_public_from_scoped(agent_id)
+            if not user_id:
+                continue
+            episodes = self.runtime.episode_store.list_for_agent(agent_id)
+            timestamps = [episode.timestamp for episode in episodes]
+            first_seen = min(timestamps).isoformat() if timestamps else None
+            last_seen = max(timestamps).isoformat() if timestamps else None
+            usage_seconds = int((max(timestamps) - min(timestamps)).total_seconds()) if len(timestamps) >= 2 else 0
+            entry = users.setdefault(
+                user_id,
+                {
+                    "user_id": user_id,
+                    "agents": [],
+                    "episode_count": 0,
+                    "interaction_count": 0,
+                    "cold_memory_count": 0,
+                    "first_seen_at": None,
+                    "last_seen_at": None,
+                    "usage_span_seconds": 0,
+                    "telegram_linked": False,
+                    "telegram_pending_link": False,
+                },
+            )
+            metrics = self.runtime.metrics(agent_id)
+            entry["agents"].append(public_agent or agent_id)
+            entry["episode_count"] += int(metrics.get("episode_count", len(episodes)))
+            entry["interaction_count"] += int(metrics.get("relation_depth", 0))
+            entry["cold_memory_count"] += int(metrics.get("cold_memory_count", 0))
+            entry["usage_span_seconds"] += usage_seconds
+            if first_seen and (entry["first_seen_at"] is None or first_seen < entry["first_seen_at"]):
+                entry["first_seen_at"] = first_seen
+            if last_seen and (entry["last_seen_at"] is None or last_seen > entry["last_seen_at"]):
+                entry["last_seen_at"] = last_seen
+
+        telegram_links: list[dict[str, Any]] = []
+        pending_links: list[dict[str, Any]] = []
+        conn = getattr(self.runtime.episode_store, "conn", None)
+        if conn is not None:
+            try:
+                rows = conn.execute("SELECT chat_id, user_id, created_at FROM telegram_link ORDER BY created_at").fetchall()
+                telegram_links = [
+                    {"chat_id": str(row["chat_id"]), "user_id": str(row["user_id"]), "created_at": str(row["created_at"])}
+                    for row in rows
+                ]
+                for link in telegram_links:
+                    entry = users.setdefault(
+                        link["user_id"],
+                        {
+                            "user_id": link["user_id"],
+                            "agents": [],
+                            "episode_count": 0,
+                            "interaction_count": 0,
+                            "cold_memory_count": 0,
+                            "first_seen_at": None,
+                            "last_seen_at": None,
+                            "usage_span_seconds": 0,
+                            "telegram_linked": False,
+                            "telegram_pending_link": False,
+                        },
+                    )
+                    entry["telegram_linked"] = True
+                    entry["telegram_chat_id"] = link["chat_id"]
+                    entry["telegram_linked_at"] = link["created_at"]
+            except sqlite3.Error:
+                telegram_links = []
+            try:
+                rows = conn.execute(
+                    "SELECT user_id, created_at FROM telegram_link_code WHERE used_at IS NULL ORDER BY created_at"
+                ).fetchall()
+                pending_links = [
+                    {"user_id": str(row["user_id"]), "created_at": str(row["created_at"])}
+                    for row in rows
+                ]
+                for pending in pending_links:
+                    entry = users.setdefault(
+                        pending["user_id"],
+                        {
+                            "user_id": pending["user_id"],
+                            "agents": [],
+                            "episode_count": 0,
+                            "interaction_count": 0,
+                            "cold_memory_count": 0,
+                            "first_seen_at": None,
+                            "last_seen_at": None,
+                            "usage_span_seconds": 0,
+                            "telegram_linked": False,
+                            "telegram_pending_link": False,
+                        },
+                    )
+                    entry["telegram_pending_link"] = True
+                    entry["telegram_pending_since"] = pending["created_at"]
+            except sqlite3.Error:
+                pending_links = []
+
+        user_list = sorted(users.values(), key=lambda item: item["user_id"])
+        return {
+            "user_count": len(user_list),
+            "active_user_count": len([item for item in user_list if item["episode_count"] > 0]),
+            "telegram_link_count": len(telegram_links),
+            "telegram_pending_link_count": len(pending_links),
+            "users": user_list,
+            "telegram_links": telegram_links,
+            "telegram_pending_links": pending_links,
+            "privacy": "private_user_scopes_never_shared",
+        }
+
     def dashboard_data(self, payload: dict[str, Any]) -> dict[str, Any]:
         user_id = _identity_slug(str(payload.get("user_id", "mindora")), "mindora")
         public_agent_id = _identity_slug(str(payload.get("agent_id", "nino")), "nino")
@@ -2293,6 +2423,7 @@ class NinoService:
             "user_id": user_id,
             "agent_id": public_agent_id,
             "scoped_agent_id": agent_id,
+            "users": self.user_overview(),
             "relationship_dashboard": self.relationship_dashboard(agent_id),
             "state": self.get_state(agent_id),
             "profile": self.get_profile(agent_id),
