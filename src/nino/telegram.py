@@ -12,6 +12,7 @@ import subprocess
 import time
 from typing import Any, Protocol
 from urllib import error, parse, request
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 AGENT_ID = "nino"
@@ -54,6 +55,19 @@ def telegram_token_from_env() -> str:
     if token:
         return token
     raise RuntimeError("missing_telegram_bot_token")
+
+
+def telegram_local_timezone() -> ZoneInfo:
+    name = (
+        os.environ.get("NINO_TELEGRAM_TIMEZONE", "").strip()
+        or os.environ.get("NINO_LOCAL_TIMEZONE", "").strip()
+        or os.environ.get("TZ", "").strip()
+        or "Europe/Madrid"
+    )
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")
 
 
 class TelegramLinkStore:
@@ -245,12 +259,14 @@ class TelegramBotService:
         *,
         poll_timeout: int = 25,
         bot_username: str | None = None,
+        local_tz: ZoneInfo | None = None,
     ) -> None:
         self.telegram = telegram
         self.backend = backend
         self.links = links
         self.poll_timeout = poll_timeout
         self.bot_username = bot_username.lower().lstrip("@") if bot_username else None
+        self.local_tz = local_tz or telegram_local_timezone()
         self.offset: int | None = None
 
     def _bot_username(self) -> str | None:
@@ -299,7 +315,7 @@ class TelegramBotService:
         text = str(message.get("text") or "").strip()
         if chat_id is None or not text:
             return
-        current_time = now or datetime.fromtimestamp(int(message.get("date") or time.time()), tz=timezone.utc)
+        current_time = now or datetime.fromtimestamp(int(message.get("date") or time.time()), tz=timezone.utc).astimezone(self.local_tz)
         if self._is_group_chat(chat):
             self._handle_group_message(message, chat_id, text, current_time)
             return

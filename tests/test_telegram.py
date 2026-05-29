@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -73,6 +74,18 @@ def test_linked_chat_resolves_user_and_replies(tmp_path) -> None:
     assert backend.ticks == [{"user_id": "ana", "text": "hola", "now": "2026-05-28T10:00:00+00:00"}]
     assert telegram.sent[-1]["chat_id"] == "111"
     assert "respuesta para ana" in str(telegram.sent[-1]["text"])
+
+
+def test_telegram_message_date_is_passed_to_backend_in_local_timezone(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links, local_tz=ZoneInfo("Europe/Madrid"))
+
+    bot.handle_update(_update(111, "recuérdame en 5 minutos que beba agua"))
+
+    assert backend.ticks == [{"user_id": "ana", "text": "recuérdame en 5 minutos que beba agua", "now": "2026-05-28T16:13:20+02:00"}]
 
 
 def test_unlinked_chat_gets_linking_flow_without_backend_access(tmp_path) -> None:
@@ -189,7 +202,7 @@ def test_group_mention_uses_group_memory_not_private_memory(tmp_path) -> None:
 
     bot.handle_update(_group_update(-100, "@amigo_test_bot qué opinas?", user_id=10))
 
-    assert backend.ticks == [{"user_id": "telegram-group-100", "text": "qué opinas?", "now": "2026-05-28T14:13:20+00:00"}]
+    assert backend.ticks == [{"user_id": "telegram-group-100", "text": "qué opinas?", "now": "2026-05-28T16:13:20+02:00"}]
     assert telegram.sent[-1]["chat_id"] == "-100"
 
 

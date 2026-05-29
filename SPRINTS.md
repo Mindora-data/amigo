@@ -774,3 +774,27 @@ Tests:
 - El dashboard contiene el bloque `Usuarios y uso`.
 - El paquete completo cuenta usuarios activos, vinculados y pendientes.
 - Un usuario Telegram vinculado sin mensajes aparece con uso cero y aislado.
+
+## Sprint 23 - Hora local Telegram y usuarios reales
+
+Estado: hecho.
+
+Objetivo: que Telegram use la hora local del usuario al crear recordatorios relativos
+y que el dashboard no cuente usuarios internos de smoke/test como personas reales.
+
+Hechos:
+
+- El bot convierte `message.date` de Telegram desde UTC a `NINO_TELEGRAM_TIMEZONE`,
+  `NINO_LOCAL_TIMEZONE`, `TZ` o `Europe/Madrid` antes de llamar al backend.
+- Un "recuerdame en 5 minutos" desde Telegram se guarda y se responde en hora local,
+  no en UTC crudo.
+- `/dashboard-data` separa `users` reales de `internal_users` y expone
+  `all_user_count` e `internal_user_count` para auditoria.
+- Los contadores principales del dashboard (`Usuarios`, `Usuarios activos`,
+  `Telegram`, `Pendientes`) cuentan solo usuarios humanos/no internos.
+
+Tests:
+
+- Mensaje Telegram con fecha UTC llega al backend con zona `Europe/Madrid`.
+- Los usuarios `*-smoke`, `test-*`, `demo`, `local` y similares quedan fuera del
+  contador principal y visibles solo como internos.

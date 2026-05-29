@@ -1654,23 +1654,31 @@ def test_dashboard_data_returns_complete_local_bundle(tmp_path) -> None:
 def test_dashboard_data_counts_telegram_users_and_pending_links(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": "hola"})
+    _request(app, "POST", "/users/reminder-smoke/agents/nino/tick", {"intent": "chat", "text": "smoke"})
     from nino.telegram import TelegramLinkStore
 
     links = TelegramLinkStore(tmp_path / "nino.db")
     assert links.link_with_code(111, links.create_code("MariaBlue1974"))
+    assert links.link_with_code(333, links.create_code("SmokeUser"))
     links.create_code("Invitada")
 
     out = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
     users = out["users"]
 
     assert users["user_count"] == 3
+    assert users["all_user_count"] == 5
+    assert users["internal_user_count"] == 2
     assert users["telegram_link_count"] == 1
     assert users["telegram_pending_link_count"] == 1
+    assert {item["user_id"] for item in users["users"]} == {"invitada", "mariablue1974", "mindora"}
     maria = next(item for item in users["users"] if item["user_id"] == "mariablue1974")
     assert maria["telegram_linked"] is True
     assert maria["episode_count"] == 0
+    assert maria["internal"] is False
     invited = next(item for item in users["users"] if item["user_id"] == "invitada")
     assert invited["telegram_pending_link"] is True
+    assert any(item["user_id"] == "reminder-smoke" for item in users["internal_users"])
+    assert any(item["user_id"] == "smokeuser" for item in users["internal_users"])
 
 
 def test_continuity_correction_is_counted_as_learning_signal(tmp_path) -> None:

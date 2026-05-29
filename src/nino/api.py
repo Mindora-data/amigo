@@ -2112,6 +2112,14 @@ def _agent_public_from_scoped(scoped_agent_id: str) -> str | None:
     return match.group(2) if match else None
 
 
+def _is_internal_dashboard_user(user_id: str) -> bool:
+    user = _identity_slug(user_id, "local")
+    if user in {"local", "smoke", "test-telegram-user"}:
+        return True
+    internal_markers = ("smoke", "demo", "test", "sprint")
+    return any(marker in user for marker in internal_markers)
+
+
 def _attach_current_report_summary(report: dict[str, Any]) -> None:
     report_file = report.get("report_file", {})
     path = report_file.get("path")
@@ -2402,15 +2410,24 @@ class NinoService:
             except sqlite3.Error:
                 pending_links = []
 
-        user_list = sorted(users.values(), key=lambda item: item["user_id"])
+        all_user_list = sorted(users.values(), key=lambda item: item["user_id"])
+        for item in all_user_list:
+            item["internal"] = _is_internal_dashboard_user(str(item["user_id"]))
+        user_list = [item for item in all_user_list if not item["internal"]]
+        internal_user_list = [item for item in all_user_list if item["internal"]]
+        human_telegram_links = [link for link in telegram_links if not _is_internal_dashboard_user(link["user_id"])]
+        human_pending_links = [link for link in pending_links if not _is_internal_dashboard_user(link["user_id"])]
         return {
             "user_count": len(user_list),
             "active_user_count": len([item for item in user_list if item["episode_count"] > 0]),
-            "telegram_link_count": len(telegram_links),
-            "telegram_pending_link_count": len(pending_links),
+            "telegram_link_count": len(human_telegram_links),
+            "telegram_pending_link_count": len(human_pending_links),
+            "internal_user_count": len(internal_user_list),
+            "all_user_count": len(all_user_list),
             "users": user_list,
-            "telegram_links": telegram_links,
-            "telegram_pending_links": pending_links,
+            "internal_users": internal_user_list,
+            "telegram_links": human_telegram_links,
+            "telegram_pending_links": human_pending_links,
             "privacy": "private_user_scopes_never_shared",
         }
 
