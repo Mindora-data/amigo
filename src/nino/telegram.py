@@ -360,7 +360,11 @@ class TelegramBotService:
         return sent
 
     def poll_once(self) -> None:
-        for update in self.telegram.get_updates(self.offset, self.poll_timeout):
+        try:
+            updates = self.telegram.get_updates(self.offset, self.poll_timeout)
+        except Exception:
+            updates = []
+        for update in updates:
             self.handle_update(update)
         self.push_proactivity_once()
 

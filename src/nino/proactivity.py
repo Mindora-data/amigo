@@ -543,18 +543,6 @@ class ProactivityEngine:
         settings = normalize_settings(proactivity.get("settings"))
         reason_trace = ["safe_proactivity_policy"]
 
-        if settings.consent != "allowed":
-            reason_trace.append(
-                "proactivity_consent_required"
-                if settings.consent == "unknown"
-                else f"proactivity_{settings.consent}"
-            )
-            return ProactivityResponse(False, None, reason_trace)
-
-        if not _inside_active_hours(now, settings):
-            reason_trace.append("outside_active_hours")
-            return ProactivityResponse(False, None, reason_trace, _next_active_hour(now, settings))
-
         temporal_event = _due_temporal_event(relation_state, now)
         if temporal_event is not None:
             reason_trace.extend(["temporal_memory", "event_reminder"])
@@ -573,6 +561,18 @@ class ProactivityEngine:
                 },
                 reason_trace=reason_trace,
             )
+
+        if settings.consent != "allowed":
+            reason_trace.append(
+                "proactivity_consent_required"
+                if settings.consent == "unknown"
+                else f"proactivity_{settings.consent}"
+            )
+            return ProactivityResponse(False, None, reason_trace)
+
+        if not _inside_active_hours(now, settings):
+            reason_trace.append("outside_active_hours")
+            return ProactivityResponse(False, None, reason_trace, _next_active_hour(now, settings))
 
         self.candidate_store.expire_stale(agent_id, now)
         ensure_checkin_candidate(self.candidate_store, agent_id, relation_state, now, checkin_prior=checkin_prior)

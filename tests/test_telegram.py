@@ -25,6 +25,11 @@ class FakeTelegram:
         return {"id": 999, "is_bot": True, "username": "amigo_test_bot"}
 
 
+class TimeoutTelegram(FakeTelegram):
+    def get_updates(self, offset: int | None, timeout: int) -> list[dict[str, object]]:
+        raise TimeoutError("telegram timeout")
+
+
 class FakeBackend:
     def __init__(self) -> None:
         self.ticks: list[dict[str, object]] = []
@@ -135,6 +140,19 @@ def test_proactive_candidate_sends_only_to_linked_chat(tmp_path) -> None:
     sent = bot.push_proactivity_once(now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
 
     assert sent == 1
+    assert telegram.sent == [{"chat_id": "111", "text": "recuerda beber agua"}]
+
+
+def test_telegram_poll_timeout_still_pushes_due_proactivity(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = TimeoutTelegram()
+    backend = FakeBackend()
+    backend.proactive["ana"] = "recuerda beber agua"
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.poll_once()
+
     assert telegram.sent == [{"chat_id": "111", "text": "recuerda beber agua"}]
 
 

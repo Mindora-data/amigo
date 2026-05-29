@@ -69,6 +69,32 @@ def test_proactivity_prioritizes_temporal_event_reminder() -> None:
     assert "event_reminder" in out.reason_trace
     assert state.relation_state["temporal_events"][0]["status"] == "reminded"
 
+
+def test_confirmed_temporal_reminder_does_not_require_general_proactivity_consent() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime.tick(
+        "agent-p",
+        {
+            "intent": "chat",
+            "text": "recuérdame en 5 minutos que beba agua",
+            "salience": 0.9,
+            "confidence": 0.95,
+            "now": now.isoformat(),
+        },
+    )
+
+    out = runtime.evaluate_proactivity("agent-p", now=now + timedelta(minutes=5))
+    state = runtime.load_or_init_state("agent-p")
+
+    assert out.should_send is True
+    assert out.action is not None
+    assert out.action["payload"]["text"] == "Oye, acuérdate: beba agua."
+    assert "event_reminder" in out.reason_trace
+    assert "proactivity_consent_required" not in out.reason_trace
+    assert state.relation_state["temporal_events"][0]["status"] == "reminded"
+
+
 def test_proactivity_reminds_weekday_event_with_exact_time() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     now = datetime(2026, 5, 25, 10, tzinfo=timezone.utc)
