@@ -94,6 +94,20 @@ def test_policy_prioritizes_new_preference_over_old_related_memory() -> None:
     assert "memory_continuity" not in out["reason_trace"]
 
 
+def test_policy_stops_reasking_after_repeated_closed_ok_replies() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    runtime.tick("agent-policy", {"intent": "chat", "text": "hola", "salience": 0.7})
+
+    first = runtime.tick("agent-policy", {"intent": "chat", "text": "todo bien", "salience": 0.4})
+    second = runtime.tick("agent-policy", {"intent": "chat", "text": "Bien", "salience": 0.4})
+
+    assert first["action"]["payload"]["text"] == "Me alegro. Te dejo tranquilo; si aparece algo, me dices."
+    assert "closed_reply_ack" in first["reason_trace"]
+    assert second["action"]["type"] == "no_response"
+    assert second["action"]["payload"]["text"] == ""
+    assert "closed_reply_silence" in second["reason_trace"]
+
+
 def test_policy_ignores_repeated_same_memory_on_followup() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     runtime.tick("agent-policy", {"intent": "chat", "text": "me gusta piano", "salience": 0.9})

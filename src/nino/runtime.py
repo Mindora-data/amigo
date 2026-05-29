@@ -666,6 +666,29 @@ def _detect_emotional_tone(text: str) -> str | None:
             return tone
     return None
 
+
+CLOSED_OK_RE = re.compile(
+    r"^\s*(todo\s+)?(bien|ok|vale|perfecto|genial|todo bien|estoy bien|voy bien)[.!¡!…\s]*$",
+    re.IGNORECASE,
+)
+
+
+def _is_closed_ok_reply(text: str) -> bool:
+    return CLOSED_OK_RE.match(_without_accents(text)) is not None
+
+
+def _recent_user_closed_ok_count(relation_state: dict[str, Any]) -> int:
+    thread = relation_state.get("active_conversation_thread")
+    if not isinstance(thread, dict):
+        return 0
+    count = 0
+    for item in reversed(list(thread.get("recent_user_messages", []))):
+        if _is_closed_ok_reply(str(item)):
+            count += 1
+            continue
+        break
+    return count
+
 RELATIONSHIP_FEEDBACK_PATTERNS = {
     "positive": re.compile(
         r"\b("
@@ -2254,6 +2277,23 @@ class NinoRuntime:
                 reason_trace=["context_policy", "greeting"],
             )
 
+        if _is_closed_ok_reply(text):
+            repeated = _recent_user_closed_ok_count(relation)
+            if repeated >= 1:
+                return PolicyResponse(
+                    chosen_action={"type": "no_response", "payload": {"text": ""}},
+                    confidence=0.78,
+                    reason_trace=["context_policy", "closed_reply_silence"],
+                )
+            return PolicyResponse(
+                chosen_action={
+                    "type": "external_message",
+                    "payload": {"text": "Me alegro. Te dejo tranquilo; si aparece algo, me dices."},
+                },
+                confidence=0.64,
+                reason_trace=["context_policy", "closed_reply_ack"],
+            )
+
         preference = PREFERENCE_RE.search(text)
         if preference:
             value = _clean_preference_value(preference.group("value"))
@@ -2616,6 +2656,8 @@ class NinoRuntime:
         force_policy_response = any(
             marker in decision.reason_trace
             for marker in (
+                "closed_reply_ack",
+                "closed_reply_silence",
                 "reminder_offer",
                 "reminder_confirmed",
                 "reminder_declined",

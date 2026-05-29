@@ -899,3 +899,25 @@ Tests:
 - Un mensaje vulnerable de grupo puede activar participacion breve.
 - La madurez grupal se guarda y aparece en dashboard como ambito de grupo.
 - El prompt incluye la identidad honesta y no permite biografia humana inventada.
+
+## Sprint 27 - Silencio conversacional ante cierres repetidos
+
+Estado: hecho inicial.
+
+Objetivo: evitar que amigo responda siempre con la misma pregunta cuando el usuario ya
+cerró el tema con respuestas cortas como `bien` o `todo bien`.
+
+Hechos:
+
+- La politica detecta cierres conversacionales breves (`bien`, `todo bien`, `ok`,
+  `estoy bien`) antes del detector emocional y antes del LLM.
+- La primera respuesta cerrada recibe un acuse breve sin reabrir la misma pregunta.
+- Si el usuario repite el cierre, amigo devuelve `no_response` con texto vacio para
+  dejar espacio en vez de insistir.
+- El prompt LLM refuerza que no debe volver a preguntar lo mismo tras un cierre corto.
+
+Tests:
+
+- Dos respuestas cerradas seguidas producen primero acuse breve y despues silencio.
+- El camino con LLM configurado se salta para cierres breves, evitando preguntas
+  repetitivas generadas por el modelo.

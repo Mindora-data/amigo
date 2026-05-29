@@ -223,6 +223,19 @@ def test_tick_falls_back_to_policy_when_llm_fails() -> None:
     assert out["nino_context"]["llm_error"] == "RuntimeError"
 
 
+def test_closed_ok_replies_bypass_llm_to_avoid_repetitive_questions() -> None:
+    llm = FakeLLM("Me alegro mucho. ¿Qué tal va la tarde?")
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+    runtime.tick("agent-llm", {"intent": "chat", "text": "hola"})
+
+    before = len(llm.prompts)
+    out = runtime.tick("agent-llm", {"intent": "chat", "text": "todo bien"})
+
+    assert len(llm.prompts) == before
+    assert out["action"]["payload"]["text"] == "Me alegro. Te dejo tranquilo; si aparece algo, me dices."
+    assert "closed_reply_ack" in out["reason_trace"]
+
+
 def test_llm_probe_does_not_create_episode() -> None:
     llm = FakeLLM("Claude conectado a amigo.")
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
