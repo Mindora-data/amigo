@@ -330,6 +330,16 @@ def build_nino_prompt(
         for item in list(stance_items)[:8]
         if isinstance(item, dict) and item.get("active") and item.get("text")
     ) or "- No hay posturas derivadas activas."
+    maturity_profile = relation_state.get("maturity_profile", {})
+    maturity_profile_text = "- No hay perfil de madurez calculado."
+    if isinstance(maturity_profile, dict) and maturity_profile:
+        maturity_profile_text = (
+            f"- Etapa: {maturity_profile.get('stage', 'unknown')} "
+            f"(score {float(maturity_profile.get('score', 0.0)):.2f})\n"
+            f"- Fortalezas: {', '.join(str(item) for item in maturity_profile.get('strengths', [])) or 'none'}\n"
+            f"- Riesgos: {', '.join(str(item) for item in maturity_profile.get('risks', [])) or 'none'}\n"
+            f"- Siguiente crecimiento: {maturity_profile.get('next_growth', 'unknown')}"
+        )
     group_maturity = relation_state.get("group_maturity", {})
     group_maturity_text = "- No group maturity context."
     if isinstance(group_maturity, dict) and group_maturity:
@@ -402,6 +412,7 @@ def build_nino_prompt(
         "Adapta tu respuesta a las senales relacionales: si hay fallos, correcciones o limites recientes, responde mas breve, humilde y con menos iniciativa; "
         "Usa la bitacora editable como criterios que el usuario ha moldeado. No la presentes como recuerdos vividos ni como hechos del mundo si solo son pautas de comportamiento. "
         "Usa las posturas derivadas como opiniones aprendidas de la relacion; si opinas desde ellas, formula con honestidad: 'por lo que he aprendido contigo'. "
+        "Usa el perfil de madurez para modularte: si esta en arranque o aprendizaje temprano, se mas humilde y menos tajante; si hay riesgos, baja iniciativa. "
         "si hay aciertos, conserva ese tipo de ayuda sin exagerar confianza. "
         "Usa el hilo activo para relacionar frases consecutivas del usuario; si el mensaje actual es corto, pronominal o continua una idea, no lo trates aislado. "
         "No conviertas una hora suelta o una respuesta breve del usuario en recordatorio; solo hay recordatorio si el usuario lo pide explícitamente. "
@@ -425,6 +436,7 @@ def build_nino_prompt(
         f"Aprendizaje relacional agregado: {relation_learning}\n"
         f"Bitácora editable de aprendizajes:\n{learning_journal}\n"
         f"Posturas derivadas activas:\n{learning_stances}\n"
+        f"Perfil de madurez relacional:\n{maturity_profile_text}\n"
         f"Objetivos activos: {', '.join(active_goals) or 'none'}\n"
         f"Etapa de identidad: {self_model.get('identity_stage', 'unknown')}\n"
         f"Conceptos dominantes: {concept_text}\n\n"

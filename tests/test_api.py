@@ -119,6 +119,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"cultura" in dashboard_body
     assert b"Opiniones derivadas" in dashboard_body
     assert b"/learning-stances/" in dashboard_body
+    assert b"Madurez relacional" in dashboard_body
     assert b"/internal/cycle" in body
     assert b"Salud" in body
     assert b"Perfil" in body
@@ -1897,6 +1898,27 @@ def test_learning_stances_derive_from_active_journal_and_can_be_edited(tmp_path)
         if item["theme"] == "cultura"
     )
     assert dash_cultura["source"] == "edited"
+
+
+def test_relationship_maturity_profile_tracks_learning_evidence(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal",
+        {"title": "John Byrne", "lesson": "Es mi autor favorito de comics", "tags": ["cultura"]},
+    )
+    for idx in range(4):
+        _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": f"mensaje {idx}"})
+
+    dashboard = _request(app, "GET", "/users/mindora/agents/nino/relationship-dashboard")["dashboard"]
+    profile = dashboard["maturity_profile"]
+
+    assert profile["score"] > 0
+    assert profile["stage"] in {"arranque", "aprendizaje_temprano", "relacion_en_maduracion", "criterio_en_formacion"}
+    assert "usa aprendizajes aprobados" in profile["strengths"]
+    assert profile["inputs"]["active_learning_count"] == 1
+    assert profile["inputs"]["active_stance_count"] >= 1
 
 
 def test_dashboard_data_counts_telegram_users_and_pending_links(tmp_path) -> None:

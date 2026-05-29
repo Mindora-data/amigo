@@ -438,6 +438,23 @@ def test_llm_prompt_includes_derived_learning_stances() -> None:
     assert "Por lo que he aprendido contigo" in prompt
 
 
+def test_llm_prompt_includes_relationship_maturity_profile() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.add_learning_journal_entry(
+        "agent-llm",
+        {"title": "Tono", "lesson": "Responder breve y sin insistir", "tags": ["comportamiento"]},
+    )
+    runtime.tick("agent-llm", {"intent": "chat", "text": "hola"})
+
+    system = llm.prompts[-1]["system"]
+    prompt = llm.prompts[-1]["user"]
+    assert "perfil de madurez" in system
+    assert "Perfil de madurez relacional:" in prompt
+    assert "Siguiente crecimiento:" in prompt
+
+
 def test_llm_prompt_includes_onboarding_profile() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

@@ -1426,6 +1426,70 @@ def _derive_stance_text(theme: str, entries: list[LearningJournalEntry]) -> str:
     return f"Por lo que he aprendido contigo, mi postura en este tema se apoya en: {joined}." if joined else ""
 
 
+def _maturity_profile(
+    *,
+    interaction_count: int,
+    active_learning_count: int,
+    draft_learning_count: int,
+    active_stance_count: int,
+    learning_counts: dict[str, int],
+    style: dict[str, float],
+) -> dict[str, Any]:
+    correction_pressure = learning_counts.get("negative", 0) + learning_counts.get("correction", 0) + learning_counts.get("stop", 0)
+    evidence = (
+        min(interaction_count, 80) * 0.35
+        + min(active_learning_count, 12) * 3.0
+        + min(active_stance_count, 7) * 5.0
+        + min(draft_learning_count, 10) * 0.8
+        + min(learning_counts.get("positive", 0), 20) * 1.2
+        - min(correction_pressure, 20) * 1.1
+    )
+    score = round(_clamp01(evidence / 100.0), 4)
+    if score >= 0.72:
+        stage = "criterio_en_formacion"
+    elif score >= 0.42:
+        stage = "relacion_en_maduracion"
+    elif score >= 0.18:
+        stage = "aprendizaje_temprano"
+    else:
+        stage = "arranque"
+    strengths: list[str] = []
+    if active_learning_count:
+        strengths.append("usa aprendizajes aprobados")
+    if active_stance_count:
+        strengths.append("forma posturas por temas")
+    if style.get("caution", 0.5) > 0.55:
+        strengths.append("ajusta cautela tras correcciones")
+    if interaction_count >= 25:
+        strengths.append("tiene continuidad de relacion")
+    risks: list[str] = []
+    if draft_learning_count > active_learning_count + 3:
+        risks.append("muchos detectados pendientes de revisar")
+    if correction_pressure > learning_counts.get("positive", 0) + 2:
+        risks.append("recibe mas correcciones que aciertos")
+    if active_learning_count == 0:
+        risks.append("pocos criterios aprobados por el usuario")
+    next_growth = "revisar detectados y activar solo los buenos"
+    if active_learning_count >= 3 and active_stance_count == 0:
+        next_growth = "consolidar posturas por tema"
+    elif active_stance_count:
+        next_growth = "contrastar posturas con nuevas conversaciones"
+    return {
+        "score": score,
+        "stage": stage,
+        "strengths": strengths,
+        "risks": risks,
+        "next_growth": next_growth,
+        "inputs": {
+            "interaction_count": interaction_count,
+            "active_learning_count": active_learning_count,
+            "draft_learning_count": draft_learning_count,
+            "active_stance_count": active_stance_count,
+            "correction_pressure": correction_pressure,
+        },
+    }
+
+
 class NinoRuntime:
     def __init__(
         self,
@@ -1970,6 +2034,16 @@ class NinoRuntime:
         journal_entries = self.learning_journal_store.list_for_agent(agent_id, status="all")
         active_journal = [entry for entry in journal_entries if entry.status == "active"]
         draft_journal = [entry for entry in journal_entries if entry.status == "draft"]
+        stances = self.learning_stances(agent_id)
+        active_stances = [item for item in stances["stances"] if item.get("active")]
+        maturity_profile = _maturity_profile(
+            interaction_count=int(relation.get("interaction_count", 0)),
+            active_learning_count=len(active_journal),
+            draft_learning_count=len(draft_journal),
+            active_stance_count=len(active_stances),
+            learning_counts=counts,
+            style=style,
+        )
         return {
             "agent_id": agent_id,
             "privacy": {
@@ -1982,6 +2056,7 @@ class NinoRuntime:
                 "maturity": state.cognitive_time.get("maturity", 0.0),
                 "interaction_count": int(relation.get("interaction_count", 0)),
             },
+            "maturity_profile": maturity_profile,
             "relationship_learning": {
                 "counts": counts,
                 "last_outcome": learning.get("last_outcome"),
@@ -2009,7 +2084,7 @@ class NinoRuntime:
                 "recent_entries": [asdict(entry) for entry in journal_entries[:8]],
                 "scope": "private_editable_user_journal",
             },
-            "learning_stances": self.learning_stances(agent_id),
+            "learning_stances": stances,
             "proactivity": {
                 "consent": proactivity.get("consent", "unknown"),
                 "pending_inbox_count": len([item for item in inbox if not item.get("delivered", False)]),
@@ -2913,8 +2988,17 @@ class NinoRuntime:
                         asdict(entry)
                         for entry in self.learning_journal_store.list_for_agent(agent_id, status="active")[:8]
                     ],
-                    "learning_stances": self.learning_stances(agent_id)["stances"],
                 }
+                prompt_stances = self.learning_stances(agent_id)["stances"]
+                prompt_relation_state["learning_stances"] = prompt_stances
+                prompt_relation_state["maturity_profile"] = _maturity_profile(
+                    interaction_count=int(state.relation_state.get("interaction_count", 0)),
+                    active_learning_count=len(prompt_relation_state["learning_journal"]),
+                    draft_learning_count=len(self.learning_journal_store.list_for_agent(agent_id, status="draft")),
+                    active_stance_count=len([item for item in prompt_stances if item.get("active")]),
+                    learning_counts=dict(dict(state.relation_state.get("relationship_learning", {})).get("counts", {})),
+                    style=dict(dict(state.relation_state.get("relationship_learning", {})).get("response_style", RELATIONSHIP_DEFAULT_STYLE)),
+                )
                 prompt = build_nino_prompt(
                     agent_id=agent_id,
                     text=text,

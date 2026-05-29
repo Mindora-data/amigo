@@ -1166,3 +1166,27 @@ Tests:
 
 - `no me gusta que llueva los domingos` en grupo no crea aprendizaje.
 - `no me gusta que amigo insista...` en grupo sí crea un `draft`.
+
+## Sprint 36 - Perfil de madurez relacional
+
+Estado: hecho inicial.
+
+Objetivo: medir y exponer la madurez de amigo como resultado de evidencia real, no
+como narrativa decorativa.
+
+Hechos:
+
+- Se calcula `maturity_profile` por relacion/agente con:
+  interacciones, aprendizajes activos, detectados pendientes, posturas activas,
+  señales positivas y presión de correcciones/limites.
+- El perfil devuelve `score`, `stage`, fortalezas, riesgos y siguiente zona de
+  crecimiento.
+- `/dashboard` muestra una tarjeta `Madurez relacional`.
+- El prompt recibe el perfil y lo usa para modular tono: en arranque o con riesgos,
+  debe ser mas humilde, menos tajante y con menos iniciativa.
+- No crea recuerdos ni experiencias: solo resume estado operativo de la relacion.
+
+Tests:
+
+- El dashboard expone perfil de madurez con evidencias.
+- El prompt incluye el perfil de madurez relacional.
