@@ -339,6 +339,27 @@ def test_group_reaction_marks_social_outcome_and_observes_feedback(tmp_path) -> 
     assert any(item["text"] == "social_feedback:positive" for item in backend.observations)
 
 
+def test_group_reply_to_human_is_observed_without_entering_thread(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+    update = _group_update(-100, "sí, yo creo que Madrid", user_id=11)
+    update["message"]["reply_to_message"] = {
+        "from": {"id": 10, "is_bot": False, "first_name": "Pablo"},
+        "text": "alguien sabe cual es la capital de españa",
+    }
+
+    bot.handle_update(update)
+
+    assert backend.ticks == []
+    assert backend.observations[-1]["text"] == "sí, yo creo que Madrid"
+    rows = links.conn.execute("SELECT * FROM telegram_social_decision").fetchall()
+    assert rows[0]["decision"] == "observe"
+    assert rows[0]["reason"] == "human_reply_thread"
+    assert telegram.sent == []
+
+
 def test_group_ambient_cooldown_shortens_when_group_is_active(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()

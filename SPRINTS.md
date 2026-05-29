@@ -1018,3 +1018,24 @@ Tests:
 - Un mensaje normal registra `observe` con motivo `no_social_opening`.
 - Una respuesta posterior del grupo marca outcome positivo y lo observa en backend.
 - El dashboard de madurez grupal muestra `social_outcomes`.
+
+## Sprint 31 - No invadir hilos humanos de grupo
+
+Estado: hecho inicial.
+
+Objetivo: evitar que amigo se meta en conversaciones laterales cuando una persona
+responde directamente a otra dentro del grupo.
+
+Hechos:
+
+- Si un mensaje de Telegram es respuesta a otro usuario humano, amigo lo observa y lo
+  registra como decision social `observe` con motivo `human_reply_thread`.
+- No responde aunque el texto contenga una respuesta o una pregunta general, salvo que
+  el mensaje lo mencione directamente o responda a un mensaje del bot.
+- Esto conserva la participacion en temas generales abiertos, pero evita colarse en
+  subhilos entre dos personas.
+
+Tests:
+
+- Un reply a humano se observa sin respuesta visible y queda auditado como
+  `human_reply_thread`.

@@ -454,6 +454,13 @@ class TelegramBotService:
             return True
         return False
 
+    def _is_reply_to_human(self, message: dict[str, Any]) -> bool:
+        reply_to = message.get("reply_to_message") if isinstance(message.get("reply_to_message"), dict) else {}
+        if not reply_to:
+            return False
+        reply_from = reply_to.get("from") if isinstance(reply_to.get("from"), dict) else {}
+        return not bool(reply_from.get("is_bot"))
+
     def _clean_group_text(self, text: str) -> str:
         username = self._bot_username()
         cleaned = text
@@ -596,6 +603,18 @@ class TelegramBotService:
         reaction = self._classify_group_reaction(chat_id, message, clean_text, now)
         if reaction:
             self.backend.observe(target_user_id, f"social_feedback:{reaction}", now)
+        if not directed and self._is_reply_to_human(message):
+            self.links.record_social_decision(
+                chat_id=chat_id,
+                message_id=message.get("message_id"),
+                sender_id=self._sender_id(message),
+                text=clean_text,
+                decision="observe",
+                reason="human_reply_thread",
+                now=now,
+            )
+            self.backend.observe(target_user_id, context_text, now)
+            return
         should_reply, reason = (True, "directed") if directed else self._ambient_group_reason(chat_id, clean_text, now)
         if not should_reply:
             self.links.record_social_decision(
