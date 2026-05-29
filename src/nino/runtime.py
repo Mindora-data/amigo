@@ -1731,16 +1731,19 @@ class NinoRuntime:
         now: datetime | None = None,
     ) -> dict[str, Any]:
         now = now or datetime.now(timezone.utc)
-        entry = make_manual_learning_entry(
-            agent_id=agent_id,
-            lesson=str(payload.get("lesson", "")),
-            title=str(payload.get("title", "")).strip() or None,
-            tags=[str(tag) for tag in payload.get("tags", ["manual"]) if str(tag).strip()]
-            if isinstance(payload.get("tags", ["manual"]), list)
-            else ["manual"],
-            status=str(payload.get("status", "active")),
-            now=now,
-        )
+        try:
+            entry = make_manual_learning_entry(
+                agent_id=agent_id,
+                lesson=str(payload.get("lesson", "")),
+                title=str(payload.get("title", "")).strip() or None,
+                tags=[str(tag) for tag in payload.get("tags", ["manual"]) if str(tag).strip()]
+                if isinstance(payload.get("tags", ["manual"]), list)
+                else ["manual"],
+                status=str(payload.get("status", "active")),
+                now=now,
+            )
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
         self.learning_journal_store.upsert(entry)
         state = self.load_or_init_state(agent_id)
         state.relation_state = _append_audit_event(
