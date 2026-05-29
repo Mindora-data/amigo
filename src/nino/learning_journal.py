@@ -110,6 +110,20 @@ DETECTED_LESSON_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
         "El usuario sugiere que deberia {detail}. Revisarlo como posible pauta.",
     ),
 )
+PRIVATE_PREFERENCE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(r"\bme encanta\s+(.{3,120})", re.IGNORECASE | re.DOTALL),
+        "Al usuario le encanta {detail}. Tratarlo como gusto personal, no como regla general.",
+    ),
+    (
+        re.compile(r"\bmi favorit[oa]\s+(?:es|son)\s+(.{3,120})", re.IGNORECASE | re.DOTALL),
+        "El usuario marca como favorito: {detail}. Usarlo como gusto personal privado.",
+    ),
+    (
+        re.compile(r"\bme gusta mucho\s+(.{3,120})", re.IGNORECASE | re.DOTALL),
+        "Al usuario le gusta mucho {detail}. Usarlo como preferencia personal privada.",
+    ),
+)
 
 FRIEND_BEHAVIOR_TERMS = (
     "amigo",
@@ -297,6 +311,33 @@ def extract_detected_learning_journal_entries(
         return []
     existing = {_norm_lesson(item) for item in (existing_lessons or [])}
     out: list[LearningJournalEntry] = []
+    if not is_group_context:
+        for pattern, template in PRIVATE_PREFERENCE_PATTERNS:
+            match = pattern.search(text)
+            if not match:
+                continue
+            detail = _clean_lesson(match.group(1))
+            if _looks_like_friend_behavior(detail):
+                continue
+            lesson = template.format(detail=detail)
+            if _norm_lesson(lesson) in existing:
+                continue
+            existing.add(_norm_lesson(lesson))
+            try:
+                out.append(
+                    _new_entry(
+                        agent_id=agent_id,
+                        lesson=lesson,
+                        tag="personal_preference",
+                        source="detected",
+                        status="draft",
+                        now=now,
+                        source_episode_id=source_episode_id,
+                        title=f"Detectado: {_title_from_lesson(detail, 'preference')}",
+                    )
+                )
+            except ValueError:
+                continue
     for pattern, tag, template in DETECTED_LESSON_PATTERNS:
         match = pattern.search(text)
         if not match:

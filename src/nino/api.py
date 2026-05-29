@@ -1884,6 +1884,9 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel"><h2>Memoria</h2><pre id="memory">{}</pre></div>
       <div class="panel"><h2>Proactividad</h2><pre id="proactivity">{}</pre></div>
       <div class="panel"><h2>Madurez relacional</h2><pre id="maturityProfile">{}</pre></div>
+      <div class="panel"><h2>Historial de madurez</h2><pre id="maturityHistory">[]</pre></div>
+      <div class="panel"><h2>Revisión aprendizajes</h2><pre id="learningReview">{}</pre></div>
+      <div class="panel"><h2>Digest aprendizaje</h2><pre id="learningDigest">{}</pre></div>
       <div class="panel"><h2>Hilo activo</h2><pre id="thread">{}</pre></div>
       <div class="panel"><h2>Señales recientes</h2><pre id="signals">[]</pre></div>
       <div class="panel wide"><h2>Bitácora editable</h2>
@@ -2053,6 +2056,9 @@ DASHBOARD_HTML = """<!doctype html>
       print("memory", dash.memory || {});
       print("proactivity", dash.proactivity || {});
       print("maturityProfile", dash.maturity_profile || {});
+      print("maturityHistory", dash.maturity_history || []);
+      print("learningReview", out.learning_review || dash.learning_review || {});
+      print("learningDigest", out.learning_digest || dash.learning_digest || {});
       print("thread", dash.active_conversation_thread || {});
       print("signals", dash.relationship_learning?.recent_signals || []);
       renderJournal(out.learning_journal?.entries || dash.learning_journal?.recent_entries || []);
@@ -2129,7 +2135,10 @@ API_ENDPOINTS = [
     "GET /users/{user_id}/agents/{agent_id}/memory/facts",
     "GET /users/{user_id}/agents/{agent_id}/learning-journal",
     "POST /users/{user_id}/agents/{agent_id}/learning-journal",
+    "POST /users/{user_id}/agents/{agent_id}/learning-journal/bulk",
     "PATCH /users/{user_id}/agents/{agent_id}/learning-journal/{entry_id}",
+    "GET /users/{user_id}/agents/{agent_id}/learning-review",
+    "GET /users/{user_id}/agents/{agent_id}/learning-digest",
     "GET /users/{user_id}/agents/{agent_id}/learning-stances",
     "PATCH /users/{user_id}/agents/{agent_id}/learning-stances/{theme}",
     "POST /users/{user_id}/agents/{agent_id}/memory/search",
@@ -2148,7 +2157,10 @@ API_ENDPOINTS = [
     "GET /agents/{agent_id}/memory/facts",
     "GET /agents/{agent_id}/learning-journal",
     "POST /agents/{agent_id}/learning-journal",
+    "POST /agents/{agent_id}/learning-journal/bulk",
     "PATCH /agents/{agent_id}/learning-journal/{entry_id}",
+    "GET /agents/{agent_id}/learning-review",
+    "GET /agents/{agent_id}/learning-digest",
     "GET /agents/{agent_id}/learning-stances",
     "PATCH /agents/{agent_id}/learning-stances/{theme}",
     "DELETE /agents/{agent_id}/memory/facts/{fact_id}",
@@ -2646,6 +2658,8 @@ class NinoService:
             "memory_facts": self.list_memory_facts(agent_id, {"status": "all"}),
             "learning_journal": self.list_learning_journal(agent_id, {"status": "all"}),
             "learning_stances": self.learning_stances(agent_id),
+            "learning_review": self.learning_review(agent_id),
+            "learning_digest": self.learning_digest(agent_id),
             "temporal_events": self.list_temporal_events(agent_id),
             "proactive_inbox": self.proactive_inbox(agent_id),
             "llm": self.llm_status(agent_id),
@@ -3733,6 +3747,15 @@ class NinoService:
     def update_learning_journal_entry(self, agent_id: str, entry_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.update_learning_journal_entry(agent_id, entry_id, payload))
 
+    def bulk_update_learning_journal(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.bulk_update_learning_journal(agent_id, payload))
+
+    def learning_review(self, agent_id: str) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.learning_review(agent_id))
+
+    def learning_digest(self, agent_id: str) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.learning_digest(agent_id))
+
     def learning_stances(self, agent_id: str) -> dict[str, Any]:
         return _to_jsonable(self.runtime.learning_stances(agent_id))
 
@@ -4028,8 +4051,14 @@ class NinoHttpApp:
             return "200 OK", self.service.list_learning_journal(agent_id, payload)
         if method == "POST" and tail == ["learning-journal"]:
             return "200 OK", self.service.add_learning_journal_entry(agent_id, payload)
+        if method == "POST" and tail == ["learning-journal", "bulk"]:
+            return "200 OK", self.service.bulk_update_learning_journal(agent_id, payload)
         if method == "PATCH" and len(tail) == 2 and tail[0] == "learning-journal":
             return "200 OK", self.service.update_learning_journal_entry(agent_id, tail[1], payload)
+        if method == "GET" and tail == ["learning-review"]:
+            return "200 OK", self.service.learning_review(agent_id)
+        if method == "GET" and tail == ["learning-digest"]:
+            return "200 OK", self.service.learning_digest(agent_id)
         if method == "GET" and tail == ["learning-stances"]:
             return "200 OK", self.service.learning_stances(agent_id)
         if method == "PATCH" and len(tail) == 2 and tail[0] == "learning-stances":

@@ -1490,6 +1490,93 @@ def _maturity_profile(
     }
 
 
+def _review_key(value: str) -> str:
+    value = value.lower()
+    value = value.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ñ", "n")
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", value)).strip()
+
+
+def _learning_review(agent_id: str, entries: list[LearningJournalEntry]) -> dict[str, Any]:
+    by_theme = {
+        theme: {"active": 0, "draft": 0, "archived": 0, "total": 0}
+        for theme in ["vida", "cultura", "amistad", "trabajo", "comportamiento", "salud", "otros"]
+    }
+    drafts: list[LearningJournalEntry] = []
+    seen: dict[str, list[str]] = {}
+    for entry in entries:
+        theme = classify_learning_theme(entry.title, entry.lesson, entry.tags)
+        status = entry.status if entry.status in {"active", "draft", "archived"} else "draft"
+        by_theme.setdefault(theme, {"active": 0, "draft": 0, "archived": 0, "total": 0})
+        by_theme[theme][status] += 1
+        by_theme[theme]["total"] += 1
+        if status == "draft":
+            drafts.append(entry)
+        key = _review_key(f"{entry.title} {entry.lesson}")
+        if key:
+            seen.setdefault(key, []).append(entry.entry_id)
+    duplicates = [
+        {"key": key[:80], "entry_ids": ids}
+        for key, ids in seen.items()
+        if len(ids) > 1
+    ][:10]
+    next_actions: list[str] = []
+    if drafts:
+        next_actions.append("Revisar detectados: activar solo lo que de verdad quieras que moldee a amigo.")
+    if duplicates:
+        next_actions.append("Fusionar duplicados para que una misma pauta no pese dos veces.")
+    if not next_actions:
+        next_actions.append("No hay borradores pendientes; seguir observando conversaciones.")
+    oldest_draft = min((entry.created_at for entry in drafts), default=None)
+    return {
+        "agent_id": agent_id,
+        "draft_count": len(drafts),
+        "oldest_draft_at": oldest_draft.isoformat() if oldest_draft else None,
+        "by_theme": by_theme,
+        "duplicates": duplicates,
+        "next_actions": next_actions,
+        "privacy": "private_review_queue_no_raw_global_export",
+    }
+
+
+def _learning_digest(
+    agent_id: str,
+    entries: list[LearningJournalEntry],
+    stances: dict[str, Any],
+    review: dict[str, Any],
+) -> dict[str, Any]:
+    active = [entry for entry in entries if entry.status == "active"]
+    draft = [entry for entry in entries if entry.status == "draft"]
+    by_theme: dict[str, dict[str, Any]] = {}
+    stance_by_theme = {str(item.get("theme")): item for item in stances.get("stances", []) if isinstance(item, dict)}
+    for theme in ["vida", "cultura", "amistad", "trabajo", "comportamiento", "salud", "otros"]:
+        theme_entries = [entry for entry in entries if classify_learning_theme(entry.title, entry.lesson, entry.tags) == theme]
+        theme_active = [entry for entry in theme_entries if entry.status == "active"]
+        theme_draft = [entry for entry in theme_entries if entry.status == "draft"]
+        stance = stance_by_theme.get(theme, {})
+        by_theme[theme] = {
+            "active_count": len(theme_active),
+            "draft_count": len(theme_draft),
+            "archived_count": len([entry for entry in theme_entries if entry.status == "archived"]),
+            "stance_active": bool(stance.get("active")),
+            "stance_source": stance.get("source"),
+            "sample_titles": [entry.title for entry in theme_entries[:5]],
+        }
+    gaps = [theme for theme, item in by_theme.items() if int(item["active_count"]) == 0]
+    return {
+        "agent_id": agent_id,
+        "active_count": len(active),
+        "draft_count": len(draft),
+        "by_theme": by_theme,
+        "gaps": gaps,
+        "review": {
+            "draft_count": review.get("draft_count", 0),
+            "duplicate_count": len(review.get("duplicates", [])),
+            "next_actions": review.get("next_actions", []),
+        },
+        "privacy": "private_digest_from_learning_journal_no_conversation_text",
+    }
+
+
 class NinoRuntime:
     def __init__(
         self,
@@ -1886,6 +1973,51 @@ class NinoRuntime:
         self.state_store.put(state)
         return {"ok": True, "entry": asdict(entry)}
 
+    def bulk_update_learning_journal(
+        self,
+        agent_id: str,
+        payload: dict[str, Any],
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        entry_ids = payload.get("entry_ids", [])
+        if not isinstance(entry_ids, list):
+            return {"ok": False, "error": "entry_ids_must_be_list"}
+        status = str(payload.get("status", "")).strip()
+        if status not in {"active", "draft", "archived"}:
+            return {"ok": False, "error": "invalid_learning_journal_status"}
+        updated: list[dict[str, Any]] = []
+        missing: list[str] = []
+        for raw_entry_id in entry_ids[:100]:
+            entry_id = str(raw_entry_id)
+            entry = self.learning_journal_store.get(agent_id, entry_id)
+            if entry is None:
+                missing.append(entry_id)
+                continue
+            entry.status = status
+            entry.updated_at = now
+            self.learning_journal_store.upsert(entry)
+            updated.append(asdict(entry))
+        state = self.load_or_init_state(agent_id)
+        state.relation_state = _append_audit_event(
+            state.relation_state,
+            now=now,
+            event_type="learning_journal_bulk_updated",
+            payload={"status": status, "updated_count": len(updated), "missing_count": len(missing)},
+        )
+        state.updated_at = now
+        self.state_store.put(state)
+        return {"ok": True, "updated_count": len(updated), "missing": missing, "entries": updated}
+
+    def learning_review(self, agent_id: str) -> dict[str, Any]:
+        return _learning_review(agent_id, self.learning_journal_store.list_for_agent(agent_id, status="all"))
+
+    def learning_digest(self, agent_id: str) -> dict[str, Any]:
+        entries = self.learning_journal_store.list_for_agent(agent_id, status="all")
+        stances = self.learning_stances(agent_id)
+        review = _learning_review(agent_id, entries)
+        return _learning_digest(agent_id, entries, stances, review)
+
     def learning_stances(self, agent_id: str) -> dict[str, Any]:
         state = self.load_or_init_state(agent_id)
         edited = dict(state.relation_state.get("learning_stances", {}))
@@ -1949,6 +2081,38 @@ class NinoRuntime:
         state.updated_at = now
         self.state_store.put(state)
         return {"ok": True, "stance": self.learning_stances(agent_id)}
+
+    def _record_maturity_history(self, state: AgentState, now: datetime) -> None:
+        entries = self.learning_journal_store.list_for_agent(state.agent_id, status="all")
+        active_journal = [entry for entry in entries if entry.status == "active"]
+        draft_journal = [entry for entry in entries if entry.status == "draft"]
+        stances = self.learning_stances(state.agent_id)
+        active_stances = [item for item in stances["stances"] if item.get("active")]
+        learning = dict(state.relation_state.get("relationship_learning", {}))
+        counts = {key: int(value) for key, value in dict(learning.get("counts", {})).items()}
+        style = dict(RELATIONSHIP_DEFAULT_STYLE)
+        style.update({key: float(value) for key, value in dict(learning.get("response_style", {})).items() if key in style})
+        profile = _maturity_profile(
+            interaction_count=int(state.relation_state.get("interaction_count", 0)),
+            active_learning_count=len(active_journal),
+            draft_learning_count=len(draft_journal),
+            active_stance_count=len(active_stances),
+            learning_counts=counts,
+            style=style,
+        )
+        history = [item for item in state.relation_state.get("maturity_history", []) if isinstance(item, dict)]
+        snapshot = {
+            "at": now.isoformat(),
+            "score": profile["score"],
+            "stage": profile["stage"],
+            "active_learning_count": len(active_journal),
+            "draft_learning_count": len(draft_journal),
+            "active_stance_count": len(active_stances),
+            "correction_pressure": profile["inputs"]["correction_pressure"],
+        }
+        if not history or any(history[-1].get(key) != snapshot[key] for key in ("score", "stage", "active_learning_count", "draft_learning_count", "active_stance_count", "correction_pressure")):
+            history.append(snapshot)
+        state.relation_state = {**state.relation_state, "maturity_history": history[-50:]}
 
     def retrieve_memory(self, agent_id: str, request: RetrieveRequest) -> RetrieveResponse:
         out = self.retriever.retrieve(agent_id=agent_id, request=request, top_k=5)
@@ -2035,6 +2199,7 @@ class NinoRuntime:
         active_journal = [entry for entry in journal_entries if entry.status == "active"]
         draft_journal = [entry for entry in journal_entries if entry.status == "draft"]
         stances = self.learning_stances(agent_id)
+        review = _learning_review(agent_id, journal_entries)
         active_stances = [item for item in stances["stances"] if item.get("active")]
         maturity_profile = _maturity_profile(
             interaction_count=int(relation.get("interaction_count", 0)),
@@ -2057,6 +2222,7 @@ class NinoRuntime:
                 "interaction_count": int(relation.get("interaction_count", 0)),
             },
             "maturity_profile": maturity_profile,
+            "maturity_history": list(relation.get("maturity_history", []))[-20:],
             "relationship_learning": {
                 "counts": counts,
                 "last_outcome": learning.get("last_outcome"),
@@ -2085,6 +2251,8 @@ class NinoRuntime:
                 "scope": "private_editable_user_journal",
             },
             "learning_stances": stances,
+            "learning_review": review,
+            "learning_digest": _learning_digest(agent_id, journal_entries, stances, review),
             "proactivity": {
                 "consent": proactivity.get("consent", "unknown"),
                 "pending_inbox_count": len([item for item in inbox if not item.get("delivered", False)]),
@@ -3115,6 +3283,7 @@ class NinoRuntime:
         self.global_model_store.put(_update_global_model(self.global_model_store.get(), percept_frame, now))
         state.active_goals = _derive_active_goals(state)
         state.energy = _clamp01(state.drive_vector.get("energy", state.energy))
+        self._record_maturity_history(state, now)
         self.state_store.put(state)
 
         return {
@@ -3168,5 +3337,6 @@ class NinoRuntime:
         self.global_model_store.put(_update_global_model(self.global_model_store.get(), percept_frame, now))
         state.active_goals = _derive_active_goals(state)
         state.energy = _clamp01(state.drive_vector.get("energy", state.energy))
+        self._record_maturity_history(state, now)
         self.state_store.put(state)
         return {"ok": True, "tick": state.tick, "episode_id": episode.episode_id}

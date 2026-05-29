@@ -1862,6 +1862,64 @@ def test_group_personal_preference_does_not_become_friend_learning(tmp_path) -> 
     assert "insista" in journal["entries"][0]["lesson"]
 
 
+def test_learning_review_bulk_digest_maturity_history_and_private_preferences(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    tick = _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/tick",
+        {"intent": "chat", "text": "me encanta Brubaker y sus comics"},
+    )
+    assert len(tick["learning_journal_updates"]) == 1
+    detected = tick["learning_journal_updates"][0]
+    assert detected["source"] == "detected"
+    assert detected["status"] == "draft"
+    assert "gusto personal" in detected["lesson"]
+    assert "personal_preference" in detected["tags"]
+
+    review = _request(app, "GET", "/users/mindora/agents/nino/learning-review")
+    assert review["draft_count"] == 1
+    assert review["by_theme"]["cultura"]["draft"] == 1
+    assert review["next_actions"]
+
+    bulk = _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal/bulk",
+        {"entry_ids": [detected["entry_id"]], "status": "active"},
+    )
+    assert bulk["ok"] is True
+    assert bulk["updated_count"] == 1
+    assert bulk["entries"][0]["status"] == "active"
+
+    digest = _request(app, "GET", "/users/mindora/agents/nino/learning-digest")
+    assert digest["active_count"] == 1
+    assert digest["by_theme"]["cultura"]["active_count"] == 1
+    assert "vida" in digest["gaps"]
+    assert digest["privacy"] == "private_digest_from_learning_journal_no_conversation_text"
+
+    dashboard_data = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
+    assert dashboard_data["learning_review"]["by_theme"]["cultura"]["active"] == 1
+    assert dashboard_data["learning_digest"]["by_theme"]["cultura"]["active_count"] == 1
+    assert dashboard_data["relationship_dashboard"]["dashboard"]["maturity_history"]
+
+
+def test_private_preference_in_group_is_not_detected_as_journal_learning(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    group = _request(
+        app,
+        "POST",
+        "/agents/telegram-group-100/tick",
+        {"intent": "group_chat", "text": "me encanta Brubaker y sus comics"},
+    )
+
+    assert group["learning_journal_updates"] == []
+    journal = _request(app, "GET", "/agents/telegram-group-100/learning-journal")
+    assert journal["count"] == 0
+
+
 def test_learning_stances_derive_from_active_journal_and_can_be_edited(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     _request(

@@ -1190,3 +1190,91 @@ Tests:
 
 - El dashboard expone perfil de madurez con evidencias.
 - El prompt incluye el perfil de madurez relacional.
+
+## Sprint 37 - Cola de revision de aprendizajes
+
+Estado: hecho inicial.
+
+Objetivo: que los aprendizajes detectados no queden escondidos como una lista plana.
+
+Hechos:
+
+- `GET /learning-review` agrupa borradores por tema, detecta duplicados simples y
+  propone siguientes acciones.
+- `/dashboard-data` y `/dashboard` exponen la revision.
+- La cola es privada por agente y no incluye texto crudo de conversaciones fuera de
+  la bitacora editable.
+
+Tests:
+
+- Un gusto privado detectado entra como borrador y aparece en la cola de revision.
+
+## Sprint 38 - Aprobacion masiva de aprendizajes
+
+Estado: hecho inicial.
+
+Objetivo: permitir limpiar la cola de detectados sin editar uno por uno.
+
+Hechos:
+
+- `POST /learning-journal/bulk` cambia estado de varios aprendizajes a `active`,
+  `draft` o `archived`.
+- La accion queda auditada como `learning_journal_bulk_updated`.
+- Mantiene aislamiento por `agent_id`.
+
+Tests:
+
+- Un borrador se activa por lote y pasa a alimentar digest/posturas.
+
+## Sprint 39 - Historial de madurez
+
+Estado: hecho inicial.
+
+Objetivo: ver si amigo madura o se atasca, no solo una foto actual.
+
+Hechos:
+
+- Cada tick guarda una instantanea compacta de madurez si cambia la evidencia.
+- Se conservan las ultimas 50 muestras en `relation_state.maturity_history`.
+- `/relationship-dashboard` expone las ultimas 20.
+
+Tests:
+
+- Tras conversar y aprender, el dashboard devuelve historial de madurez.
+
+## Sprint 40 - Digest tematico de aprendizaje
+
+Estado: hecho inicial.
+
+Objetivo: que el dashboard muestre de forma manejable que sabe, que falta y donde hay
+pendientes.
+
+Hechos:
+
+- `GET /learning-digest` resume activos, borradores, gaps y posturas por tema.
+- `/dashboard` muestra `Digest aprendizaje`.
+- No exporta conversaciones ni datos globales; solo deriva de la bitacora privada.
+
+Tests:
+
+- El digest refleja cultura activa y detecta temas sin evidencia aprobada.
+
+## Sprint 41 - Gustos privados suaves como borradores
+
+Estado: hecho inicial.
+
+Objetivo: que amigo empiece a captar gustos personales del usuario en privado sin
+confundirlos con normas generales ni aprenderlos desde grupos.
+
+Hechos:
+
+- En chat privado, patrones como `me encanta X`, `mi favorito es X` o `me gusta mucho
+  X` crean un borrador `personal_preference`.
+- En grupos, esos gustos no crean aprendizaje de amigo.
+- Los borradores deben ser revisados por el usuario antes de convertirse en criterio
+  activo.
+
+Tests:
+
+- `me encanta Brubaker...` en privado crea borrador personal.
+- La misma frase en grupo no crea entrada de bitacora.
