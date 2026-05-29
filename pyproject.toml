@@ -25,6 +25,8 @@ nino-completion-audit = "nino.completion_audit:main"
 nino-closing-report = "nino.closing_report:main"
 nino-prod-smoke = "nino.prod_smoke:main"
 nino-telegram = "nino.telegram:main"
+nino-synthetic-companion = "nino.synthetic_companion:main"
+telegram-style-import = "nino.style_import:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

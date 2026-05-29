@@ -71,6 +71,8 @@ Commands:
   prod-smoke Run production-mode auth smoke without exposing the server.
   telegram Run Telegram long-polling bot or create link code.
   telegram-launchd Manage Telegram long-polling service with launchd.
+  telegram-style-import Import Telegram JSON into an offline anonymous style corpus.
+  synthetic-companion Run synthetic longitudinal companion regression.
   reports     List local closing evidence reports.
   report      Print one closing evidence report. Use: scripts/ninoctl report <nino-closing-*.json|latest>
   eval        Run deterministic local regression evaluations.
@@ -600,6 +602,14 @@ eval_local() {
   "$ROOT_DIR/scripts/nino-eval" "$@"
 }
 
+telegram_style_import() {
+  "$ROOT_DIR/scripts/telegram-style-import" "$@"
+}
+
+synthetic_companion() {
+  "$ROOT_DIR/scripts/nino-synthetic-companion" "$@"
+}
+
 memory_search() {
   local agent="nino"
   local memory_type="all"
@@ -807,6 +817,8 @@ case "$command" in
   prod-smoke) prod_smoke "$@" ;;
   telegram) telegram_bot "$@" ;;
   telegram-launchd) telegram_launchd "$@" ;;
+  telegram-style-import) telegram_style_import "$@" ;;
+  synthetic-companion) synthetic_companion "$@" ;;
   reports) reports ;;
   report) report "${1:-}" ;;
   eval) eval_local "$@" ;;

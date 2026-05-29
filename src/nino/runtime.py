@@ -2471,6 +2471,7 @@ class NinoRuntime:
             self_state=asdict(state),
             relation_state=state.relation_state,
             time_scope="recent",
+            now=now,
         )
         retrieved = self.retrieve_memory(agent_id, retrieve_req)
         llm_retrieved = retrieved
@@ -2482,6 +2483,7 @@ class NinoRuntime:
                     self_state=asdict(state),
                     relation_state=state.relation_state,
                     time_scope="long",
+                    now=now,
                 ),
             )
 

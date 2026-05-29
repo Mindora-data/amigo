@@ -21,6 +21,7 @@ class RetrieveRequest:
     self_state: dict[str, Any]
     relation_state: dict[str, Any]
     time_scope: TimeScope
+    now: datetime | None = None
 
 @dataclass(slots=True)
 class RetrieveResponse:

@@ -214,7 +214,7 @@ class MemoryRetriever:
         self.cold_store = cold_store
 
     def retrieve(self, agent_id: str, request: RetrieveRequest, top_k: int = 5) -> RetrieveResponse:
-        now = datetime.now(timezone.utc)
+        now = request.now or datetime.now(timezone.utc)
         temporal_window = _temporal_window(request.query_intent, now)
         temporal_hit = False
         scored: list[MemoryCandidate] = []

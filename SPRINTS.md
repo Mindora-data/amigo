@@ -827,3 +827,43 @@ Tests:
 - Las respuestas ambientales tienen limite de frecuencia inteligente.
 - Una pregunta sensible se observa sin respuesta.
 - El contexto publico del autor no incluye secretos ni conversaciones privadas.
+
+## Sprint 25 - Aprendizaje social seguro (Sprint 9 solicitado)
+
+Estado: hecho inicial.
+
+Objetivo: separar aprendizaje de registro y medicion longitudinal sin tocar la
+memoria viva ni la memoria privada de usuarios reales.
+
+Frente A - corpus de estilo Telegram:
+
+- `scripts/telegram-style-import` importa el JSON nativo exportado por Telegram y
+  escribe solo en `data/style/` o en el directorio indicado.
+- La allowlist de autores consentidos es obligatoria (`--allow-author`); sin ella el
+  proceso aborta antes de crear salida.
+- El import aplica dos capas: primero despersonaliza nombres, emails, telefonos, URLs
+  y menciones; despues descarta contenido privado o sobre terceros aunque ya este
+  sanitizado.
+- La salida se etiqueta como `registro_no_recuerdos`, contiene metricas agregadas y
+  ejemplos cortos de tono, y declara explicitamente que no escribe en base viva ni en
+  memoria privada.
+
+Frente B - compañero sintetico:
+
+- `scripts/nino-synthetic-companion` ejecuta un usuario falso coherente sobre un
+  runtime in-memory, con informe JSON por turno y sin contacto con `data/nino.db`.
+- El usuario sintetico puede usar DeepSeek solo para refrasear un guion fijo; si el
+  modelo cambia hechos, fechas o intenciones, se usa el texto literal del guion.
+- El guion cubre onboarding, cita futura con pregunta de aviso, confirmacion sin
+  repetir, recuerdo temporal, correccion de perfil, recordatorio relativo y consulta
+  temporal vacia.
+- El banco detecto y corrigio una regresion real: la recuperacion temporal usaba el
+  reloj del sistema en vez del `now` del turno. `RetrieveRequest.now` conserva ahora el
+  reloj cognitivo de cada tick.
+
+Criterios de salida:
+
+- Ninguna pieza escribe en `data/nino.db` por defecto ni en memoria privada real.
+- Tests cubren allowlist obligatoria, filtrado privado/terceros, sanitizacion,
+  fallback determinista del usuario sintetico, recordatorios y honestidad temporal.
+- El corpus de estilo queda disponible para prompt/style few-shot, no para recuerdos.
