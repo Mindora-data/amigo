@@ -727,3 +727,25 @@ Tests:
 - Una continuacion corta usa `active_thread_continuity`.
 - Una correccion de continuidad incrementa `continuity_miss`.
 - Las rutas explicitas de tema/preferencia mantienen prioridad sobre el hilo activo.
+
+## Sprint 21 - Dashboard completo en `/dashboard`
+
+Estado: hecho.
+
+Objetivo: que `/dashboard` sea el lugar unico y directo para ver todos los datos
+operativos del agente, sin tener que buscar botones dentro de `/app`.
+
+Hechos:
+
+- `/dashboard` carga desde `/dashboard-data` y muestra resumen, aprendizaje,
+  hilo activo, perfil, self-model, world-model, conversacion, memoria, eventos,
+  proactividad, LLM y calidad.
+- `GET /dashboard-data?user_id=mindora&agent_id=nino` devuelve un paquete completo
+  de datos locales del agente seleccionado.
+- En produccion, `/dashboard-data` queda deshabilitado igual que `/dashboard` y `/app`.
+
+Tests:
+
+- `/dashboard` contiene la pantalla de datos completos.
+- `/dashboard-data` devuelve el paquete operativo completo.
+- `/dashboard-data` no se expone en `NINO_ENV=prod`.

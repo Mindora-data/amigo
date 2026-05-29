@@ -1823,7 +1823,7 @@ DASHBOARD_HTML = """<!doctype html>
     :root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #172026; background: #f4f6f8; }
     * { box-sizing: border-box; }
     body { margin: 0; padding: 24px; }
-    main { max-width: 980px; margin: 0 auto; display: grid; gap: 16px; }
+    main { max-width: 1180px; margin: 0 auto; display: grid; gap: 16px; }
     header { display: flex; justify-content: space-between; gap: 12px; align-items: end; }
     h1 { margin: 0; font-size: 24px; letter-spacing: 0; }
     .controls { display: grid; grid-template-columns: 160px 160px auto; gap: 8px; align-items: end; }
@@ -1849,8 +1849,8 @@ DASHBOARD_HTML = """<!doctype html>
   <main>
     <header>
       <div>
-        <h1>Aprendizaje de amigo</h1>
-        <div id="status" class="muted">Cargando...</div>
+        <h1>Dashboard de amigo</h1>
+        <div id="status" class="muted">Cargando todos los datos...</div>
       </div>
       <div class="controls">
         <label>Usuario<input id="userId" value="mindora"></label>
@@ -1866,8 +1866,13 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel"><h2>Estilo</h2><pre id="style">{}</pre></div>
       <div class="panel"><h2>Memoria</h2><pre id="memory">{}</pre></div>
       <div class="panel"><h2>Proactividad</h2><pre id="proactivity">{}</pre></div>
+      <div class="panel"><h2>Hilo activo</h2><pre id="thread">{}</pre></div>
       <div class="panel"><h2>Señales recientes</h2><pre id="signals">[]</pre></div>
-      <div class="panel wide"><h2>Dashboard completo</h2><pre id="raw">{}</pre></div>
+      <div class="panel"><h2>Perfil</h2><pre id="profile">{}</pre></div>
+      <div class="panel"><h2>Self</h2><pre id="selfModel">{}</pre></div>
+      <div class="panel"><h2>Mundo</h2><pre id="worldModel">{}</pre></div>
+      <div class="panel wide"><h2>Conversación</h2><pre id="conversation">[]</pre></div>
+      <div class="panel wide"><h2>Datos completos</h2><pre id="raw">{}</pre></div>
     </section>
   </main>
   <script>
@@ -1879,20 +1884,25 @@ DASHBOARD_HTML = """<!doctype html>
       const agent = ($("agentId").value || "nino").trim();
       localStorage.setItem("nino_user_id", user);
       localStorage.setItem("nino_agent_id", agent);
-      const path = `/users/${encodeURIComponent(user)}/agents/${encodeURIComponent(agent)}/relationship-dashboard`;
+      const path = `/dashboard-data?user_id=${encodeURIComponent(user)}&agent_id=${encodeURIComponent(agent)}`;
       const res = await fetch(path, {cache: "no-store", credentials: "same-origin"});
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const out = await res.json();
-      const dash = out.dashboard || {};
+      const dash = out.relationship_dashboard?.dashboard || out.dashboard || {};
       const counts = dash.relationship_learning?.counts || {};
       $("maturity").textContent = fmt(dash.maturity?.maturity);
       $("interactions").textContent = dash.maturity?.interaction_count ?? 0;
       $("positive").textContent = counts.positive ?? 0;
-      $("misses").textContent = (counts.negative ?? 0) + (counts.correction ?? 0) + (counts.stop ?? 0);
+      $("misses").textContent = (counts.negative ?? 0) + (counts.correction ?? 0) + (counts.stop ?? 0) + (counts.continuity_miss ?? 0);
       print("style", dash.response_style || {});
       print("memory", dash.memory || {});
       print("proactivity", dash.proactivity || {});
+      print("thread", dash.active_conversation_thread || {});
       print("signals", dash.relationship_learning?.recent_signals || []);
+      print("profile", out.profile || {});
+      print("selfModel", out.self_model || {});
+      print("worldModel", out.world_model || {});
+      print("conversation", out.conversation?.turns || []);
       print("raw", out);
       $("status").textContent = `Actualizado: ${new Date().toLocaleTimeString()}`;
     }
@@ -1913,6 +1923,7 @@ API_ENDPOINTS = [
     "GET /health/deep",
     "GET /app",
     "GET /dashboard",
+    "GET /dashboard-data",
     "GET /openapi.json",
     "GET /autonomy/status",
     "POST /autonomy/run-once",
@@ -2272,6 +2283,31 @@ class NinoService:
 
     def list_agents(self) -> dict[str, Any]:
         return {"agents": self.runtime.list_agents()}
+
+    def dashboard_data(self, payload: dict[str, Any]) -> dict[str, Any]:
+        user_id = _identity_slug(str(payload.get("user_id", "mindora")), "mindora")
+        public_agent_id = _identity_slug(str(payload.get("agent_id", "nino")), "nino")
+        agent_id = _scoped_agent_id(user_id, public_agent_id)
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "agent_id": public_agent_id,
+            "scoped_agent_id": agent_id,
+            "relationship_dashboard": self.relationship_dashboard(agent_id),
+            "state": self.get_state(agent_id),
+            "profile": self.get_profile(agent_id),
+            "metrics": self.metrics(agent_id),
+            "relation": self.get_relation(agent_id),
+            "self_model": self.get_self_model(agent_id),
+            "world_model": self.get_world_model(agent_id),
+            "narrative": self.get_narrative(agent_id),
+            "conversation": self.conversation(agent_id),
+            "memory_facts": self.list_memory_facts(agent_id, {"status": "all"}),
+            "temporal_events": self.list_temporal_events(agent_id),
+            "proactive_inbox": self.proactive_inbox(agent_id),
+            "llm": self.llm_status(agent_id),
+            "quality": self.conversation_quality(agent_id),
+        }
 
     def login(self, payload: dict[str, Any]) -> dict[str, Any]:
         user_id = _identity_slug(str(payload.get("user_id", "local")), "local")
@@ -3508,6 +3544,13 @@ class NinoHttpApp:
                     ],
                 )
                 return [encoded]
+            if method == "GET" and path == "/dashboard-data" and _is_prod():
+                encoded = json.dumps({"error": "dashboard_disabled_in_prod"}).encode("utf-8")
+                start_response(
+                    "404 Not Found",
+                    [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(encoded))), *_security_headers()],
+                )
+                return [encoded]
             payload = self._read_json(environ)
             session_token = environ.get("HTTP_X_NINO_SESSION", "").strip()
             if not session_token:
@@ -3725,6 +3768,11 @@ class NinoHttpApp:
             return "200 OK", self.service.session_status(payload)
         if method == "POST" and parts == ["session", "logout"]:
             return "200 OK", self.service.logout(payload)
+        if method == "GET" and parts == ["dashboard-data"]:
+            auth = self.service.authorize_user_scope(str(payload.get("user_id", "mindora")), payload)
+            if not auth["ok"]:
+                return "401 Unauthorized", auth
+            return "200 OK", self.service.dashboard_data(payload)
         if method == "GET" and len(parts) == 2 and parts[0] == "users" and parts[1]:
             auth = self.service.authorize_user_scope(parts[1], payload)
             if not auth["ok"]:

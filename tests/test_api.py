@@ -108,8 +108,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert content_type.startswith("text/html")
     assert dashboard_type.startswith("text/html")
     assert b"<title>amigo</title>" in body
-    assert b"Aprendizaje de amigo" in dashboard_body
-    assert b"/relationship-dashboard" in dashboard_body
+    assert b"Dashboard de amigo" in dashboard_body
+    assert b"/dashboard-data" in dashboard_body
+    assert b"Datos completos" in dashboard_body
     assert b"/internal/cycle" in body
     assert b"Salud" in body
     assert b"Perfil" in body
@@ -376,6 +377,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert "GET /health" in root["endpoints"]
     assert "GET /openapi.json" in root["endpoints"]
     assert "GET /dashboard" in root["endpoints"]
+    assert "GET /dashboard-data" in root["endpoints"]
     assert "GET /operations/mode" in root["endpoints"]
     assert "GET /operations/claude" in root["endpoints"]
     assert "POST /operations/claude/configure" in root["endpoints"]
@@ -407,6 +409,7 @@ def test_http_api_ticks_and_restores_state(tmp_path) -> None:
     assert openapi["openapi"] == "3.1.0"
     assert "/agents/{agent_id}/tick" in openapi["paths"]
     assert "/dashboard" in openapi["paths"]
+    assert "/dashboard-data" in openapi["paths"]
     assert "post" in openapi["paths"]["/agents/{agent_id}/tick"]
     assert "delete" in openapi["paths"]["/agents/{agent_id}/episodes/{episode_id}"]
     assert "delete" in openapi["paths"]["/agents/{agent_id}/memory/facts/{fact_id}"]
@@ -807,6 +810,7 @@ def test_prod_rejects_non_https_and_disables_app(tmp_path, monkeypatch) -> None:
     insecure_status, insecure, _ = _request_status_headers(app, "GET", "/health")
     app_status, app_body, _ = _request_status_headers(app, "GET", "/app", headers={"X-Forwarded-Proto": "https"})
     dashboard_status, dashboard_body, _ = _request_status_headers(app, "GET", "/dashboard", headers={"X-Forwarded-Proto": "https"})
+    dashboard_data_status, dashboard_data_body, _ = _request_status_headers(app, "GET", "/dashboard-data", headers={"X-Forwarded-Proto": "https"})
 
     assert insecure_status.startswith("403")
     assert insecure["error"] == "https_required"
@@ -814,6 +818,8 @@ def test_prod_rejects_non_https_and_disables_app(tmp_path, monkeypatch) -> None:
     assert app_body["error"] == "app_disabled_in_prod"
     assert dashboard_status.startswith("404")
     assert dashboard_body["error"] == "dashboard_disabled_in_prod"
+    assert dashboard_data_status.startswith("404")
+    assert dashboard_data_body["error"] == "dashboard_disabled_in_prod"
 
 
 def test_http_api_tick_accepts_time_context_and_records_temporal_event(tmp_path) -> None:
@@ -1617,6 +1623,28 @@ def test_active_conversation_thread_connects_short_followups(tmp_path) -> None:
     assert "active_thread_continuity" in followup["reason_trace"]
     assert dashboard["active_conversation_thread"]["present"] is True
     assert dashboard["active_conversation_thread"]["turn_count"] == 2
+
+
+def test_dashboard_data_returns_complete_local_bundle(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": "hola dashboard"})
+
+    out = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
+
+    assert out["ok"] is True
+    assert out["user_id"] == "mindora"
+    assert out["agent_id"] == "nino"
+    assert out["relationship_dashboard"]["dashboard"]["agent_id"] == "user::mindora::agent::nino"
+    assert "state" in out
+    assert "profile" in out
+    assert "metrics" in out
+    assert "relation" in out
+    assert "self_model" in out
+    assert "world_model" in out
+    assert "conversation" in out
+    assert "memory_facts" in out
+    assert "temporal_events" in out
+    assert "proactive_inbox" in out
 
 
 def test_continuity_correction_is_counted_as_learning_signal(tmp_path) -> None:
