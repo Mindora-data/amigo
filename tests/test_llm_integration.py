@@ -438,6 +438,35 @@ def test_llm_prompt_includes_derived_learning_stances() -> None:
     assert "Por lo que he aprendido contigo" in prompt
 
 
+def test_llm_prompt_blocks_unsupported_personal_opinions() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick("agent-llm", {"intent": "chat", "text": "qué opinas de Watchmen?"})
+
+    system = llm.prompts[-1]["system"]
+    prompt = llm.prompts[-1]["user"]
+    assert "No des opiniones propias sobre obras" in system
+    assert "si no aparecen en tu bitacora activa" in system
+    assert "aun no tienes criterio formado" in system
+    assert "Temas con criterio propio respaldado por evidencia: ninguno" in prompt
+
+
+def test_llm_prompt_lists_evidence_backed_opinion_themes() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.add_learning_journal_entry(
+        "agent-llm",
+        {"title": "John Byrne", "lesson": "Es mi autor favorito de comics", "tags": ["cultura"]},
+    )
+    runtime.tick("agent-llm", {"intent": "chat", "text": "qué opinas de Superman?"})
+
+    prompt = llm.prompts[-1]["user"]
+    assert "Temas con criterio propio respaldado por evidencia:" in prompt
+    assert "cultura" in prompt
+
+
 def test_llm_prompt_includes_relationship_maturity_profile() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

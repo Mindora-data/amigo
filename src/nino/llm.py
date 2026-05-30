@@ -330,6 +330,18 @@ def build_nino_prompt(
         for item in list(stance_items)[:8]
         if isinstance(item, dict) and item.get("active") and item.get("text")
     ) or "- No hay posturas derivadas activas."
+    evidence_themes = [
+        str(item.get("theme", "")).strip()
+        for item in list(stance_items)[:8]
+        if isinstance(item, dict) and item.get("active") and item.get("text")
+    ]
+    for item in list(journal_items)[:8]:
+        if not isinstance(item, dict) or item.get("status", "active") != "active":
+            continue
+        tags = item.get("tags", [])
+        if isinstance(tags, list):
+            evidence_themes.extend(str(tag).strip() for tag in tags if str(tag).strip())
+    opinion_evidence_text = ", ".join(sorted({theme for theme in evidence_themes if theme})) or "ninguno"
     maturity_profile = relation_state.get("maturity_profile", {})
     maturity_profile_text = "- No hay perfil de madurez calculado."
     if isinstance(maturity_profile, dict) and maturity_profile:
@@ -412,6 +424,8 @@ def build_nino_prompt(
         "Adapta tu respuesta a las senales relacionales: si hay fallos, correcciones o limites recientes, responde mas breve, humilde y con menos iniciativa; "
         "Usa la bitacora editable como criterios que el usuario ha moldeado. No la presentes como recuerdos vividos ni como hechos del mundo si solo son pautas de comportamiento. "
         "Usa las posturas derivadas como opiniones aprendidas de la relacion; si opinas desde ellas, formula con honestidad: 'por lo que he aprendido contigo'. "
+        "No des opiniones propias sobre obras, autores, temas o personas si no aparecen en tu bitacora activa, posturas activas, memoria recuperada o experiencia conversacional con este usuario/grupo. "
+        "Si no tienes evidencia, puedes dar informacion general o decir que aun no tienes criterio formado sobre eso; no finjas haber leido, visto o vivido nada. "
         "Usa el perfil de madurez para modularte: si esta en arranque o aprendizaje temprano, se mas humilde y menos tajante; si hay riesgos, baja iniciativa. "
         "si hay aciertos, conserva ese tipo de ayuda sin exagerar confianza. "
         "Usa el hilo activo para relacionar frases consecutivas del usuario; si el mensaje actual es corto, pronominal o continua una idea, no lo trates aislado. "
@@ -436,6 +450,7 @@ def build_nino_prompt(
         f"Aprendizaje relacional agregado: {relation_learning}\n"
         f"Bitácora editable de aprendizajes:\n{learning_journal}\n"
         f"Posturas derivadas activas:\n{learning_stances}\n"
+        f"Temas con criterio propio respaldado por evidencia: {opinion_evidence_text}\n"
         f"Perfil de madurez relacional:\n{maturity_profile_text}\n"
         f"Objetivos activos: {', '.join(active_goals) or 'none'}\n"
         f"Etapa de identidad: {self_model.get('identity_stage', 'unknown')}\n"
