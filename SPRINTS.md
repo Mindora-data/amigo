@@ -1473,3 +1473,89 @@ Hechos:
 Tests:
 
 - El prompt incluye foco, curiosidad abierta, temas estables y tensiones.
+
+## Sprint 53 - Bitacora navegable
+
+Estado: hecho inicial.
+
+Objetivo: que la bitacora editable no se convierta en una lista inmanejable.
+
+Hechos:
+
+- `/learning-journal` acepta filtros por `status`, `theme`, `source` y `q`.
+- `/dashboard` añade busqueda local y filtro por fuente.
+- La eliminacion individual queda disponible desde la tarjeta de cada aprendizaje.
+
+Tests:
+
+- El dashboard contiene controles de busqueda/fuente y boton de eliminar.
+- La API filtra aprendizajes por tema y texto sin mezclar usuarios.
+
+## Sprint 54 - Calidad de aprendizajes
+
+Estado: hecho inicial.
+
+Objetivo: detectar aprendizajes demasiado vagos, absolutos o poco revisados antes de
+que moldeen a amigo.
+
+Hechos:
+
+- `learning_review` incluye `quality.score`, `weak_count` y `weak_entries`.
+- La revision marca aprendizajes cortos, poco especificos, absolutos o detectados
+  activos sin revision manual.
+- Las acciones sugeridas priorizan editar aprendizajes debiles.
+
+Tests:
+
+- Un aprendizaje debil aparece en `quality.weak_entries`.
+
+## Sprint 55 - Fusion de duplicados de bitacora
+
+Estado: hecho inicial.
+
+Objetivo: que una misma pauta no pese dos veces por repeticion.
+
+Hechos:
+
+- Nuevo endpoint `POST /learning-journal/merge`.
+- La fusion conserva el objetivo y archiva las fuentes duplicadas.
+- Se registra auditoria `learning_journal_merged`.
+
+Tests:
+
+- Fusionar dos entradas archiva la fuente y mantiene activo el objetivo.
+
+## Sprint 56 - Bitacora contextual en el prompt
+
+Estado: hecho inicial.
+
+Objetivo: que amigo use aprendizajes pertinentes al tema actual y no arrastre
+criterios culturales o personales sin evidencia cuando no tocan.
+
+Hechos:
+
+- El prompt selecciona aprendizajes activos por solape tematico con el mensaje.
+- Las pautas de comportamiento/amistad siguen disponibles como estilo general.
+- Los aprendizajes de otro tema quedan fuera si no hay relacion con la pregunta.
+
+Tests:
+
+- Una pregunta sobre otro tema no inyecta una opinion cultural irrelevante, pero si
+  conserva una pauta conversacional general.
+
+## Sprint 57 - Revision operativa desde dashboard
+
+Estado: hecho inicial.
+
+Objetivo: que el dashboard ayude a limpiar y moldear la bitacora sin tocar SQLite ni
+scripts.
+
+Hechos:
+
+- La pestaña de bitacora permite buscar, filtrar por fuente, editar, archivar y borrar.
+- El panel de revision muestra duplicados, calidad y siguientes acciones.
+- Los controles son locales al dashboard y no escriben nada hasta guardar/eliminar.
+
+Tests:
+
+- Los controles de dashboard existen y la API de revision/fusion pasa pruebas.

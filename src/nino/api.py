@@ -1842,6 +1842,7 @@ DASHBOARD_HTML = """<!doctype html>
     .journal-list { display: grid; gap: 10px; }
     .journal-entry { display: grid; gap: 8px; border-top: 1px solid #e1e7eb; padding-top: 10px; }
     .journal-row { display: grid; grid-template-columns: 1fr 130px 150px auto auto; gap: 8px; align-items: start; }
+    .journal-tools { display: grid; grid-template-columns: 1fr 160px auto; gap: 8px; align-items: start; margin: 10px 0; }
     .stance-list { display: grid; gap: 12px; }
     .stance-entry { display: grid; gap: 8px; border-top: 1px solid #e1e7eb; padding-top: 10px; }
     .stance-row { display: grid; grid-template-columns: 150px 1fr auto; gap: 8px; align-items: start; }
@@ -1853,6 +1854,7 @@ DASHBOARD_HTML = """<!doctype html>
       body { padding: 14px; }
       header, .controls { grid-template-columns: 1fr; display: grid; }
       .grid { grid-template-columns: 1fr 1fr; }
+      .journal-row, .journal-tools { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -1905,6 +1907,11 @@ DASHBOARD_HTML = """<!doctype html>
         </div>
         <textarea id="journalLesson" placeholder="Aprendizaje, pauta o comportamiento que quieres moldear"></textarea>
         <div id="journalTabs" class="tabs"></div>
+        <div class="journal-tools">
+          <input id="journalSearch" placeholder="Buscar en aprendizajes">
+          <select id="journalSource"><option value="all">todas las fuentes</option><option value="manual">manual</option><option value="auto">auto</option><option value="detected">detected</option></select>
+          <button id="journalClearFilters" class="secondary">Limpiar filtros</button>
+        </div>
         <div id="journalList" class="journal-list"></div>
       </div>
       <div class="panel wide"><h2>Opiniones derivadas</h2><div id="stanceList" class="stance-list"></div></div>
@@ -1921,6 +1928,8 @@ DASHBOARD_HTML = """<!doctype html>
     const print = (id, value) => { $(id).textContent = JSON.stringify(value, null, 2); };
     let lastJournal = [];
     let activeJournalTheme = "todos";
+    let activeJournalSource = "all";
+    let activeJournalQuery = "";
     const journalThemes = ["todos", "vida", "cultura", "amistad", "trabajo", "comportamiento", "salud", "otros", "detectados"];
     async function requestJson(path, options = {}) {
       const res = await fetch(path, {cache: "no-store", credentials: "same-origin", ...options});
@@ -1968,6 +1977,11 @@ DASHBOARD_HTML = """<!doctype html>
         if (activeJournalTheme === "todos") return true;
         if (activeJournalTheme === "detectados") return entry.status === "draft" || entry.source === "detected";
         return inferTheme(entry) === activeJournalTheme;
+      }).filter((entry) => {
+        if (activeJournalSource !== "all" && entry.source !== activeJournalSource) return false;
+        const query = activeJournalQuery.trim().toLowerCase();
+        if (!query) return true;
+        return `${entry.title || ""} ${entry.lesson || ""} ${(entry.tags || []).join(" ")}`.toLowerCase().includes(query);
       });
       $("journalList").replaceChildren(...visible.map((entry) => {
         const wrap = document.createElement("div");
@@ -2092,6 +2106,16 @@ DASHBOARD_HTML = """<!doctype html>
       $("status").textContent = `Actualizado: ${new Date().toLocaleTimeString()}`;
     }
     $("refresh").onclick = () => loadDashboard().catch((err) => $("status").textContent = `Error: ${err.message}`);
+    $("journalSearch").oninput = () => { activeJournalQuery = $("journalSearch").value; renderJournal(lastJournal); };
+    $("journalSource").onchange = () => { activeJournalSource = $("journalSource").value; renderJournal(lastJournal); };
+    $("journalClearFilters").onclick = () => {
+      activeJournalTheme = "todos";
+      activeJournalSource = "all";
+      activeJournalQuery = "";
+      $("journalSearch").value = "";
+      $("journalSource").value = "all";
+      renderJournal(lastJournal);
+    };
     $("journalAdd").onclick = async () => {
       await requestJson(currentAgentPath("/learning-journal"), {
         method: "POST",
@@ -2157,6 +2181,7 @@ API_ENDPOINTS = [
     "GET /users/{user_id}/agents/{agent_id}/learning-journal",
     "POST /users/{user_id}/agents/{agent_id}/learning-journal",
     "POST /users/{user_id}/agents/{agent_id}/learning-journal/bulk",
+    "POST /users/{user_id}/agents/{agent_id}/learning-journal/merge",
     "PATCH /users/{user_id}/agents/{agent_id}/learning-journal/{entry_id}",
     "DELETE /users/{user_id}/agents/{agent_id}/learning-journal/{entry_id}",
     "GET /users/{user_id}/agents/{agent_id}/learning-review",
@@ -2182,6 +2207,7 @@ API_ENDPOINTS = [
     "GET /agents/{agent_id}/learning-journal",
     "POST /agents/{agent_id}/learning-journal",
     "POST /agents/{agent_id}/learning-journal/bulk",
+    "POST /agents/{agent_id}/learning-journal/merge",
     "PATCH /agents/{agent_id}/learning-journal/{entry_id}",
     "DELETE /agents/{agent_id}/learning-journal/{entry_id}",
     "GET /agents/{agent_id}/learning-review",
@@ -3761,11 +3787,17 @@ class NinoService:
     def list_learning_journal(self, agent_id: str, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         filters = filters or {}
         status = str(filters.get("status", "all") or "all")
-        entries = self.runtime.list_learning_journal(agent_id, status=status)
+        theme = str(filters.get("theme", "all") or "all")
+        source = str(filters.get("source", "all") or "all")
+        query = str(filters.get("q", filters.get("query", "")) or "")
+        entries = self.runtime.list_learning_journal(agent_id, status=status, theme=theme, source=source, query=query)
         return {
             "entries": _to_jsonable(entries),
             "count": len(entries),
             "status": status,
+            "theme": theme,
+            "source": source,
+            "query": query,
             "privacy": "private_user_scope_editable_not_global",
         }
 
@@ -3780,6 +3812,9 @@ class NinoService:
 
     def bulk_update_learning_journal(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.bulk_update_learning_journal(agent_id, payload))
+
+    def merge_learning_journal_entries(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.merge_learning_journal_entries(agent_id, payload))
 
     def learning_review(self, agent_id: str) -> dict[str, Any]:
         return _to_jsonable(self.runtime.learning_review(agent_id))
@@ -4090,6 +4125,8 @@ class NinoHttpApp:
             return "200 OK", self.service.add_learning_journal_entry(agent_id, payload)
         if method == "POST" and tail == ["learning-journal", "bulk"]:
             return "200 OK", self.service.bulk_update_learning_journal(agent_id, payload)
+        if method == "POST" and tail == ["learning-journal", "merge"]:
+            return "200 OK", self.service.merge_learning_journal_entries(agent_id, payload)
         if method == "PATCH" and len(tail) == 2 and tail[0] == "learning-journal":
             return "200 OK", self.service.update_learning_journal_entry(agent_id, tail[1], payload)
         if method == "DELETE" and len(tail) == 2 and tail[0] == "learning-journal":

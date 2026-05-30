@@ -28,6 +28,8 @@ from .learning_journal import (
     classify_learning_theme,
     extract_detected_learning_journal_entries,
     extract_learning_journal_entries,
+    learning_entry_quality,
+    learning_terms,
     make_manual_learning_entry,
 )
 from .memory import Episode, InMemoryEpisodeStore, MemoryRetriever
@@ -1812,11 +1814,24 @@ def _learning_review(agent_id: str, entries: list[LearningJournalEntry]) -> dict
         for key, ids in seen.items()
         if len(ids) > 1
     ][:10]
+    quality_items = [learning_entry_quality(entry) for entry in entries]
+    weak_entries = [
+        item
+        for item in quality_items
+        if float(item.get("score", 1.0)) < 0.7 or item.get("issues")
+    ][:15]
+    quality_score = (
+        round(sum(float(item.get("score", 0.0)) for item in quality_items) / len(quality_items), 3)
+        if quality_items
+        else 1.0
+    )
     next_actions: list[str] = []
     if drafts:
         next_actions.append("Revisar detectados: activar solo lo que de verdad quieras que moldee a amigo.")
     if duplicates:
         next_actions.append("Fusionar duplicados para que una misma pauta no pese dos veces.")
+    if weak_entries:
+        next_actions.append("Editar aprendizajes debiles: deben ser concretos, revisables y sin absolutos innecesarios.")
     if not next_actions:
         next_actions.append("No hay borradores pendientes; seguir observando conversaciones.")
     oldest_draft = min((entry.created_at for entry in drafts), default=None)
@@ -1826,6 +1841,11 @@ def _learning_review(agent_id: str, entries: list[LearningJournalEntry]) -> dict
         "oldest_draft_at": oldest_draft.isoformat() if oldest_draft else None,
         "by_theme": by_theme,
         "duplicates": duplicates,
+        "quality": {
+            "score": quality_score,
+            "weak_count": len(weak_entries),
+            "weak_entries": weak_entries,
+        },
         "next_actions": next_actions,
         "privacy": "private_review_queue_no_raw_global_export",
     }
@@ -1868,6 +1888,31 @@ def _learning_digest(
         },
         "privacy": "private_digest_from_learning_journal_no_conversation_text",
     }
+
+
+def _select_prompt_learning_entries(
+    text: str,
+    entries: list[LearningJournalEntry],
+    *,
+    limit: int = 8,
+) -> list[LearningJournalEntry]:
+    active = [entry for entry in entries if entry.status == "active"]
+    if not active:
+        return []
+    query_terms = learning_terms(text)
+    scored: list[tuple[float, LearningJournalEntry]] = []
+    for entry in active:
+        theme = classify_learning_theme(entry.title, entry.lesson, entry.tags)
+        entry_terms = learning_terms(f"{entry.title} {entry.lesson} {' '.join(entry.tags or [])}")
+        overlap = len(query_terms & entry_terms)
+        style_bonus = 1.5 if theme in {"comportamiento", "amistad"} else 0.0
+        score = float(overlap * 2) + style_bonus
+        if not query_terms and theme in {"comportamiento", "amistad"}:
+            score += 0.5
+        if score > 0:
+            scored.append((score, entry))
+    scored.sort(key=lambda item: (item[0], item[1].updated_at.isoformat()), reverse=True)
+    return [entry for _, entry in scored[:limit]]
 
 
 class NinoRuntime:
@@ -2193,8 +2238,28 @@ class NinoRuntime:
             self.state_store.put(state)
         return {"agent_id": agent_id, "event_id": event_id, "deleted": deleted}
 
-    def list_learning_journal(self, agent_id: str, status: str = "all") -> list[LearningJournalEntry]:
-        return self.learning_journal_store.list_for_agent(agent_id, status=status)
+    def list_learning_journal(
+        self,
+        agent_id: str,
+        status: str = "all",
+        *,
+        theme: str = "all",
+        query: str = "",
+        source: str = "all",
+    ) -> list[LearningJournalEntry]:
+        entries = self.learning_journal_store.list_for_agent(agent_id, status=status)
+        if theme and theme != "all":
+            entries = [entry for entry in entries if classify_learning_theme(entry.title, entry.lesson, entry.tags) == theme]
+        if source and source != "all":
+            entries = [entry for entry in entries if entry.source == source]
+        terms = learning_terms(query)
+        if terms:
+            entries = [
+                entry
+                for entry in entries
+                if terms & learning_terms(f"{entry.title} {entry.lesson} {' '.join(entry.tags or [])}")
+            ]
+        return entries
 
     def add_learning_journal_entry(
         self,
@@ -2327,6 +2392,73 @@ class NinoRuntime:
         state.updated_at = now
         self.state_store.put(state)
         return {"ok": True, "updated_count": len(updated), "missing": missing, "entries": updated}
+
+    def merge_learning_journal_entries(
+        self,
+        agent_id: str,
+        payload: dict[str, Any],
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        target_id = str(payload.get("target_id", "")).strip()
+        source_ids = [str(item).strip() for item in payload.get("source_ids", []) if str(item).strip()] if isinstance(payload.get("source_ids", []), list) else []
+        target = self.learning_journal_store.get(agent_id, target_id)
+        if target is None:
+            return {"ok": False, "error": "learning_journal_entry_not_found", "entry_id": target_id}
+        sources: list[LearningJournalEntry] = []
+        missing: list[str] = []
+        for entry_id in source_ids[:25]:
+            if entry_id == target_id:
+                continue
+            entry = self.learning_journal_store.get(agent_id, entry_id)
+            if entry is None:
+                missing.append(entry_id)
+                continue
+            sources.append(entry)
+        if not sources:
+            return {"ok": False, "error": "no_merge_sources", "missing": missing}
+        title = str(payload.get("title", "")).strip()
+        lesson = str(payload.get("lesson", "")).strip()
+        if title:
+            target.title = title[:90]
+        if lesson:
+            target.lesson = lesson[:500]
+        else:
+            pieces = [target.lesson, *(entry.lesson for entry in sources)]
+            merged: list[str] = []
+            seen: set[str] = set()
+            for piece in pieces:
+                key = _review_key(piece)
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                merged.append(piece)
+            target.lesson = " / ".join(merged)[:500]
+        tags: list[str] = []
+        for entry in [target, *sources]:
+            for tag in entry.tags or []:
+                if tag not in tags:
+                    tags.append(tag)
+        target.tags = tags[:8]
+        target.updated_at = now
+        self.learning_journal_store.upsert(target)
+        archived: list[str] = []
+        for entry in sources:
+            entry.status = "archived"
+            entry.updated_at = now
+            self.learning_journal_store.upsert(entry)
+            archived.append(entry.entry_id)
+        state = self.load_or_init_state(agent_id)
+        self._refresh_curiosity_state(state, now)
+        state.relation_state = _append_audit_event(
+            state.relation_state,
+            now=now,
+            event_type="learning_journal_merged",
+            payload={"target_id": target.entry_id, "archived_count": len(archived), "missing_count": len(missing)},
+        )
+        state.updated_at = now
+        self.state_store.put(state)
+        return {"ok": True, "target": asdict(target), "archived": archived, "missing": missing}
 
     def learning_review(self, agent_id: str) -> dict[str, Any]:
         return _learning_review(agent_id, self.learning_journal_store.list_for_agent(agent_id, status="all"))
@@ -3568,18 +3700,20 @@ class NinoRuntime:
         llm_provider = self._llm_provider()
         if self.llm_client is not None and text.strip() and not force_policy_response:
             try:
+                active_learning_entries = self.learning_journal_store.list_for_agent(agent_id, status="active")
+                selected_learning_entries = _select_prompt_learning_entries(text, active_learning_entries)
                 prompt_relation_state = {
                     **state.relation_state,
                     "learning_journal": [
                         asdict(entry)
-                        for entry in self.learning_journal_store.list_for_agent(agent_id, status="active")[:8]
+                        for entry in selected_learning_entries
                     ],
                 }
                 prompt_stances = self.learning_stances(agent_id)["stances"]
                 prompt_relation_state["learning_stances"] = prompt_stances
                 prompt_relation_state["maturity_profile"] = _maturity_profile(
                     interaction_count=int(state.relation_state.get("interaction_count", 0)),
-                    active_learning_count=len(prompt_relation_state["learning_journal"]),
+                    active_learning_count=len(active_learning_entries),
                     draft_learning_count=len(self.learning_journal_store.list_for_agent(agent_id, status="draft")),
                     active_stance_count=len([item for item in prompt_stances if item.get("active")]),
                     learning_counts=dict(dict(state.relation_state.get("relationship_learning", {})).get("counts", {})),

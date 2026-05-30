@@ -10,6 +10,26 @@ from uuid import uuid4
 ACTIVE_STATUSES = {"active", "draft", "archived"}
 SOURCES = {"auto", "manual", "detected"}
 THEMES = {"vida", "cultura", "amistad", "trabajo", "comportamiento", "salud", "otros"}
+STOPWORDS = {
+    "para",
+    "pero",
+    "porque",
+    "como",
+    "cuando",
+    "donde",
+    "desde",
+    "sobre",
+    "este",
+    "esta",
+    "esto",
+    "todo",
+    "algo",
+    "debe",
+    "debo",
+    "hacer",
+    "usuario",
+    "amigo",
+}
 
 
 @dataclass(slots=True)
@@ -186,6 +206,10 @@ def _norm_lesson(value: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", value)).strip()
 
 
+def learning_terms(value: str) -> set[str]:
+    return {word for word in _norm_lesson(value).split() if len(word) >= 4 and word not in STOPWORDS}
+
+
 def _looks_like_friend_behavior(detail: str) -> bool:
     text = _norm_lesson(detail)
     if not text:
@@ -227,6 +251,33 @@ def classify_learning_theme(title: str, lesson: str, tags: list[str] | None = No
     if any(word in text for word in ("vida", "familia", "casa", "madrid", "rutina", "hobby", "gusta")):
         return "vida"
     return "otros"
+
+
+def learning_entry_quality(entry: LearningJournalEntry) -> dict[str, object]:
+    text = f"{entry.title} {entry.lesson}"
+    terms = learning_terms(text)
+    issues: list[str] = []
+    lesson = entry.lesson.strip()
+    if len(lesson) < 24:
+        issues.append("demasiado_corto")
+    if len(terms) < 4:
+        issues.append("poco_especifico")
+    if re.search(r"\b(siempre|nunca|todo|nada|nadie|todos)\b", _norm_lesson(lesson)):
+        issues.append("absoluto")
+    if entry.status == "active" and entry.source == "detected":
+        issues.append("detectado_activo_sin_revision_manual")
+    score = 1.0
+    score -= 0.18 * len(issues)
+    if classify_learning_theme(entry.title, entry.lesson, entry.tags) in {"comportamiento", "amistad"}:
+        score += 0.08
+    return {
+        "entry_id": entry.entry_id,
+        "title": entry.title,
+        "theme": classify_learning_theme(entry.title, entry.lesson, entry.tags),
+        "score": max(0.0, min(1.0, round(score, 3))),
+        "issues": issues,
+        "term_count": len(terms),
+    }
 
 
 def _tags_with_theme(tag: str, title: str, lesson: str, tags: list[str] | None = None) -> list[str]:

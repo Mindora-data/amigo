@@ -1767,6 +1767,8 @@ def test_dashboard_contains_learning_journal_delete_button(tmp_path) -> None:
 
     assert b"Eliminar" in body
     assert b'method: "DELETE"' in body
+    assert b"journalSearch" in body
+    assert b"journalSource" in body
 
 
 def test_learning_journal_auto_manual_edit_and_isolation(tmp_path) -> None:
@@ -1834,6 +1836,59 @@ def test_learning_journal_entry_can_be_deleted_and_isolated(tmp_path) -> None:
     other = _request(app, "DELETE", f"/users/maria/agents/nino/learning-journal/{entry_id}")
     assert other["ok"] is False
     assert other["error"] == "learning_journal_entry_not_found"
+
+
+def test_learning_journal_filters_quality_and_merge_duplicates(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    first = _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal",
+        {"title": "Tono breve", "lesson": "Responder breve cuando el usuario cierre con bien", "tags": ["comportamiento"]},
+    )["entry"]
+    second = _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal",
+        {"title": "Tono breve", "lesson": "Responder breve cuando el usuario cierre con bien", "tags": ["comportamiento"]},
+    )["entry"]
+    _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal",
+        {"title": "Byrne", "lesson": "John Byrne interesa como referencia cultural", "tags": ["cultura"]},
+    )
+    weak = _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal",
+        {"title": "Todo", "lesson": "Siempre todo", "tags": ["otros"]},
+    )["entry"]
+
+    filtered = _request(app, "GET", "/users/mindora/agents/nino/learning-journal?theme=cultura&q=byrne")
+    assert filtered["count"] == 1
+    assert filtered["theme"] == "cultura"
+    assert filtered["query"] == "byrne"
+
+    review = _request(app, "GET", "/users/mindora/agents/nino/learning-review")
+    assert review["duplicates"]
+    assert review["quality"]["weak_count"] >= 1
+    assert any(item["entry_id"] == weak["entry_id"] for item in review["quality"]["weak_entries"])
+
+    merged = _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal/merge",
+        {"target_id": first["entry_id"], "source_ids": [second["entry_id"]]},
+    )
+    assert merged["ok"] is True
+    assert second["entry_id"] in merged["archived"]
+
+    active = _request(app, "GET", "/users/mindora/agents/nino/learning-journal?status=active")
+    archived = _request(app, "GET", "/users/mindora/agents/nino/learning-journal?status=archived")
+    assert all(item["entry_id"] != second["entry_id"] for item in active["entries"])
+    assert any(item["entry_id"] == second["entry_id"] for item in archived["entries"])
 
 
 def test_learning_journal_detects_draft_candidates_from_conversation(tmp_path) -> None:

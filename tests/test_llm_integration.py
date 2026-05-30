@@ -49,6 +49,25 @@ def test_tick_uses_configured_llm_response() -> None:
     assert "Usa al menos un recuerdo" in llm.prompts[-1]["system"]
 
 
+def test_llm_prompt_uses_relevant_learning_journal_entries() -> None:
+    llm = FakeLLM("Respuesta con criterio contextual.")
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+    runtime.add_learning_journal_entry(
+        "agent-llm",
+        {"title": "Byrne", "lesson": "John Byrne es referencia cultural para comics de Superman", "tags": ["cultura"]},
+    )
+    runtime.add_learning_journal_entry(
+        "agent-llm",
+        {"title": "Cierres breves", "lesson": "Responder breve cuando el usuario cierre con bien", "tags": ["comportamiento"]},
+    )
+
+    runtime.tick("agent-llm", {"intent": "question", "text": "que opinas de la capital de España?"})
+    prompt = llm.prompts[-1]["user"]
+
+    assert "Responder breve" in prompt
+    assert "John Byrne" not in prompt
+
+
 def test_tick_context_memory_candidates_include_origin_fields() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
