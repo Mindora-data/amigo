@@ -501,6 +501,20 @@ def test_llm_prompt_includes_maturity_reflections() -> None:
     assert "curiosidad ya tiene evidencia activa" in prompt
 
 
+def test_llm_prompt_includes_growth_compass() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick("agent-llm", {"intent": "chat", "text": "qué opinas de Watchmen?"})
+    runtime.tick("agent-llm", {"intent": "chat", "text": "seguimos"})
+
+    system = llm.prompts[-1]["system"]
+    prompt = llm.prompts[-1]["user"]
+    assert "brujula de crecimiento" in system.lower()
+    assert "Brújula de crecimiento:" in prompt
+    assert "Curiosidad abierta:" in prompt
+
+
 def test_llm_prompt_includes_relationship_maturity_profile() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

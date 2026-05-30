@@ -1889,6 +1889,10 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel"><h2>Digest aprendizaje</h2><pre id="learningDigest">{}</pre></div>
       <div class="panel"><h2>Curiosidad</h2><pre id="curiosity">{}</pre></div>
       <div class="panel"><h2>Reflexiones de madurez</h2><pre id="maturityReflections">[]</pre></div>
+      <div class="panel"><h2>Brújula de crecimiento</h2><pre id="growthCompass">{}</pre></div>
+      <div class="panel"><h2>Dominio por temas</h2><pre id="themeMastery">{}</pre></div>
+      <div class="panel"><h2>Prioridades</h2><pre id="learningPriorities">[]</pre></div>
+      <div class="panel"><h2>Tensiones</h2><pre id="contradictionWatch">{}</pre></div>
       <div class="panel"><h2>Hilo activo</h2><pre id="thread">{}</pre></div>
       <div class="panel"><h2>Señales recientes</h2><pre id="signals">[]</pre></div>
       <div class="panel wide"><h2>Bitácora editable</h2>
@@ -2063,6 +2067,10 @@ DASHBOARD_HTML = """<!doctype html>
       print("learningDigest", out.learning_digest || dash.learning_digest || {});
       print("curiosity", out.curiosity_topics?.curiosity || dash.conversation?.curiosity || dash.conversation?.curiosity_topics || []);
       print("maturityReflections", out.curiosity_topics?.maturity_reflections || dash.maturity_reflections || []);
+      print("growthCompass", out.curiosity_topics?.growth_compass || dash.growth_compass || {});
+      print("themeMastery", out.curiosity_topics?.theme_mastery || dash.theme_mastery || {});
+      print("learningPriorities", out.curiosity_topics?.learning_priorities || dash.learning_priorities || []);
+      print("contradictionWatch", out.curiosity_topics?.contradiction_watch || dash.contradiction_watch || {});
       print("thread", dash.active_conversation_thread || {});
       print("signals", dash.relationship_learning?.recent_signals || []);
       renderJournal(out.learning_journal?.entries || dash.learning_journal?.recent_entries || []);

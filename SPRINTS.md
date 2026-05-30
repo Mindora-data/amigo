@@ -1389,3 +1389,87 @@ Hechos:
 Tests:
 
 - El prompt diferencia temas abiertos de reflexiones grounded.
+
+## Sprint 48 - Brujula de crecimiento
+
+Estado: hecho inicial.
+
+Objetivo: resumir que necesita amigo para madurar en el siguiente paso.
+
+Hechos:
+
+- `growth_compass` calcula foco actual: resolver tensiones, revisar detectados,
+  convertir curiosidad en evidencia o usar criterio estable.
+- `/dashboard` muestra `Brújula de crecimiento`.
+- El prompt recibe la brujula para priorizar mejor.
+
+Tests:
+
+- El prompt incluye `Brújula de crecimiento`.
+
+## Sprint 49 - Dominio por temas
+
+Estado: hecho inicial.
+
+Objetivo: distinguir temas sin base, en revision, con criterio inicial y con criterio
+estable.
+
+Hechos:
+
+- `theme_mastery` clasifica cada tema (`vida`, `cultura`, etc.) con nivel.
+- El nivel deriva de bitacora activa, borradores y posturas activas.
+- No se genera opinion por tener un tema; solo mide evidencia.
+
+Tests:
+
+- Cultura con evidencia activa aparece como `criterio_inicial`.
+
+## Sprint 50 - Prioridades de aprendizaje
+
+Estado: hecho inicial.
+
+Objetivo: decidir que conviene revisar o aprender antes.
+
+Hechos:
+
+- `learning_priorities` combina curiosidad abierta, borradores pendientes y gaps por
+  tema.
+- El dashboard muestra la lista ordenada por peso.
+- El foco evita que amigo intente madurar por volumen sin direccion.
+
+Tests:
+
+- Aparecen prioridades cuando hay curiosidad abierta o borradores.
+
+## Sprint 51 - Vigilancia de tensiones
+
+Estado: hecho inicial.
+
+Objetivo: detectar pautas activas que podrian chocar entre si antes de que afecten a
+la conversacion.
+
+Hechos:
+
+- `contradiction_watch` busca tensiones simples dentro del mismo tema.
+- No decide solo: expone candidatos privados para revision humana.
+- El foco de crecimiento prioriza tensiones si existen.
+
+Tests:
+
+- Dos pautas activas de cultura con negacion generan candidato de tension.
+
+## Sprint 52 - Crecimiento en el prompt
+
+Estado: hecho inicial.
+
+Objetivo: que la madurez calculada afecte la conversacion, no solo el dashboard.
+
+Hechos:
+
+- El prompt recibe `growth_compass`.
+- Si hay tensiones, debe bajar seguridad.
+- Si hay criterio estable, puede hablar con mas criterio sin fingir certeza.
+
+Tests:
+
+- El prompt incluye foco, curiosidad abierta, temas estables y tensiones.

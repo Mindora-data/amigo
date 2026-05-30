@@ -2036,6 +2036,42 @@ def test_curiosity_topic_can_be_archived_manually(tmp_path) -> None:
     assert patched["topic"]["note"] == "No seguir por ahora"
 
 
+def test_growth_compass_mastery_priorities_and_contradictions_are_visible(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": "qué opinas de Watchmen?"})
+    _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal",
+        {"title": "Cultura", "lesson": "Responder sobre comics con criterio y referencias concretas", "tags": ["cultura"]},
+    )
+    _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal",
+        {"title": "No cultura", "lesson": "No responder sobre comics sin evidencia suficiente", "tags": ["cultura"]},
+    )
+    _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal",
+        {"title": "Detectado pendiente", "lesson": "Revisar si debe preguntar menos", "tags": ["comportamiento"], "status": "draft"},
+    )
+
+    out = _request(app, "GET", "/users/mindora/agents/nino/curiosity-topics")
+
+    assert out["theme_mastery"]["by_theme"]["cultura"]["level"] == "criterio_inicial"
+    assert out["learning_priorities"][0]["kind"] in {"curiosity", "review"}
+    assert out["growth_compass"]["priority_count"] >= 1
+    assert out["contradiction_watch"]["count"] >= 1
+
+    dashboard = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
+    dash = dashboard["relationship_dashboard"]["dashboard"]
+    assert dash["growth_compass"]["contradiction_count"] >= 1
+    assert dash["theme_mastery"]["by_theme"]["cultura"]["active_count"] == 2
+
+
 def test_dashboard_data_counts_telegram_users_and_pending_links(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": "hola"})

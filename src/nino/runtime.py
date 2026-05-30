@@ -1326,6 +1326,141 @@ def _curiosity_maturity_summary(world_model: dict[str, Any], entries: list[Learn
         "privacy": "private_agent_curiosity_not_global",
     }
 
+def _theme_mastery_summary(entries: list[LearningJournalEntry], stances: dict[str, Any]) -> dict[str, Any]:
+    active = [entry for entry in entries if entry.status == "active"]
+    draft = [entry for entry in entries if entry.status == "draft"]
+    active_stance_themes = {
+        str(item.get("theme"))
+        for item in stances.get("stances", [])
+        if isinstance(item, dict) and item.get("active")
+    }
+    by_theme: dict[str, dict[str, Any]] = {}
+    for theme in ["vida", "cultura", "amistad", "trabajo", "comportamiento", "salud", "otros"]:
+        active_count = len([entry for entry in active if classify_learning_theme(entry.title, entry.lesson, entry.tags) == theme])
+        draft_count = len([entry for entry in draft if classify_learning_theme(entry.title, entry.lesson, entry.tags) == theme])
+        if active_count >= 3 and theme in active_stance_themes:
+            level = "criterio_estable"
+        elif active_count >= 1:
+            level = "criterio_inicial"
+        elif draft_count:
+            level = "en_revision"
+        else:
+            level = "sin_base"
+        by_theme[theme] = {
+            "level": level,
+            "active_count": active_count,
+            "draft_count": draft_count,
+            "stance_active": theme in active_stance_themes,
+        }
+    stable_count = len([item for item in by_theme.values() if item["level"] == "criterio_estable"])
+    initial_count = len([item for item in by_theme.values() if item["level"] == "criterio_inicial"])
+    review_count = len([item for item in by_theme.values() if item["level"] == "en_revision"])
+    return {
+        "by_theme": by_theme,
+        "stable_count": stable_count,
+        "initial_count": initial_count,
+        "review_count": review_count,
+        "next_growth": "subir temas iniciales a criterio estable" if initial_count else "activar evidencia en temas sin base",
+        "privacy": "private_theme_mastery_from_learning_journal",
+    }
+
+def _learning_priorities(
+    entries: list[LearningJournalEntry],
+    curiosity: dict[str, Any],
+    mastery: dict[str, Any],
+) -> list[dict[str, Any]]:
+    priorities: list[dict[str, Any]] = []
+    for topic in curiosity.get("topics", []):
+        if isinstance(topic, dict) and topic.get("status") == "open":
+            priorities.append(
+                {
+                    "kind": "curiosity",
+                    "label": str(topic.get("topic", "")),
+                    "reason": "tema abierto sin evidencia activa",
+                    "weight": 3,
+                }
+            )
+    for entry in entries:
+        if entry.status == "draft":
+            priorities.append(
+                {
+                    "kind": "review",
+                    "label": entry.title,
+                    "reason": "aprendizaje detectado pendiente de aprobar o archivar",
+                    "weight": 2,
+                }
+            )
+    for theme, item in mastery.get("by_theme", {}).items():
+        if isinstance(item, dict) and item.get("level") == "sin_base":
+            priorities.append(
+                {
+                    "kind": "theme_gap",
+                    "label": str(theme),
+                    "reason": "tema sin criterio respaldado",
+                    "weight": 1,
+                }
+            )
+    priorities.sort(key=lambda item: int(item.get("weight", 0)), reverse=True)
+    return priorities[:8]
+
+def _learning_contradiction_watch(entries: list[LearningJournalEntry]) -> dict[str, Any]:
+    active = [entry for entry in entries if entry.status == "active"]
+    candidates: list[dict[str, Any]] = []
+    for idx, left in enumerate(active):
+        left_text = _review_key(f"{left.title} {left.lesson}")
+        left_theme = classify_learning_theme(left.title, left.lesson, left.tags)
+        for right in active[idx + 1 :]:
+            right_theme = classify_learning_theme(right.title, right.lesson, right.tags)
+            if left_theme != right_theme:
+                continue
+            right_text = _review_key(f"{right.title} {right.lesson}")
+            left_tokens = set(left_text.split())
+            right_tokens = set(right_text.split())
+            if len(left_tokens & right_tokens) < 2:
+                continue
+            if ("no" in left_tokens) != ("no" in right_tokens):
+                candidates.append(
+                    {
+                        "theme": left_theme,
+                        "entry_ids": [left.entry_id, right.entry_id],
+                        "titles": [left.title, right.title],
+                        "reason": "posible tension entre pauta afirmativa y negativa",
+                    }
+                )
+    return {
+        "count": len(candidates),
+        "candidates": candidates[:10],
+        "privacy": "private_learning_contradiction_candidates",
+    }
+
+def _growth_compass(
+    *,
+    maturity_profile: dict[str, Any],
+    curiosity: dict[str, Any],
+    mastery: dict[str, Any],
+    priorities: list[dict[str, Any]],
+    contradictions: dict[str, Any],
+) -> dict[str, Any]:
+    focus = "aprender con curiosidad"
+    if contradictions.get("count"):
+        focus = "resolver tensiones de criterio"
+    elif priorities and priorities[0].get("kind") == "review":
+        focus = "revisar aprendizajes detectados"
+    elif curiosity.get("open_count", 0):
+        focus = "convertir curiosidad en evidencia"
+    elif mastery.get("stable_count", 0):
+        focus = "usar criterio estable sin fingir certeza"
+    return {
+        "focus": focus,
+        "maturity_stage": maturity_profile.get("stage"),
+        "open_curiosity": curiosity.get("open_count", 0),
+        "grounded_curiosity": curiosity.get("grounded_count", 0),
+        "stable_themes": mastery.get("stable_count", 0),
+        "priority_count": len(priorities),
+        "contradiction_count": contradictions.get("count", 0),
+        "privacy": "private_growth_compass",
+    }
+
 def _append_maturity_reflections(
     relation_state: dict[str, Any],
     *,
@@ -2182,9 +2317,32 @@ class NinoRuntime:
     def curiosity_topics(self, agent_id: str) -> dict[str, Any]:
         state = self.load_or_init_state(agent_id)
         entries = self.learning_journal_store.list_for_agent(agent_id, status="all")
+        stances = self.learning_stances(agent_id)
+        curiosity = _curiosity_maturity_summary(state.world_model, entries)
+        mastery = _theme_mastery_summary(entries, stances)
+        priorities = _learning_priorities(entries, curiosity, mastery)
+        contradictions = _learning_contradiction_watch(entries)
+        growth = _growth_compass(
+            maturity_profile=_maturity_profile(
+                interaction_count=int(state.relation_state.get("interaction_count", 0)),
+                active_learning_count=len([entry for entry in entries if entry.status == "active"]),
+                draft_learning_count=len([entry for entry in entries if entry.status == "draft"]),
+                active_stance_count=len([item for item in stances["stances"] if item.get("active")]),
+                learning_counts=dict(dict(state.relation_state.get("relationship_learning", {})).get("counts", {})),
+                style=dict(dict(state.relation_state.get("relationship_learning", {})).get("response_style", RELATIONSHIP_DEFAULT_STYLE)),
+            ),
+            curiosity=curiosity,
+            mastery=mastery,
+            priorities=priorities,
+            contradictions=contradictions,
+        )
         return {
             "agent_id": agent_id,
-            "curiosity": _curiosity_maturity_summary(state.world_model, entries),
+            "curiosity": curiosity,
+            "theme_mastery": mastery,
+            "learning_priorities": priorities,
+            "contradiction_watch": contradictions,
+            "growth_compass": growth,
             "maturity_reflections": list(state.relation_state.get("maturity_reflections", []))[-10:],
         }
 
@@ -2428,6 +2586,16 @@ class NinoRuntime:
             style=style,
         )
         curiosity_summary = _curiosity_maturity_summary(state.world_model, journal_entries)
+        theme_mastery = _theme_mastery_summary(journal_entries, stances)
+        learning_priorities = _learning_priorities(journal_entries, curiosity_summary, theme_mastery)
+        contradiction_watch = _learning_contradiction_watch(journal_entries)
+        growth_compass = _growth_compass(
+            maturity_profile=maturity_profile,
+            curiosity=curiosity_summary,
+            mastery=theme_mastery,
+            priorities=learning_priorities,
+            contradictions=contradiction_watch,
+        )
         return {
             "agent_id": agent_id,
             "privacy": {
@@ -2443,6 +2611,7 @@ class NinoRuntime:
             "maturity_profile": maturity_profile,
             "maturity_history": list(relation.get("maturity_history", []))[-20:],
             "maturity_reflections": list(relation.get("maturity_reflections", []))[-10:],
+            "growth_compass": growth_compass,
             "relationship_learning": {
                 "counts": counts,
                 "last_outcome": learning.get("last_outcome"),
@@ -2473,6 +2642,9 @@ class NinoRuntime:
             "learning_stances": stances,
             "learning_review": review,
             "learning_digest": _learning_digest(agent_id, journal_entries, stances, review),
+            "theme_mastery": theme_mastery,
+            "learning_priorities": learning_priorities,
+            "contradiction_watch": contradiction_watch,
             "proactivity": {
                 "consent": proactivity.get("consent", "unknown"),
                 "pending_inbox_count": len([item for item in inbox if not item.get("delivered", False)]),
@@ -3389,6 +3561,19 @@ class NinoRuntime:
                     active_stance_count=len([item for item in prompt_stances if item.get("active")]),
                     learning_counts=dict(dict(state.relation_state.get("relationship_learning", {})).get("counts", {})),
                     style=dict(dict(state.relation_state.get("relationship_learning", {})).get("response_style", RELATIONSHIP_DEFAULT_STYLE)),
+                )
+                entries_for_growth = self.learning_journal_store.list_for_agent(agent_id, status="all")
+                curiosity_for_growth = _curiosity_maturity_summary(state.world_model, entries_for_growth)
+                mastery_for_growth = _theme_mastery_summary(entries_for_growth, {"stances": prompt_stances})
+                priorities_for_growth = _learning_priorities(entries_for_growth, curiosity_for_growth, mastery_for_growth)
+                contradictions_for_growth = _learning_contradiction_watch(entries_for_growth)
+                prompt_relation_state["maturity_reflections"] = list(state.relation_state.get("maturity_reflections", []))[-5:]
+                prompt_relation_state["growth_compass"] = _growth_compass(
+                    maturity_profile=prompt_relation_state["maturity_profile"],
+                    curiosity=curiosity_for_growth,
+                    mastery=mastery_for_growth,
+                    priorities=priorities_for_growth,
+                    contradictions=contradictions_for_growth,
                 )
                 prompt = build_nino_prompt(
                     agent_id=agent_id,
