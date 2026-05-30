@@ -1194,7 +1194,77 @@ def _default_world_model() -> dict[str, Any]:
         "intent_counts": {},
         "open_questions": [],
         "causal_observations": [],
+        "curiosity_topics": [],
     }
+
+def _clean_curiosity_topic(value: str) -> str:
+    value = re.sub(r"\s+", " ", value).strip(" ?¿!¡.,:;\"'")
+    value = re.sub(r"\b(?:tu|tú)\s+opini[oó]n\b", "", value, flags=re.IGNORECASE).strip(" ?¿!¡.,:;")
+    return value[:90]
+
+def _curiosity_key(value: str) -> str:
+    value = value.lower()
+    value = value.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ñ", "n")
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", value)).strip()
+
+def _extract_curiosity_topics(text: str, intent: str) -> list[str]:
+    raw = text.strip()
+    if len(raw) < 4:
+        return []
+    patterns = (
+        r"(?:qu[eé]\s+opinas\s+de|qu[eé]\s+piensas\s+de|que te parece|qué te parece)\s+(.{3,120})",
+        r"(?:me interesa|tengo curiosidad por|quiero aprender sobre|quiero entender)\s+(.{3,120})",
+        r"(?:hablemos de|cu[eé]ntame sobre)\s+(.{3,120})",
+    )
+    topics: list[str] = []
+    for pattern in patterns:
+        match = re.search(pattern, raw, re.IGNORECASE | re.DOTALL)
+        if match:
+            topic = _clean_curiosity_topic(match.group(1))
+            if topic and _curiosity_key(topic) not in {"esto", "eso", "aquello", "tema", "algo"}:
+                topics.append(topic)
+    if not topics and "?" in raw and intent.startswith(("question", "group_")):
+        tokens = _tokens_for_model(raw)
+        if 1 <= len(tokens) <= 5:
+            topic = _clean_curiosity_topic(" ".join(tokens))
+            if topic:
+                topics.append(topic)
+    seen: set[str] = set()
+    out: list[str] = []
+    for topic in topics:
+        key = _curiosity_key(topic)
+        if key and key not in seen:
+            seen.add(key)
+            out.append(topic)
+    return out[:3]
+
+def _update_curiosity_topics(world_model: dict[str, Any], topics: list[str], now: datetime) -> dict[str, Any]:
+    if not topics:
+        return world_model
+    items = [dict(item) for item in world_model.get("curiosity_topics", []) if isinstance(item, dict)]
+    by_key = {_curiosity_key(str(item.get("topic", ""))): item for item in items if item.get("topic")}
+    for topic in topics:
+        key = _curiosity_key(topic)
+        if not key:
+            continue
+        if key in by_key:
+            by_key[key]["count"] = int(by_key[key].get("count", 1)) + 1
+            by_key[key]["last_seen_at"] = now.isoformat()
+            by_key[key]["status"] = "open"
+        else:
+            item = {
+                "topic": topic,
+                "status": "open",
+                "source": "conversation_curiosity",
+                "count": 1,
+                "first_seen_at": now.isoformat(),
+                "last_seen_at": now.isoformat(),
+            }
+            items.append(item)
+            by_key[key] = item
+    items.sort(key=lambda item: (str(item.get("status")) != "open", str(item.get("last_seen_at", ""))), reverse=True)
+    world_model["curiosity_topics"] = items[-50:]
+    return world_model
 
 def _tokens_for_model(text: str) -> list[str]:
     return [
@@ -1240,6 +1310,7 @@ def _update_cognitive_models(
         open_questions = list(world_model.get("open_questions", []))
         open_questions.append({"text": text, "observed_at": now.isoformat()})
         world_model["open_questions"] = open_questions[-20:]
+    world_model = _update_curiosity_topics(world_model, _extract_curiosity_topics(text, intent), now)
     if "porque" in text.lower():
         causal = list(world_model.get("causal_observations", []))
         causal.append({"text": text, "observed_at": now.isoformat()})
@@ -2195,6 +2266,11 @@ class NinoRuntime:
         proactivity = dict(relation.get("proactivity", {}))
         inbox = self.list_proactive_inbox(agent_id)
         open_questions = list(state.world_model.get("open_questions", []))
+        curiosity_topics = [
+            dict(item)
+            for item in list(state.world_model.get("curiosity_topics", []))[-10:]
+            if isinstance(item, dict)
+        ]
         journal_entries = self.learning_journal_store.list_for_agent(agent_id, status="all")
         active_journal = [entry for entry in journal_entries if entry.status == "active"]
         draft_journal = [entry for entry in journal_entries if entry.status == "draft"]
@@ -2262,6 +2338,8 @@ class NinoRuntime:
             "conversation": {
                 "open_question_count": len(open_questions),
                 "recent_open_questions": [str(item)[:120] for item in open_questions[-5:]],
+                "curiosity_topic_count": len(curiosity_topics),
+                "curiosity_topics": curiosity_topics,
                 "quality": self.evaluate_conversation_quality(agent_id),
             },
             "group_maturity": _to_group_maturity_dashboard(relation),

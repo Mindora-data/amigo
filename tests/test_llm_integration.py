@@ -469,6 +469,20 @@ def test_llm_prompt_lists_evidence_backed_opinion_themes() -> None:
     assert "cultura" in prompt
 
 
+def test_llm_prompt_includes_open_curiosity_topics() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick("agent-llm", {"intent": "chat", "text": "qué opinas de Watchmen?"})
+    runtime.tick("agent-llm", {"intent": "chat", "text": "quiero seguir hablando de comics"})
+
+    system = llm.prompts[-1]["system"]
+    prompt = llm.prompts[-1]["user"]
+    assert "temas abiertos de curiosidad" in system.lower()
+    assert "Temas abiertos de curiosidad:" in prompt
+    assert "Watchmen" in prompt
+
+
 def test_llm_prompt_includes_relationship_maturity_profile() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

@@ -1979,6 +1979,26 @@ def test_relationship_maturity_profile_tracks_learning_evidence(tmp_path) -> Non
     assert profile["inputs"]["active_stance_count"] >= 1
 
 
+def test_curiosity_topics_are_tracked_and_visible_in_dashboard(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/tick",
+        {"intent": "chat", "text": "qué opinas de Watchmen?"},
+    )
+
+    world = _request(app, "GET", "/users/mindora/agents/nino/world-model")["world_model"]
+    assert world["curiosity_topics"][0]["topic"] == "Watchmen"
+    assert world["curiosity_topics"][0]["status"] == "open"
+
+    dashboard = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
+    conversation = dashboard["relationship_dashboard"]["dashboard"]["conversation"]
+    assert conversation["curiosity_topic_count"] == 1
+    assert conversation["curiosity_topics"][0]["topic"] == "Watchmen"
+
+
 def test_dashboard_data_counts_telegram_users_and_pending_links(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": "hola"})

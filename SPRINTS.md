@@ -1278,3 +1278,26 @@ Tests:
 
 - `me encanta Brubaker...` en privado crea borrador personal.
 - La misma frase en grupo no crea entrada de bitacora.
+
+## Sprint 42 - Curiosidad persistente
+
+Estado: hecho inicial.
+
+Objetivo: que la curiosidad de amigo no sea solo tono del prompt, sino una memoria
+privada de temas abiertos que quiere entender mejor.
+
+Hechos:
+
+- `world_model.curiosity_topics` guarda temas detectados desde preguntas como
+  `que opinas de X`, `me interesa X`, `quiero aprender sobre X` o `cuentame sobre X`.
+- Cada tema queda como `open`, con contador y fechas de primera/ultima aparicion.
+- `/relationship-dashboard` y `/dashboard` muestran los temas abiertos de curiosidad.
+- El prompt recibe `Temas abiertos de curiosidad` para poder volver a ellos con
+  continuidad y hacer preguntas concretas sin fingir opinion formada.
+- Los temas son privados por agente/relacion; no se exportan al modelo global anonimo.
+
+Tests:
+
+- Un `que opinas de Watchmen?` crea un tema abierto de curiosidad.
+- El dashboard lo expone.
+- El prompt incluye los temas abiertos para continuidad de aprendizaje.

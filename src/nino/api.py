@@ -1887,6 +1887,7 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel"><h2>Historial de madurez</h2><pre id="maturityHistory">[]</pre></div>
       <div class="panel"><h2>Revisión aprendizajes</h2><pre id="learningReview">{}</pre></div>
       <div class="panel"><h2>Digest aprendizaje</h2><pre id="learningDigest">{}</pre></div>
+      <div class="panel"><h2>Curiosidad</h2><pre id="curiosity">{}</pre></div>
       <div class="panel"><h2>Hilo activo</h2><pre id="thread">{}</pre></div>
       <div class="panel"><h2>Señales recientes</h2><pre id="signals">[]</pre></div>
       <div class="panel wide"><h2>Bitácora editable</h2>
@@ -2059,6 +2060,7 @@ DASHBOARD_HTML = """<!doctype html>
       print("maturityHistory", dash.maturity_history || []);
       print("learningReview", out.learning_review || dash.learning_review || {});
       print("learningDigest", out.learning_digest || dash.learning_digest || {});
+      print("curiosity", dash.conversation?.curiosity_topics || out.world_model?.world_model?.curiosity_topics || []);
       print("thread", dash.active_conversation_thread || {});
       print("signals", dash.relationship_learning?.recent_signals || []);
       renderJournal(out.learning_journal?.entries || dash.learning_journal?.recent_entries || []);
