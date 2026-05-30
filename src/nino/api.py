@@ -1831,6 +1831,7 @@ DASHBOARD_HTML = """<!doctype html>
     input, textarea, select, button { font: inherit; border: 1px solid #b9c5cc; border-radius: 6px; padding: 9px 10px; }
     textarea { resize: vertical; min-height: 72px; width: 100%; }
     button { background: #1f6f78; color: #fff; border-color: #1f6f78; cursor: pointer; min-height: 38px; }
+    button.danger { background: #fff; color: #9b1c1c; border-color: #d7aaaa; }
     .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .panel { background: #fff; border: 1px solid #cfd8df; border-radius: 8px; padding: 14px; }
     .panel h2 { margin: 0 0 10px; font-size: 14px; letter-spacing: 0; color: #33424a; }
@@ -1840,7 +1841,7 @@ DASHBOARD_HTML = """<!doctype html>
     .wide { grid-column: 1 / -1; }
     .journal-list { display: grid; gap: 10px; }
     .journal-entry { display: grid; gap: 8px; border-top: 1px solid #e1e7eb; padding-top: 10px; }
-    .journal-row { display: grid; grid-template-columns: 1fr 130px 150px auto; gap: 8px; align-items: start; }
+    .journal-row { display: grid; grid-template-columns: 1fr 130px 150px auto auto; gap: 8px; align-items: start; }
     .stance-list { display: grid; gap: 12px; }
     .stance-entry { display: grid; gap: 8px; border-top: 1px solid #e1e7eb; padding-top: 10px; }
     .stance-row { display: grid; grid-template-columns: 150px 1fr auto; gap: 8px; align-items: start; }
@@ -1990,6 +1991,9 @@ DASHBOARD_HTML = """<!doctype html>
         }
         const save = document.createElement("button");
         save.textContent = "Guardar";
+        const remove = document.createElement("button");
+        remove.textContent = "Eliminar";
+        remove.className = "danger";
         const lesson = document.createElement("textarea");
         lesson.value = entry.lesson || "";
         const meta = document.createElement("div");
@@ -2003,7 +2007,12 @@ DASHBOARD_HTML = """<!doctype html>
           });
           await loadDashboard();
         };
-        row.append(title, status, theme, save);
+        remove.onclick = async () => {
+          if (!confirm(`Eliminar "${entry.title || "aprendizaje"}"?`)) return;
+          await requestJson(currentAgentPath(`/learning-journal/${encodeURIComponent(entry.entry_id)}`), {method: "DELETE"});
+          await loadDashboard();
+        };
+        row.append(title, status, theme, save, remove);
         wrap.append(row, lesson, meta);
         return wrap;
       }));
@@ -2149,6 +2158,7 @@ API_ENDPOINTS = [
     "POST /users/{user_id}/agents/{agent_id}/learning-journal",
     "POST /users/{user_id}/agents/{agent_id}/learning-journal/bulk",
     "PATCH /users/{user_id}/agents/{agent_id}/learning-journal/{entry_id}",
+    "DELETE /users/{user_id}/agents/{agent_id}/learning-journal/{entry_id}",
     "GET /users/{user_id}/agents/{agent_id}/learning-review",
     "GET /users/{user_id}/agents/{agent_id}/learning-digest",
     "GET /users/{user_id}/agents/{agent_id}/curiosity-topics",
@@ -2173,6 +2183,7 @@ API_ENDPOINTS = [
     "POST /agents/{agent_id}/learning-journal",
     "POST /agents/{agent_id}/learning-journal/bulk",
     "PATCH /agents/{agent_id}/learning-journal/{entry_id}",
+    "DELETE /agents/{agent_id}/learning-journal/{entry_id}",
     "GET /agents/{agent_id}/learning-review",
     "GET /agents/{agent_id}/learning-digest",
     "GET /agents/{agent_id}/curiosity-topics",
@@ -3764,6 +3775,9 @@ class NinoService:
     def update_learning_journal_entry(self, agent_id: str, entry_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.update_learning_journal_entry(agent_id, entry_id, payload))
 
+    def delete_learning_journal_entry(self, agent_id: str, entry_id: str) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.delete_learning_journal_entry(agent_id, entry_id))
+
     def bulk_update_learning_journal(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(self.runtime.bulk_update_learning_journal(agent_id, payload))
 
@@ -4078,6 +4092,8 @@ class NinoHttpApp:
             return "200 OK", self.service.bulk_update_learning_journal(agent_id, payload)
         if method == "PATCH" and len(tail) == 2 and tail[0] == "learning-journal":
             return "200 OK", self.service.update_learning_journal_entry(agent_id, tail[1], payload)
+        if method == "DELETE" and len(tail) == 2 and tail[0] == "learning-journal":
+            return "200 OK", self.service.delete_learning_journal_entry(agent_id, tail[1])
         if method == "GET" and tail == ["learning-review"]:
             return "200 OK", self.service.learning_review(agent_id)
         if method == "GET" and tail == ["learning-digest"]:

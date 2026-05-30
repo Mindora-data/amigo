@@ -537,6 +537,14 @@ class SQLiteLearningJournalStore:
         ).fetchone()
         return self._row_to_entry(row) if row is not None else None
 
+    def delete(self, agent_id: str, entry_id: str) -> bool:
+        cursor = self.conn.execute(
+            "DELETE FROM learning_journal_entries WHERE agent_id = ? AND entry_id = ?",
+            (agent_id, entry_id),
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
+
     def delete_for_agent(self, agent_id: str) -> int:
         cursor = self.conn.execute("DELETE FROM learning_journal_entries WHERE agent_id = ?", (agent_id,))
         self.conn.commit()

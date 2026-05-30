@@ -2268,6 +2268,29 @@ class NinoRuntime:
         self.state_store.put(state)
         return {"ok": True, "entry": asdict(entry)}
 
+    def delete_learning_journal_entry(
+        self,
+        agent_id: str,
+        entry_id: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        entry = self.learning_journal_store.get(agent_id, entry_id)
+        if entry is None:
+            return {"ok": False, "error": "learning_journal_entry_not_found", "entry_id": entry_id}
+        deleted = bool(self.learning_journal_store.delete(agent_id, entry_id))
+        state = self.load_or_init_state(agent_id)
+        self._refresh_curiosity_state(state, now)
+        state.relation_state = _append_audit_event(
+            state.relation_state,
+            now=now,
+            event_type="learning_journal_deleted",
+            payload={"entry_id": entry_id, "title": entry.title, "status": entry.status, "deleted": deleted},
+        )
+        state.updated_at = now
+        self.state_store.put(state)
+        return {"ok": deleted, "deleted": deleted, "entry_id": entry_id}
+
     def bulk_update_learning_journal(
         self,
         agent_id: str,

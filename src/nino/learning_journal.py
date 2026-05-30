@@ -30,6 +30,7 @@ class LearningJournalStoreProtocol(Protocol):
     def upsert(self, entry: LearningJournalEntry) -> None: ...
     def list_for_agent(self, agent_id: str, status: str = "all") -> list[LearningJournalEntry]: ...
     def get(self, agent_id: str, entry_id: str) -> LearningJournalEntry | None: ...
+    def delete(self, agent_id: str, entry_id: str) -> bool: ...
     def delete_for_agent(self, agent_id: str) -> int: ...
 
 
@@ -61,6 +62,13 @@ class InMemoryLearningJournalStore:
         count = len(self._entries.get(agent_id, []))
         self._entries.pop(agent_id, None)
         return count
+
+    def delete(self, agent_id: str, entry_id: str) -> bool:
+        entries = self._entries.get(agent_id, [])
+        kept = [entry for entry in entries if entry.entry_id != entry_id]
+        deleted = len(kept) != len(entries)
+        self._entries[agent_id] = kept
+        return deleted
 
 
 EXPLICIT_LESSON_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (

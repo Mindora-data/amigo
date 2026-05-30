@@ -1760,6 +1760,15 @@ def test_dashboard_data_returns_complete_local_bundle(tmp_path) -> None:
     assert "proactive_inbox" in out
 
 
+def test_dashboard_contains_learning_journal_delete_button(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    body = b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/dashboard", "QUERY_STRING": "", "CONTENT_LENGTH": "0", "wsgi.input": BytesIO(b"")}, lambda *_: None))
+
+    assert b"Eliminar" in body
+    assert b'method: "DELETE"' in body
+
+
 def test_learning_journal_auto_manual_edit_and_isolation(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 
@@ -1802,6 +1811,29 @@ def test_learning_journal_auto_manual_edit_and_isolation(tmp_path) -> None:
 
     global_model = _request(app, "GET", "/operations/global-model")
     assert "no hace falta seguir preguntando" not in json.dumps(global_model)
+
+
+def test_learning_journal_entry_can_be_deleted_and_isolated(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    created = _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal",
+        {"title": "Tono", "lesson": "Responde con calma y sin alargar por defecto", "tags": ["comportamiento"]},
+    )
+    entry_id = created["entry"]["entry_id"]
+
+    deleted = _request(app, "DELETE", f"/users/mindora/agents/nino/learning-journal/{entry_id}")
+    assert deleted["ok"] is True
+    assert deleted["deleted"] is True
+
+    journal = _request(app, "GET", "/users/mindora/agents/nino/learning-journal")
+    assert journal["count"] == 0
+
+    other = _request(app, "DELETE", f"/users/maria/agents/nino/learning-journal/{entry_id}")
+    assert other["ok"] is False
+    assert other["error"] == "learning_journal_entry_not_found"
 
 
 def test_learning_journal_detects_draft_candidates_from_conversation(tmp_path) -> None:
