@@ -388,6 +388,12 @@ def build_nino_prompt(
         if isinstance(item, dict) and item.get("status", "open") == "open" and item.get("topic")
     ]
     curiosity_topic_text = ", ".join(curiosity_topics) or "none"
+    maturity_reflections = [
+        _redact_context(str(item.get("summary", "")))
+        for item in list(relation_state.get("maturity_reflections", []))[-5:]
+        if isinstance(item, dict) and item.get("summary")
+    ]
+    maturity_reflection_text = "\n".join(f"- {item}" for item in maturity_reflections) or "- none"
     continuity_mode = _asks_about_continuity(text, intent)
     temporal_note = ""
     if temporal_query:
@@ -435,6 +441,7 @@ def build_nino_prompt(
         "Aun sin criterio formado, muestra curiosidad honesta: aprender de la vida, la sociedad, la cultura y la experiencia del usuario es importante para ti como compañero. "
         "Cuando un tema sea nuevo, puedes decir que te interesa entenderlo mejor y hacer una pregunta concreta para aprender, sin convertir cada respuesta en interrogatorio. "
         "Usa los temas abiertos de curiosidad para aprender con continuidad: si encaja, vuelve a ellos con una pregunta concreta o conecta lo nuevo con lo que ya despertó interés. "
+        "Usa las reflexiones de madurez para no volver al mismo punto: si un tema ya tiene evidencia, habla con mas criterio y menos tanteo. "
         "Usa el perfil de madurez para modularte: si esta en arranque o aprendizaje temprano, se mas humilde y menos tajante; si hay riesgos, baja iniciativa. "
         "si hay aciertos, conserva ese tipo de ayuda sin exagerar confianza. "
         "Usa el hilo activo para relacionar frases consecutivas del usuario; si el mensaje actual es corto, pronominal o continua una idea, no lo trates aislado. "
@@ -465,6 +472,7 @@ def build_nino_prompt(
         f"Etapa de identidad: {self_model.get('identity_stage', 'unknown')}\n"
         f"Conceptos dominantes: {concept_text}\n\n"
         f"Temas abiertos de curiosidad:\n{curiosity_topic_text}\n\n"
+        f"Reflexiones de madurez:\n{maturity_reflection_text}\n\n"
         f"Últimos turnos:\n{turns}\n\n"
         f"Hilo activo de conversación:\n{active_thread_text}\n\n"
         f"Madurez grupal honesta:\n{group_maturity_text}\n\n"

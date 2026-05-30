@@ -1301,3 +1301,91 @@ Tests:
 - Un `que opinas de Watchmen?` crea un tema abierto de curiosidad.
 - El dashboard lo expone.
 - El prompt incluye los temas abiertos para continuidad de aprendizaje.
+
+## Sprint 43 - Ciclo de vida de curiosidad
+
+Estado: hecho inicial.
+
+Objetivo: que los temas de curiosidad no se queden eternamente abiertos.
+
+Hechos:
+
+- Cada tema de curiosidad tiene `key`, `status`, contador y fechas.
+- Cuando aparece evidencia activa en la bitacora, el tema pasa de `open` a
+  `grounded`.
+- El cierre es privado por agente y no se exporta al modelo global.
+
+Tests:
+
+- `Watchmen` pasa a `grounded` cuando hay una entrada activa relacionada.
+
+## Sprint 44 - Evidencia de curiosidad
+
+Estado: hecho inicial.
+
+Objetivo: medir si una curiosidad ya tiene base real para formar criterio.
+
+Hechos:
+
+- Cada tema calcula `evidence_count` contra la bitacora activa.
+- El dashboard muestra resumen de curiosidad con abiertos, grounded y archivados.
+- La madurez ya no depende solo de preguntar, sino de convertir preguntas en
+  evidencia.
+
+Tests:
+
+- El resumen devuelve `grounded_count` y `evidence_count`.
+
+## Sprint 45 - Edicion manual de curiosidad
+
+Estado: hecho inicial.
+
+Objetivo: permitir al usuario moldear los temas que amigo sigue o deja aparcados.
+
+Hechos:
+
+- API nueva: `GET /curiosity-topics`.
+- API nueva: `PATCH /curiosity-topics/{topic_key}` con estado `open`, `grounded` o
+  `archived` y nota opcional.
+- La accion queda auditada como `curiosity_topic_updated`.
+
+Tests:
+
+- Un tema puede archivarse manualmente con nota.
+
+## Sprint 46 - Reflexiones de madurez
+
+Estado: hecho inicial.
+
+Objetivo: que amigo registre cambios internos utiles cuando convierte curiosidad en
+criterio respaldado.
+
+Hechos:
+
+- Al pasar un tema a `grounded`, se crea una reflexion privada
+  `curiosity_grounded`.
+- `/dashboard` muestra `Reflexiones de madurez`.
+- El prompt recibe estas reflexiones para no volver al mismo tanteo.
+
+Tests:
+
+- El cierre de `Watchmen` genera reflexion de madurez.
+- El prompt incluye `Reflexiones de madurez`.
+
+## Sprint 47 - Curiosidad como criterio de crecimiento
+
+Estado: hecho inicial.
+
+Objetivo: que la madurez avance por el ciclo curiosidad -> evidencia -> criterio, no
+solo por acumular conversaciones.
+
+Hechos:
+
+- `curiosity_topics` devuelve `next_growth`.
+- El prompt usa temas abiertos y reflexiones para modular si debe preguntar,
+  conectar o hablar con mas criterio.
+- Se mantiene la linea roja: curiosidad no es opinion inventada.
+
+Tests:
+
+- El prompt diferencia temas abiertos de reflexiones grounded.

@@ -483,6 +483,24 @@ def test_llm_prompt_includes_open_curiosity_topics() -> None:
     assert "Watchmen" in prompt
 
 
+def test_llm_prompt_includes_maturity_reflections() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick("agent-llm", {"intent": "chat", "text": "qué opinas de Watchmen?"})
+    runtime.add_learning_journal_entry(
+        "agent-llm",
+        {"title": "Watchmen", "lesson": "Watchmen empieza a tener evidencia cultural activa", "tags": ["cultura"]},
+    )
+    runtime.tick("agent-llm", {"intent": "chat", "text": "seguimos con Watchmen"})
+
+    system = llm.prompts[-1]["system"]
+    prompt = llm.prompts[-1]["user"]
+    assert "reflexiones de madurez" in system.lower()
+    assert "Reflexiones de madurez:" in prompt
+    assert "curiosidad ya tiene evidencia activa" in prompt
+
+
 def test_llm_prompt_includes_relationship_maturity_profile() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

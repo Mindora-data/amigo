@@ -1999,6 +1999,43 @@ def test_curiosity_topics_are_tracked_and_visible_in_dashboard(tmp_path) -> None
     assert conversation["curiosity_topics"][0]["topic"] == "Watchmen"
 
 
+def test_curiosity_topic_becomes_grounded_when_learning_is_approved(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": "qué opinas de Watchmen?"})
+    created = _request(
+        app,
+        "POST",
+        "/users/mindora/agents/nino/learning-journal",
+        {"title": "Watchmen", "lesson": "Watchmen interesa como obra para aprender criterio cultural", "tags": ["cultura"]},
+    )
+    assert created["ok"] is True
+
+    curiosity = _request(app, "GET", "/users/mindora/agents/nino/curiosity-topics")
+    topic = curiosity["curiosity"]["topics"][0]
+    assert topic["topic"] == "Watchmen"
+    assert topic["status"] == "grounded"
+    assert topic["evidence_count"] == 1
+    assert curiosity["curiosity"]["grounded_count"] == 1
+    assert curiosity["maturity_reflections"][0]["type"] == "curiosity_grounded"
+
+
+def test_curiosity_topic_can_be_archived_manually(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": "qué opinas de Watchmen?"})
+    patched = _request(
+        app,
+        "PATCH",
+        "/users/mindora/agents/nino/curiosity-topics/watchmen",
+        {"status": "archived", "note": "No seguir por ahora"},
+    )
+
+    assert patched["ok"] is True
+    assert patched["topic"]["status"] == "archived"
+    assert patched["topic"]["note"] == "No seguir por ahora"
+
+
 def test_dashboard_data_counts_telegram_users_and_pending_links(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": "hola"})

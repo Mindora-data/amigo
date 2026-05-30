@@ -1253,6 +1253,7 @@ def _update_curiosity_topics(world_model: dict[str, Any], topics: list[str], now
             by_key[key]["status"] = "open"
         else:
             item = {
+                "key": key,
                 "topic": topic,
                 "status": "open",
                 "source": "conversation_curiosity",
@@ -1262,9 +1263,95 @@ def _update_curiosity_topics(world_model: dict[str, Any], topics: list[str], now
             }
             items.append(item)
             by_key[key] = item
-    items.sort(key=lambda item: (str(item.get("status")) != "open", str(item.get("last_seen_at", ""))), reverse=True)
-    world_model["curiosity_topics"] = items[-50:]
+    for item in items:
+        item["key"] = _curiosity_key(str(item.get("topic", "")))
+    items.sort(key=lambda item: (str(item.get("status")) == "open", str(item.get("last_seen_at", ""))), reverse=True)
+    world_model["curiosity_topics"] = items[:50]
     return world_model
+
+def _curiosity_evidence_count(topic: str, entries: list[LearningJournalEntry]) -> int:
+    topic_tokens = set(_tokens_for_model(topic))
+    if not topic_tokens:
+        return 0
+    count = 0
+    for entry in entries:
+        if entry.status != "active":
+            continue
+        text = f"{entry.title} {entry.lesson} {' '.join(entry.tags or [])}"
+        entry_tokens = set(_tokens_for_model(text))
+        if topic_tokens & entry_tokens:
+            count += 1
+    return count
+
+def _refresh_curiosity_topics_from_learning(
+    world_model: dict[str, Any],
+    entries: list[LearningJournalEntry],
+    now: datetime,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    topics = [dict(item) for item in world_model.get("curiosity_topics", []) if isinstance(item, dict)]
+    grounded: list[dict[str, Any]] = []
+    for item in topics:
+        topic = str(item.get("topic", "")).strip()
+        item["key"] = _curiosity_key(topic)
+        evidence_count = _curiosity_evidence_count(topic, entries)
+        item["evidence_count"] = evidence_count
+        if evidence_count > 0 and item.get("status") == "open":
+            item["status"] = "grounded"
+            item["grounded_at"] = now.isoformat()
+            grounded.append(dict(item))
+    topics.sort(key=lambda item: (str(item.get("status")) == "open", int(item.get("evidence_count", 0)), str(item.get("last_seen_at", ""))), reverse=True)
+    world_model["curiosity_topics"] = topics[:50]
+    return world_model, grounded
+
+def _curiosity_maturity_summary(world_model: dict[str, Any], entries: list[LearningJournalEntry]) -> dict[str, Any]:
+    topics = [dict(item) for item in world_model.get("curiosity_topics", []) if isinstance(item, dict)]
+    enriched: list[dict[str, Any]] = []
+    for item in topics:
+        topic = str(item.get("topic", "")).strip()
+        evidence_count = _curiosity_evidence_count(topic, entries)
+        if evidence_count:
+            item["evidence_count"] = evidence_count
+        item["key"] = _curiosity_key(topic)
+        enriched.append(item)
+    open_count = len([item for item in enriched if item.get("status") == "open"])
+    grounded_count = len([item for item in enriched if item.get("status") == "grounded"])
+    archived_count = len([item for item in enriched if item.get("status") == "archived"])
+    return {
+        "total_count": len(enriched),
+        "open_count": open_count,
+        "grounded_count": grounded_count,
+        "archived_count": archived_count,
+        "topics": enriched[-10:],
+        "next_growth": "convertir curiosidad en evidencia activa" if open_count else "seguir descubriendo temas nuevos",
+        "privacy": "private_agent_curiosity_not_global",
+    }
+
+def _append_maturity_reflections(
+    relation_state: dict[str, Any],
+    *,
+    grounded_topics: list[dict[str, Any]],
+    now: datetime,
+) -> dict[str, Any]:
+    if not grounded_topics:
+        return relation_state
+    reflections = [dict(item) for item in relation_state.get("maturity_reflections", []) if isinstance(item, dict)]
+    existing = {str(item.get("topic_key", "")) for item in reflections}
+    for topic in grounded_topics:
+        key = str(topic.get("key", ""))
+        if not key or key in existing:
+            continue
+        reflections.append(
+            {
+                "id": str(uuid4()),
+                "at": now.isoformat(),
+                "topic": str(topic.get("topic", "")),
+                "topic_key": key,
+                "type": "curiosity_grounded",
+                "summary": f"Un tema que despertaba curiosidad ya tiene evidencia activa: {topic.get('topic', '')}.",
+            }
+        )
+        existing.add(key)
+    return {**relation_state, "maturity_reflections": reflections[-50:]}
 
 def _tokens_for_model(text: str) -> list[str]:
     return [
@@ -1996,6 +2083,7 @@ class NinoRuntime:
             return {"ok": False, "error": str(exc)}
         self.learning_journal_store.upsert(entry)
         state = self.load_or_init_state(agent_id)
+        self._refresh_curiosity_state(state, now)
         state.relation_state = _append_audit_event(
             state.relation_state,
             now=now,
@@ -2034,6 +2122,7 @@ class NinoRuntime:
         entry.updated_at = now
         self.learning_journal_store.upsert(entry)
         state = self.load_or_init_state(agent_id)
+        self._refresh_curiosity_state(state, now)
         state.relation_state = _append_audit_event(
             state.relation_state,
             now=now,
@@ -2070,6 +2159,7 @@ class NinoRuntime:
             self.learning_journal_store.upsert(entry)
             updated.append(asdict(entry))
         state = self.load_or_init_state(agent_id)
+        self._refresh_curiosity_state(state, now)
         state.relation_state = _append_audit_event(
             state.relation_state,
             now=now,
@@ -2088,6 +2178,58 @@ class NinoRuntime:
         stances = self.learning_stances(agent_id)
         review = _learning_review(agent_id, entries)
         return _learning_digest(agent_id, entries, stances, review)
+
+    def curiosity_topics(self, agent_id: str) -> dict[str, Any]:
+        state = self.load_or_init_state(agent_id)
+        entries = self.learning_journal_store.list_for_agent(agent_id, status="all")
+        return {
+            "agent_id": agent_id,
+            "curiosity": _curiosity_maturity_summary(state.world_model, entries),
+            "maturity_reflections": list(state.relation_state.get("maturity_reflections", []))[-10:],
+        }
+
+    def update_curiosity_topic(
+        self,
+        agent_id: str,
+        topic_key: str,
+        payload: dict[str, Any],
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        status = str(payload.get("status", "")).strip()
+        if status not in {"open", "grounded", "archived"}:
+            return {"ok": False, "error": "invalid_curiosity_topic_status"}
+        state = self.load_or_init_state(agent_id)
+        topics = [dict(item) for item in state.world_model.get("curiosity_topics", []) if isinstance(item, dict)]
+        found: dict[str, Any] | None = None
+        for item in topics:
+            item["key"] = _curiosity_key(str(item.get("topic", "")))
+            if item["key"] != topic_key:
+                continue
+            item["status"] = status
+            item["updated_at"] = now.isoformat()
+            if "note" in payload:
+                item["note"] = str(payload.get("note", "")).strip()[:240]
+            found = item
+            break
+        if found is None:
+            return {"ok": False, "error": "curiosity_topic_not_found", "topic_key": topic_key}
+        state.world_model = {**state.world_model, "curiosity_topics": topics[-50:]}
+        state.relation_state = _append_audit_event(
+            state.relation_state,
+            now=now,
+            event_type="curiosity_topic_updated",
+            payload={"topic_key": topic_key, "status": status},
+        )
+        state.updated_at = now
+        self.state_store.put(state)
+        return {"ok": True, "topic": found, "curiosity": self.curiosity_topics(agent_id)}
+
+    def _refresh_curiosity_state(self, state: AgentState, now: datetime) -> None:
+        entries = self.learning_journal_store.list_for_agent(state.agent_id, status="all")
+        world, grounded = _refresh_curiosity_topics_from_learning(dict(state.world_model), entries, now)
+        state.world_model = world
+        state.relation_state = _append_maturity_reflections(state.relation_state, grounded_topics=grounded, now=now)
 
     def learning_stances(self, agent_id: str) -> dict[str, Any]:
         state = self.load_or_init_state(agent_id)
@@ -2285,6 +2427,7 @@ class NinoRuntime:
             learning_counts=counts,
             style=style,
         )
+        curiosity_summary = _curiosity_maturity_summary(state.world_model, journal_entries)
         return {
             "agent_id": agent_id,
             "privacy": {
@@ -2299,6 +2442,7 @@ class NinoRuntime:
             },
             "maturity_profile": maturity_profile,
             "maturity_history": list(relation.get("maturity_history", []))[-20:],
+            "maturity_reflections": list(relation.get("maturity_reflections", []))[-10:],
             "relationship_learning": {
                 "counts": counts,
                 "last_outcome": learning.get("last_outcome"),
@@ -2340,6 +2484,7 @@ class NinoRuntime:
                 "recent_open_questions": [str(item)[:120] for item in open_questions[-5:]],
                 "curiosity_topic_count": len(curiosity_topics),
                 "curiosity_topics": curiosity_topics,
+                "curiosity": curiosity_summary,
                 "quality": self.evaluate_conversation_quality(agent_id),
             },
             "group_maturity": _to_group_maturity_dashboard(relation),
@@ -3358,6 +3503,7 @@ class NinoRuntime:
         )
         _regulate_drives(state, percept_frame)
         _update_cognitive_models(state, percept_frame, now)
+        self._refresh_curiosity_state(state, now)
         self.global_model_store.put(_update_global_model(self.global_model_store.get(), percept_frame, now))
         state.active_goals = _derive_active_goals(state)
         state.energy = _clamp01(state.drive_vector.get("energy", state.energy))
@@ -3412,6 +3558,7 @@ class NinoRuntime:
             payload={"intent": intent, "text_present": bool(text.strip())},
         )
         _update_cognitive_models(state, percept_frame, now)
+        self._refresh_curiosity_state(state, now)
         self.global_model_store.put(_update_global_model(self.global_model_store.get(), percept_frame, now))
         state.active_goals = _derive_active_goals(state)
         state.energy = _clamp01(state.drive_vector.get("energy", state.energy))

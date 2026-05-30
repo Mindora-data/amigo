@@ -1888,6 +1888,7 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel"><h2>Revisión aprendizajes</h2><pre id="learningReview">{}</pre></div>
       <div class="panel"><h2>Digest aprendizaje</h2><pre id="learningDigest">{}</pre></div>
       <div class="panel"><h2>Curiosidad</h2><pre id="curiosity">{}</pre></div>
+      <div class="panel"><h2>Reflexiones de madurez</h2><pre id="maturityReflections">[]</pre></div>
       <div class="panel"><h2>Hilo activo</h2><pre id="thread">{}</pre></div>
       <div class="panel"><h2>Señales recientes</h2><pre id="signals">[]</pre></div>
       <div class="panel wide"><h2>Bitácora editable</h2>
@@ -2060,7 +2061,8 @@ DASHBOARD_HTML = """<!doctype html>
       print("maturityHistory", dash.maturity_history || []);
       print("learningReview", out.learning_review || dash.learning_review || {});
       print("learningDigest", out.learning_digest || dash.learning_digest || {});
-      print("curiosity", dash.conversation?.curiosity_topics || out.world_model?.world_model?.curiosity_topics || []);
+      print("curiosity", out.curiosity_topics?.curiosity || dash.conversation?.curiosity || dash.conversation?.curiosity_topics || []);
+      print("maturityReflections", out.curiosity_topics?.maturity_reflections || dash.maturity_reflections || []);
       print("thread", dash.active_conversation_thread || {});
       print("signals", dash.relationship_learning?.recent_signals || []);
       renderJournal(out.learning_journal?.entries || dash.learning_journal?.recent_entries || []);
@@ -2141,6 +2143,8 @@ API_ENDPOINTS = [
     "PATCH /users/{user_id}/agents/{agent_id}/learning-journal/{entry_id}",
     "GET /users/{user_id}/agents/{agent_id}/learning-review",
     "GET /users/{user_id}/agents/{agent_id}/learning-digest",
+    "GET /users/{user_id}/agents/{agent_id}/curiosity-topics",
+    "PATCH /users/{user_id}/agents/{agent_id}/curiosity-topics/{topic_key}",
     "GET /users/{user_id}/agents/{agent_id}/learning-stances",
     "PATCH /users/{user_id}/agents/{agent_id}/learning-stances/{theme}",
     "POST /users/{user_id}/agents/{agent_id}/memory/search",
@@ -2163,6 +2167,8 @@ API_ENDPOINTS = [
     "PATCH /agents/{agent_id}/learning-journal/{entry_id}",
     "GET /agents/{agent_id}/learning-review",
     "GET /agents/{agent_id}/learning-digest",
+    "GET /agents/{agent_id}/curiosity-topics",
+    "PATCH /agents/{agent_id}/curiosity-topics/{topic_key}",
     "GET /agents/{agent_id}/learning-stances",
     "PATCH /agents/{agent_id}/learning-stances/{theme}",
     "DELETE /agents/{agent_id}/memory/facts/{fact_id}",
@@ -2662,6 +2668,7 @@ class NinoService:
             "learning_stances": self.learning_stances(agent_id),
             "learning_review": self.learning_review(agent_id),
             "learning_digest": self.learning_digest(agent_id),
+            "curiosity_topics": self.curiosity_topics(agent_id),
             "temporal_events": self.list_temporal_events(agent_id),
             "proactive_inbox": self.proactive_inbox(agent_id),
             "llm": self.llm_status(agent_id),
@@ -3758,6 +3765,12 @@ class NinoService:
     def learning_digest(self, agent_id: str) -> dict[str, Any]:
         return _to_jsonable(self.runtime.learning_digest(agent_id))
 
+    def curiosity_topics(self, agent_id: str) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.curiosity_topics(agent_id))
+
+    def update_curiosity_topic(self, agent_id: str, topic_key: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.update_curiosity_topic(agent_id, topic_key, payload))
+
     def learning_stances(self, agent_id: str) -> dict[str, Any]:
         return _to_jsonable(self.runtime.learning_stances(agent_id))
 
@@ -4061,6 +4074,10 @@ class NinoHttpApp:
             return "200 OK", self.service.learning_review(agent_id)
         if method == "GET" and tail == ["learning-digest"]:
             return "200 OK", self.service.learning_digest(agent_id)
+        if method == "GET" and tail == ["curiosity-topics"]:
+            return "200 OK", self.service.curiosity_topics(agent_id)
+        if method == "PATCH" and len(tail) == 2 and tail[0] == "curiosity-topics":
+            return "200 OK", self.service.update_curiosity_topic(agent_id, tail[1], payload)
         if method == "GET" and tail == ["learning-stances"]:
             return "200 OK", self.service.learning_stances(agent_id)
         if method == "PATCH" and len(tail) == 2 and tail[0] == "learning-stances":
