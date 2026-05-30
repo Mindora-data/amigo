@@ -30,6 +30,11 @@ class TimeoutTelegram(FakeTelegram):
         raise TimeoutError("telegram timeout")
 
 
+class FailingSendTelegram(FakeTelegram):
+    def send_message(self, chat_id: int | str, text: str) -> dict[str, object]:
+        raise TimeoutError("telegram send timeout")
+
+
 class FakeBackend:
     def __init__(self) -> None:
         self.ticks: list[dict[str, object]] = []
@@ -164,6 +169,21 @@ def test_telegram_poll_timeout_still_pushes_due_proactivity(tmp_path) -> None:
     bot.poll_once()
 
     assert telegram.sent == [{"chat_id": "111", "text": "recuerda beber agua"}]
+
+
+def test_telegram_send_failure_does_not_stop_poll_loop(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FailingSendTelegram()
+    telegram.updates = [_update(111, "hola")]
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.poll_once()
+
+    assert len(backend.ticks) == 1
+    assert backend.ticks[0]["user_id"] == "ana"
+    assert backend.ticks[0]["text"] == "hola"
 
 
 def test_blocked_proactive_candidate_sends_nothing(tmp_path) -> None:

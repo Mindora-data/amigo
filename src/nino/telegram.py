@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import secrets
 import sqlite3
+import sys
 import subprocess
 import time
 from typing import Any, Protocol
@@ -654,15 +655,25 @@ class TelegramBotService:
     def poll_once(self) -> None:
         try:
             updates = self.telegram.get_updates(self.offset, self.poll_timeout)
-        except Exception:
+        except Exception as exc:
+            print(f"telegram_poll_error: {exc.__class__.__name__}", file=sys.stderr)
             updates = []
         for update in updates:
-            self.handle_update(update)
-        self.push_proactivity_once()
+            try:
+                self.handle_update(update)
+            except Exception as exc:
+                print(f"telegram_update_error: {exc.__class__.__name__}", file=sys.stderr)
+        try:
+            self.push_proactivity_once()
+        except Exception as exc:
+            print(f"telegram_proactivity_error: {exc.__class__.__name__}", file=sys.stderr)
 
     def run_forever(self, interval_seconds: float = 1.0) -> None:
         while True:
-            self.poll_once()
+            try:
+                self.poll_once()
+            except Exception as exc:
+                print(f"telegram_loop_error: {exc.__class__.__name__}", file=sys.stderr)
             time.sleep(interval_seconds)
 
 

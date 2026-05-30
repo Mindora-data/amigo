@@ -59,12 +59,12 @@ def test_retrieval_understands_last_week_temporal_query() -> None:
 
 def test_retrieval_understands_before_yesterday_temporal_query() -> None:
     store = InMemoryEpisodeStore()
-    now = datetime.now(timezone.utc)
+    now = datetime(2026, 5, 30, 12, tzinfo=timezone.utc)
     store.append(Episode("target", "a1", now - timedelta(days=2, hours=1), "fuimos al medico", "chat", 0.8, 0.9))
     store.append(Episode("wrong", "a1", now - timedelta(days=1), "compré pan", "chat", 0.8, 0.9))
 
     retriever = MemoryRetriever(store)
-    req = RetrieveRequest(query_intent="que te dije antes de ayer", self_state={}, relation_state={}, time_scope="long")
+    req = RetrieveRequest(query_intent="que te dije antes de ayer", self_state={}, relation_state={}, time_scope="long", now=now)
     out = retriever.retrieve(agent_id="a1", request=req, top_k=3)
 
     assert out.memory_candidates
