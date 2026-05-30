@@ -357,11 +357,16 @@ def build_nino_prompt(
     if isinstance(group_maturity, dict) and group_maturity:
         topic_counts = dict(group_maturity.get("topic_counts", {}))
         tone_counts = dict(group_maturity.get("tone_counts", {}))
+        social_learning = dict(group_maturity.get("social_learning", {}))
+        social_counts = dict(social_learning.get("signal_counts", {}))
         topics = ", ".join(
             key for key, _ in sorted(topic_counts.items(), key=lambda item: int(item[1]), reverse=True)[:6]
         ) or "none"
         tones = ", ".join(
             key for key, _ in sorted(tone_counts.items(), key=lambda item: int(item[1]), reverse=True)[:6]
+        ) or "none"
+        social = ", ".join(
+            key for key, _ in sorted(social_counts.items(), key=lambda item: int(item[1]), reverse=True)[:6]
         ) or "none"
         shared = [
             _redact_context(str(item.get("summary", "")))
@@ -374,6 +379,8 @@ def build_nino_prompt(
             f"- Respuestas de amigo en este grupo: {int(group_maturity.get('bot_replies', 0))}\n"
             f"- Temas frecuentes: {topics}\n"
             f"- Tono del grupo: {tones}\n"
+            f"- Señales sociales agregadas: {social}\n"
+            f"- Politica de aprendizaje social: {social_learning.get('policy', 'aggregate_only_no_raw_memory')}\n"
             f"- Historia compartida reciente: {' | '.join(shared) if shared else 'none'}"
         )
     concepts = sorted(

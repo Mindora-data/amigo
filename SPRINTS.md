@@ -1583,3 +1583,61 @@ Tests:
 - `/user` y `/chat` sirven el mismo HTML minimalista.
 - La pagina conserva login por sesion/cookie, onboarding, proactividad e inbox.
 - La pagina no expone rutas internas de operaciones ni tokens de sesion.
+
+## Sprint 59 - Señales sociales agregadas de grupo
+
+Estado: hecho inicial.
+
+Objetivo: que amigo aprenda comportamiento social de grupos sin convertir mensajes
+sueltos en recuerdos ni reglas vivas.
+
+Hechos:
+
+- `group_maturity.social_learning` registra señales de vocabulario cerrado:
+  `general_question`, `supportive_ack`, `boundary`, `greeting`.
+- Solo guarda contadores, ultima señal y politica; no guarda texto crudo en el modelo
+  social.
+- El dashboard relacional expone estas señales dentro de la madurez grupal.
+
+Tests:
+
+- El feedback social negativo incrementa `boundary`.
+- Las señales agregadas no contienen el texto original del grupo.
+
+## Sprint 60 - Borradores sociales revisables
+
+Estado: hecho inicial.
+
+Objetivo: que los patrones sociales repetidos puedan llegar a la bitacora, pero como
+borradores revisables, nunca como aprendizaje activo automatico.
+
+Hechos:
+
+- Patrones sociales con umbral generan entradas `detected` en `draft`.
+- Una pregunta general repetida tres veces crea un borrador sobre participacion breve
+  en preguntas abiertas.
+- Los limites sociales del grupo pueden crear borrador de cautela con umbral bajo.
+- Cada patron se emite una sola vez por grupo mediante `drafted_patterns`.
+
+Tests:
+
+- Tres preguntas generales de grupo crean un unico borrador.
+- El borrador queda aislado en `telegram-group-<chat_id>` y no aparece en otro grupo.
+
+## Sprint 61 - Madurez social en el prompt de grupo
+
+Estado: hecho inicial.
+
+Objetivo: que el LLM reciba señales sociales agregadas y politica de aprendizaje
+social sin acceder a memoria privada ni texto crudo.
+
+Hechos:
+
+- El prompt de grupo incluye `Señales sociales agregadas`.
+- El prompt incluye la politica `aggregate_closed_vocab_drafts_only_no_raw_memory`.
+- El fondo social sigue siendo honesto: software companion, sin vida humana inventada.
+
+Tests:
+
+- El prompt de grupo contiene señales sociales agregadas y conserva la identidad
+  honesta sin vida humana.

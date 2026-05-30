@@ -1712,6 +1712,45 @@ def test_group_social_feedback_updates_group_maturity(tmp_path) -> None:
 
     assert dashboard["group_maturity"]["social_outcomes"]["negative"] == 1
     assert dashboard["group_maturity"]["last_social_outcome"] == "negative"
+    assert dashboard["group_maturity"]["social_learning"]["signal_counts"]["boundary"] == 1
+
+
+def test_group_social_learning_creates_reviewable_drafts_not_active_memory(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    for idx, text in enumerate(
+        [
+            "alguien sabe cual es la capital de españa",
+            "¿alguien sabe cómo se hace esto?",
+            "sabeis como lo veis para quedar",
+        ]
+    ):
+        out = _request(
+            app,
+            "POST",
+            "/agents/telegram-group-100/observe",
+            {"intent": "group_observation", "text": text, "now": f"2026-05-29T13:0{idx}:00+02:00"},
+        )
+
+    assert len(out["learning_journal_updates"]) == 1
+    draft = out["learning_journal_updates"][0]
+    assert draft["status"] == "draft"
+    assert draft["source"] == "detected"
+    assert "pregunta general abierta" in draft["lesson"]
+    assert "social" in draft["tags"]
+
+    journal = _request(app, "GET", "/agents/telegram-group-100/learning-journal")
+    assert journal["count"] == 1
+    assert journal["entries"][0]["status"] == "draft"
+
+    dashboard = _request(app, "GET", "/agents/telegram-group-100/relationship-dashboard")["dashboard"]
+    social = dashboard["group_maturity"]["social_learning"]
+    assert social["signal_counts"]["general_question"] == 3
+    assert social["policy"] == "aggregate_closed_vocab_drafts_only_no_raw_memory"
+    assert "alguien sabe" not in json.dumps(social)
+
+    other = _request(app, "GET", "/agents/telegram-group-200/learning-journal")
+    assert other["count"] == 0
 
 
 def test_active_conversation_thread_connects_short_followups(tmp_path) -> None:

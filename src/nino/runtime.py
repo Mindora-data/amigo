@@ -30,6 +30,7 @@ from .learning_journal import (
     extract_learning_journal_entries,
     learning_entry_quality,
     learning_terms,
+    make_detected_learning_entry,
     make_manual_learning_entry,
 )
 from .memory import Episode, InMemoryEpisodeStore, MemoryRetriever
@@ -889,6 +890,44 @@ GROUP_TONE_MARKERS = {
     "practico": ("plan", "idea", "hacer", "quedamos", "cuando", "hora"),
 }
 
+SOCIAL_LEARNING_SPECS = {
+    "general_question": {
+        "threshold": 3,
+        "title": "Detectado: preguntas generales de grupo",
+        "lesson": "En grupos, cuando aparece una pregunta general abierta, puede participar con una respuesta breve si aporta valor claro y no invade un hilo entre dos personas.",
+    },
+    "supportive_ack": {
+        "threshold": 2,
+        "title": "Detectado: apoyo social breve",
+        "lesson": "En grupos, las señales de agradecimiento o apoyo piden presencia breve y natural; mejor acompañar sin convertirlo siempre en otra pregunta.",
+    },
+    "boundary": {
+        "threshold": 1,
+        "title": "Detectado: limite social del grupo",
+        "lesson": "Si el grupo marca molestia o pide que no intervenga, debe bajar iniciativa y observar antes de volver a participar.",
+    },
+    "greeting": {
+        "threshold": 3,
+        "title": "Detectado: saludos de grupo",
+        "lesson": "Un saludo general en grupo puede responderse de forma sencilla, pero no debe abrir una conversacion larga si nadie la pide.",
+    },
+}
+
+
+def _classify_social_learning_signal(text: str, intent: str) -> str | None:
+    if not (intent.startswith("group_") or intent == "group_chat"):
+        return None
+    plain = _without_accents(text)
+    if text.startswith("social_feedback:negative") or any(marker in plain for marker in ("no te metas", "calla", "pesado", "no insistas", "no preguntes")):
+        return "boundary"
+    if any(marker in plain for marker in ("gracias", "bien visto", "exacto", "te entiendo", "animo", "tranqui", "me alegro")):
+        return "supportive_ack"
+    if any(marker in plain for marker in ("hola", "buenas", "buenos dias", "buenas tardes", "buenas noches")) and len(_tokens_for_model(text)) <= 5:
+        return "greeting"
+    if "?" in text or "¿" in text or any(marker in plain for marker in ("alguien sabe", "alguin sabe", "que opinais", "como lo veis", "sabeis", "cual es")):
+        return "general_question"
+    return None
+
 
 def _apply_group_social_feedback(
     relation_state: dict[str, Any],
@@ -910,6 +949,29 @@ def _apply_group_social_feedback(
         maturity["participation_guidance"] = "baja iniciativa; interviene solo si te mencionan o si la pregunta general es clara"
     elif outcome in {"positive", "reacted"}:
         maturity["participation_guidance"] = "puede participar con brevedad cuando aporte valor claro"
+    relation["group_maturity"] = maturity
+    return relation
+
+
+def _update_group_social_learning(
+    relation_state: dict[str, Any],
+    text: str,
+    intent: str,
+    now: datetime,
+) -> dict[str, Any]:
+    signal = _classify_social_learning_signal(text, intent)
+    if signal is None:
+        return relation_state
+    relation = dict(relation_state)
+    maturity = dict(relation.get("group_maturity", {}))
+    social = dict(maturity.get("social_learning", {}))
+    counts = dict(social.get("signal_counts", {}))
+    counts[signal] = int(counts.get(signal, 0)) + 1
+    social["signal_counts"] = counts
+    social["last_signal"] = signal
+    social["last_signal_at"] = now.isoformat()
+    social["policy"] = "aggregate_closed_vocab_drafts_only_no_raw_memory"
+    maturity["social_learning"] = social
     relation["group_maturity"] = maturity
     return relation
 
@@ -988,10 +1050,59 @@ def _to_group_maturity_dashboard(relation_state: dict[str, Any]) -> dict[str, An
         ],
         "shared_history_count": len([item for item in maturity.get("shared_history", []) if isinstance(item, dict)]),
         "social_outcomes": dict(maturity.get("social_outcomes", {})),
+        "social_learning": dict(maturity.get("social_learning", {})),
         "last_social_outcome": maturity.get("last_social_outcome"),
         "last_observed_at": maturity.get("last_observed_at"),
         "privacy": "group_scope_only_no_private_chats_no_human_life",
     }
+
+
+def _social_learning_journal_entries(
+    *,
+    agent_id: str,
+    relation_state: dict[str, Any],
+    source_episode_id: str,
+    now: datetime,
+    existing_lessons: list[str],
+) -> list[LearningJournalEntry]:
+    if not agent_id.startswith("telegram-group-"):
+        return []
+    maturity = relation_state.get("group_maturity", {})
+    if not isinstance(maturity, dict):
+        return []
+    social = dict(maturity.get("social_learning", {}))
+    counts = dict(social.get("signal_counts", {}))
+    drafted = set(str(item) for item in social.get("drafted_patterns", []) if str(item))
+    existing = {_review_key(item) for item in existing_lessons}
+    out: list[LearningJournalEntry] = []
+    for key, spec in SOCIAL_LEARNING_SPECS.items():
+        if key in drafted or int(counts.get(key, 0)) < int(spec["threshold"]):
+            continue
+        lesson = str(spec["lesson"])
+        if _review_key(lesson) in existing:
+            drafted.add(key)
+            continue
+        try:
+            out.append(
+                make_detected_learning_entry(
+                    agent_id=agent_id,
+                    lesson=lesson,
+                    title=str(spec["title"]),
+                    tags=["social", "comportamiento", "amistad"],
+                    source_episode_id=source_episode_id,
+                    now=now,
+                    status="draft",
+                )
+            )
+            drafted.add(key)
+            existing.add(_review_key(lesson))
+        except ValueError:
+            continue
+    if out:
+        social["drafted_patterns"] = sorted(drafted)
+        maturity["social_learning"] = social
+        relation_state["group_maturity"] = maturity
+    return out[:3]
 
 
 def _update_relation_from_percept(
@@ -1015,6 +1126,7 @@ def _update_relation_from_percept(
     relation = _record_continuity_miss_if_needed(relation, text, now)
     relation = _update_active_conversation_thread(relation, text, intent, now)
     relation = _update_group_maturity(relation, text, intent, now)
+    relation = _update_group_social_learning(relation, text, intent, now)
 
     name = NAME_RE.search(text)
     if name:
@@ -3809,6 +3921,17 @@ class NinoRuntime:
         state.tick += 1
         state.updated_at = now
         state.relation_state = _update_relation_from_percept(state.relation_state, percept_frame, now)
+        if text.strip() and agent_id.startswith("telegram-group-"):
+            social_updates = _social_learning_journal_entries(
+                agent_id=agent_id,
+                relation_state=state.relation_state,
+                source_episode_id=episode.episode_id,
+                now=now,
+                existing_lessons=[entry.lesson for entry in self.learning_journal_store.list_for_agent(agent_id, status="all")],
+            )
+            for entry in social_updates:
+                self.learning_journal_store.upsert(entry)
+            journal_updates.extend(social_updates)
         response_text = str(decision.chosen_action.get("payload", {}).get("text", "")).strip()
         source = f"llm_{llm_provider}" if llm_provider and f"llm_provider_{llm_provider}" in decision.reason_trace else "policy"
         if response_text:
@@ -3890,14 +4013,25 @@ class NinoRuntime:
             confidence=_clamp01(float(percept_frame.get("confidence", 0.7))),
         )
         self.episode_store.append(episode)
+        journal_updates: list[LearningJournalEntry] = []
         state.tick += 1
         state.updated_at = now
         state.relation_state = _update_relation_from_percept(state.relation_state, percept_frame, now)
+        if text.strip() and agent_id.startswith("telegram-group-"):
+            journal_updates = _social_learning_journal_entries(
+                agent_id=agent_id,
+                relation_state=state.relation_state,
+                source_episode_id=episode.episode_id,
+                now=now,
+                existing_lessons=[entry.lesson for entry in self.learning_journal_store.list_for_agent(agent_id, status="all")],
+            )
+            for entry in journal_updates:
+                self.learning_journal_store.upsert(entry)
         state.relation_state = _append_audit_event(
             state.relation_state,
             now=now,
             event_type="observation",
-            payload={"intent": intent, "text_present": bool(text.strip())},
+            payload={"intent": intent, "text_present": bool(text.strip()), "learning_journal_updates": len(journal_updates)},
         )
         _update_cognitive_models(state, percept_frame, now)
         self._refresh_curiosity_state(state, now)
@@ -3906,4 +4040,4 @@ class NinoRuntime:
         state.energy = _clamp01(state.drive_vector.get("energy", state.energy))
         self._record_maturity_history(state, now)
         self.state_store.put(state)
-        return {"ok": True, "tick": state.tick, "episode_id": episode.episode_id}
+        return {"ok": True, "tick": state.tick, "episode_id": episode.episode_id, "learning_journal_updates": [asdict(entry) for entry in journal_updates]}

@@ -456,3 +456,27 @@ def make_manual_learning_entry(
     )
     entry.tags = _tags_with_theme("manual", entry.title, entry.lesson, tags or ["manual"])
     return entry
+
+
+def make_detected_learning_entry(
+    *,
+    agent_id: str,
+    lesson: str,
+    now: datetime,
+    title: str,
+    tags: list[str] | None = None,
+    source_episode_id: str | None = None,
+    status: str = "draft",
+) -> LearningJournalEntry:
+    entry = _new_entry(
+        agent_id=agent_id,
+        lesson=lesson,
+        tag=(tags or ["detected"])[0] if tags else "detected",
+        source="detected",
+        now=now,
+        title=title,
+        status=status,
+        source_episode_id=source_episode_id,
+    )
+    entry.tags = _tags_with_theme("detected", entry.title, entry.lesson, tags or ["social", "comportamiento"])
+    return entry

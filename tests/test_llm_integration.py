@@ -571,6 +571,7 @@ def test_llm_prompt_includes_honest_group_maturity_not_human_life() -> None:
 
     runtime.tick("telegram-group-100", {"intent": "group_chat", "text": "tenemos una idea para el viaje"})
     runtime.tick("telegram-group-100", {"intent": "group_chat", "text": "¿cómo lo veis?"})
+    runtime.tick("telegram-group-100", {"intent": "group_chat", "text": "¿alguien sabe otra opción?"})
 
     system = llm.prompts[-1]["system"]
     prompt = llm.prompts[-1]["user"]
@@ -578,6 +579,9 @@ def test_llm_prompt_includes_honest_group_maturity_not_human_life() -> None:
     assert "Madurez grupal honesta:" in prompt
     assert "software_companion_no_human_life" in prompt
     assert "Historia compartida reciente:" in prompt
+    assert "Señales sociales agregadas:" in prompt
+    assert "general_question" in prompt
+    assert "aggregate_closed_vocab_drafts_only_no_raw_memory" in prompt
 
 
 def test_llm_prompt_tells_group_responses_not_to_always_extend_conversation() -> None:
