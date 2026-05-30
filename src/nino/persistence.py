@@ -11,6 +11,7 @@ from .learning_journal import LearningJournalEntry
 from .memory import Episode
 from .memory_graph import GraphEdge, GraphNode
 from .proactivity import InMemoryProactiveCandidateStore
+from .rss_culture import RssItem, RssSource
 from .runtime import NinoRuntime, _safe_global_concept_counts
 
 DEFAULT_COGNITIVE_TIME_JSON = '{"age_ticks": 0.0, "experience_mass": 0.0, "maturity": 0.0}'
@@ -863,6 +864,144 @@ class SQLiteProactiveCandidateStore(InMemoryProactiveCandidateStore):
         return cursor.rowcount
 
 
+class SQLiteRssCultureStore:
+    def __init__(self, path: str | Path) -> None:
+        self.conn = _connect(path)
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS rss_source (
+                source_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                url TEXT NOT NULL,
+                theme TEXT NOT NULL,
+                active INTEGER NOT NULL,
+                trust REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS rss_item (
+                item_id TEXT PRIMARY KEY,
+                source_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                link TEXT NOT NULL,
+                published_at TEXT,
+                summary TEXT NOT NULL,
+                theme TEXT NOT NULL,
+                fetched_at TEXT NOT NULL,
+                UNIQUE(source_id, link),
+                FOREIGN KEY(source_id) REFERENCES rss_source(source_id) ON DELETE CASCADE
+            )
+            """
+        )
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_rss_item_theme_time ON rss_item(theme, fetched_at)")
+        self.conn.commit()
+
+    def upsert_source(self, source: RssSource) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO rss_source (source_id, name, url, theme, active, trust, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source_id) DO UPDATE SET
+                name = excluded.name,
+                url = excluded.url,
+                theme = excluded.theme,
+                active = excluded.active,
+                trust = excluded.trust,
+                updated_at = excluded.updated_at
+            """,
+            (
+                source.source_id,
+                source.name,
+                source.url,
+                source.theme,
+                1 if source.active else 0,
+                source.trust,
+                source.created_at.isoformat(),
+                source.updated_at.isoformat(),
+            ),
+        )
+        self.conn.commit()
+
+    def _source_from_row(self, row: sqlite3.Row) -> RssSource:
+        return RssSource(
+            source_id=str(row["source_id"]),
+            name=str(row["name"]),
+            url=str(row["url"]),
+            theme=str(row["theme"]),
+            active=bool(row["active"]),
+            trust=float(row["trust"]),
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
+
+    def list_sources(self, active_only: bool = False) -> list[RssSource]:
+        sql = "SELECT * FROM rss_source"
+        params: tuple[object, ...] = ()
+        if active_only:
+            sql += " WHERE active = 1"
+        sql += " ORDER BY updated_at DESC, source_id"
+        return [self._source_from_row(row) for row in self.conn.execute(sql, params).fetchall()]
+
+    def get_source(self, source_id: str) -> RssSource | None:
+        row = self.conn.execute("SELECT * FROM rss_source WHERE source_id = ?", (source_id,)).fetchone()
+        return self._source_from_row(row) if row else None
+
+    def upsert_item(self, item: RssItem) -> bool:
+        try:
+            self.conn.execute(
+                """
+                INSERT INTO rss_item (item_id, source_id, title, link, published_at, summary, theme, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item.item_id,
+                    item.source_id,
+                    item.title,
+                    item.link,
+                    item.published_at.isoformat() if item.published_at else None,
+                    item.summary,
+                    item.theme,
+                    item.fetched_at.isoformat(),
+                ),
+            )
+            self.conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            self.conn.rollback()
+            return False
+
+    def _item_from_row(self, row: sqlite3.Row) -> RssItem:
+        return RssItem(
+            item_id=str(row["item_id"]),
+            source_id=str(row["source_id"]),
+            title=str(row["title"]),
+            link=str(row["link"]),
+            published_at=datetime.fromisoformat(row["published_at"]) if row["published_at"] else None,
+            summary=str(row["summary"]),
+            theme=str(row["theme"]),
+            fetched_at=datetime.fromisoformat(row["fetched_at"]),
+        )
+
+    def list_items(self, theme: str = "all", limit: int = 20) -> list[RssItem]:
+        params: list[object] = []
+        sql = "SELECT * FROM rss_item"
+        if theme and theme != "all":
+            sql += " WHERE theme = ?"
+            params.append(theme)
+        sql += " ORDER BY COALESCE(published_at, fetched_at) DESC, item_id LIMIT ?"
+        params.append(int(limit))
+        return [self._item_from_row(row) for row in self.conn.execute(sql, tuple(params)).fetchall()]
+
+    def delete_source(self, source_id: str) -> int:
+        cursor = self.conn.execute("DELETE FROM rss_source WHERE source_id = ?", (source_id,))
+        self.conn.commit()
+        return cursor.rowcount
+
+
 def create_persistent_runtime(path: str | Path) -> NinoRuntime:
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -874,4 +1013,5 @@ def create_persistent_runtime(path: str | Path) -> NinoRuntime:
         proactive_candidate_store=SQLiteProactiveCandidateStore(db_path),
         graph_store=SQLiteGraphStore(db_path),
         learning_journal_store=SQLiteLearningJournalStore(db_path),
+        rss_culture_store=SQLiteRssCultureStore(db_path),
     )

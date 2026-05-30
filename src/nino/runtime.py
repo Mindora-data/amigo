@@ -45,6 +45,7 @@ from .proactivity import (
     record_proactive_send,
     record_proactive_source,
 )
+from .rss_culture import RssItem, RssSource, fetch_rss_xml, normalize_theme, parse_rss_items, source_id_from_name
 
 
 def _nino_context_summary(
@@ -177,6 +178,45 @@ class InMemoryGlobalModelStore:
                 stats[outcome] += count
                 stats["total"] += count
         return stats
+
+
+class InMemoryRssCultureStore:
+    def __init__(self) -> None:
+        self._sources: dict[str, RssSource] = {}
+        self._items: dict[str, RssItem] = {}
+
+    def upsert_source(self, source: RssSource) -> None:
+        self._sources[source.source_id] = source
+
+    def list_sources(self, active_only: bool = False) -> list[RssSource]:
+        sources = sorted(self._sources.values(), key=lambda item: item.updated_at, reverse=True)
+        return [source for source in sources if source.active] if active_only else sources
+
+    def get_source(self, source_id: str) -> RssSource | None:
+        return self._sources.get(source_id)
+
+    def upsert_item(self, item: RssItem) -> bool:
+        for existing in self._items.values():
+            if existing.source_id == item.source_id and existing.link and existing.link == item.link:
+                return False
+            if existing.source_id == item.source_id and existing.title.lower() == item.title.lower():
+                return False
+        self._items[item.item_id] = item
+        return True
+
+    def list_items(self, theme: str = "all", limit: int = 20) -> list[RssItem]:
+        items = sorted(self._items.values(), key=lambda item: item.published_at or item.fetched_at, reverse=True)
+        if theme and theme != "all":
+            items = [item for item in items if item.theme == theme]
+        return items[:limit]
+
+    def delete_source(self, source_id: str) -> int:
+        deleted = 1 if self._sources.pop(source_id, None) else 0
+        for item_id, item in list(self._items.items()):
+            if item.source_id == source_id:
+                self._items.pop(item_id, None)
+        return deleted
+
 
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
@@ -1309,6 +1349,7 @@ def _default_world_model() -> dict[str, Any]:
         "open_questions": [],
         "causal_observations": [],
         "curiosity_topics": [],
+        "rss_culture": {"enabled": True, "item_count": 0, "themes": {}, "privacy": "global_culture_not_private_memory"},
     }
 
 def _clean_curiosity_topic(value: str) -> str:
@@ -2037,6 +2078,7 @@ class NinoRuntime:
         proactive_candidate_store: InMemoryProactiveCandidateStore | None = None,
         graph_store: InMemoryGraphStore | None = None,
         learning_journal_store: InMemoryLearningJournalStore | None = None,
+        rss_culture_store: InMemoryRssCultureStore | None = None,
         llm_client: LLMClient | None = None,
     ) -> None:
         self.state_store = state_store
@@ -2048,6 +2090,7 @@ class NinoRuntime:
         self.proactive_candidate_store = proactive_candidate_store or InMemoryProactiveCandidateStore()
         self.graph_store = graph_store or InMemoryGraphStore()
         self.learning_journal_store = learning_journal_store or InMemoryLearningJournalStore()
+        self.rss_culture_store = rss_culture_store or InMemoryRssCultureStore()
         self.llm_client = llm_client if llm_client is not None else build_configured_llm()
         self.proactivity = ProactivityEngine(
             self.episode_store,
@@ -2064,6 +2107,8 @@ class NinoRuntime:
         existing = self.state_store.get(agent_id)
         if existing:
             return existing
+        world = _default_world_model()
+        world["rss_culture"] = self._rss_world_summary(datetime.now(timezone.utc))
         initial = AgentState(
             agent_id=agent_id,
             tick=0,
@@ -2079,11 +2124,24 @@ class NinoRuntime:
             },
             cognitive_time=_default_cognitive_time(),
             self_model=_default_self_model(),
-            world_model=_default_world_model(),
+            world_model=world,
             updated_at=datetime.now(timezone.utc),
         )
         self.state_store.put(initial)
         return initial
+
+    def _rss_world_summary(self, now: datetime) -> dict[str, Any]:
+        items = self.rss_culture_store.list_items(theme="all", limit=500)
+        themes: dict[str, int] = {}
+        for item in items:
+            themes[item.theme] = themes.get(item.theme, 0) + 1
+        return {
+            "enabled": True,
+            "item_count": len(items),
+            "themes": themes,
+            "updated_at": now.isoformat() if items else None,
+            "privacy": "global_culture_not_private_memory",
+        }
 
     def action_permissions(self, agent_id: str) -> dict[str, Any]:
         state = self.load_or_init_state(agent_id)
@@ -2719,6 +2777,106 @@ class NinoRuntime:
         state.updated_at = now
         self.state_store.put(state)
         return {"ok": True, "stance": self.learning_stances(agent_id)}
+
+    def rss_culture(self, theme: str = "all", limit: int = 20) -> dict[str, Any]:
+        sources = self.rss_culture_store.list_sources()
+        items = self.rss_culture_store.list_items(theme=theme, limit=limit)
+        themes: dict[str, int] = {}
+        for item in self.rss_culture_store.list_items(theme="all", limit=500):
+            themes[item.theme] = themes.get(item.theme, 0) + 1
+        return {
+            "sources": [asdict(source) for source in sources],
+            "items": [asdict(item) for item in items],
+            "source_count": len(sources),
+            "active_source_count": len([source for source in sources if source.active]),
+            "item_count": sum(themes.values()),
+            "themes": themes,
+            "privacy": "global_culture_sources_not_private_memory",
+        }
+
+    def add_rss_source(self, payload: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        name = str(payload.get("name", "")).strip()[:120]
+        url = str(payload.get("url", "")).strip()[:500]
+        if not name or not url:
+            return {"ok": False, "error": "rss_source_requires_name_and_url"}
+        theme = normalize_theme(str(payload.get("theme", "otros")))
+        trust = _clamp01(float(payload.get("trust", 0.6)))
+        source = RssSource(
+            source_id=source_id_from_name(name),
+            name=name,
+            url=url,
+            theme=theme,
+            active=bool(payload.get("active", True)),
+            trust=trust,
+            created_at=now,
+            updated_at=now,
+        )
+        self.rss_culture_store.upsert_source(source)
+        return {"ok": True, "source": asdict(source)}
+
+    def update_rss_source(self, source_id: str, payload: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        source = self.rss_culture_store.get_source(source_id)
+        if source is None:
+            return {"ok": False, "error": "rss_source_not_found", "source_id": source_id}
+        if "name" in payload:
+            source.name = str(payload["name"]).strip()[:120] or source.name
+        if "url" in payload:
+            source.url = str(payload["url"]).strip()[:500] or source.url
+        if "theme" in payload:
+            source.theme = normalize_theme(str(payload["theme"]))
+        if "active" in payload:
+            source.active = bool(payload["active"])
+        if "trust" in payload:
+            source.trust = _clamp01(float(payload["trust"]))
+        source.updated_at = now
+        self.rss_culture_store.upsert_source(source)
+        return {"ok": True, "source": asdict(source)}
+
+    def delete_rss_source(self, source_id: str) -> dict[str, Any]:
+        deleted = self.rss_culture_store.delete_source(source_id)
+        return {"ok": bool(deleted), "deleted": deleted, "source_id": source_id}
+
+    def import_rss_source(self, source_id: str, *, xml_text: str | None = None, now: datetime | None = None) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        source = self.rss_culture_store.get_source(source_id)
+        if source is None:
+            return {"ok": False, "error": "rss_source_not_found", "source_id": source_id}
+        if not source.active:
+            return {"ok": False, "error": "rss_source_inactive", "source_id": source_id}
+        try:
+            xml = xml_text if xml_text is not None else fetch_rss_xml(source.url)
+            parsed = parse_rss_items(xml, source_id=source.source_id, theme=source.theme, fetched_at=now)
+        except Exception as exc:
+            return {"ok": False, "error": "rss_import_failed", "detail": exc.__class__.__name__}
+        added = 0
+        for item in parsed:
+            if self.rss_culture_store.upsert_item(item):
+                added += 1
+        source.updated_at = now
+        self.rss_culture_store.upsert_source(source)
+        self._refresh_rss_world_model(now)
+        return {"ok": True, "source_id": source_id, "parsed_count": len(parsed), "added_count": added}
+
+    def import_all_rss_sources(self, now: datetime | None = None) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        results = [self.import_rss_source(source.source_id, now=now) for source in self.rss_culture_store.list_sources(active_only=True)]
+        return {
+            "ok": all(result.get("ok") for result in results) if results else True,
+            "results": results,
+            "added_count": sum(int(result.get("added_count", 0)) for result in results),
+        }
+
+    def _refresh_rss_world_model(self, now: datetime) -> None:
+        for agent_id in self.state_store.list_agent_ids():
+            state = self.load_or_init_state(agent_id)
+            state.world_model = {
+                **state.world_model,
+                "rss_culture": self._rss_world_summary(now),
+            }
+            state.updated_at = now
+            self.state_store.put(state)
 
     def _record_maturity_history(self, state: AgentState, now: datetime) -> None:
         entries = self.learning_journal_store.list_for_agent(state.agent_id, status="all")
@@ -3850,7 +4008,7 @@ class NinoRuntime:
                     intent=intent,
                     relation_state=prompt_relation_state,
                     self_model=state.self_model,
-                    world_model=state.world_model,
+                    world_model={**state.world_model, "rss_culture": self._rss_world_summary(now)},
                     active_goals=list(state.active_goals),
                     memory_candidates=llm_retrieved.memory_candidates,
                     temporal_query=llm_retrieved.temporal_query,

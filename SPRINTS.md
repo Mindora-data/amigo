@@ -1641,3 +1641,34 @@ Tests:
 
 - El prompt de grupo contiene señales sociales agregadas y conserva la identidad
   honesta sin vida humana.
+
+## Sprint 62 - Fuentes RSS culturales controladas
+
+Estado: hecho inicial.
+
+Objetivo: ampliar cultura y referencias de amigo sin convertir RSS en recuerdos
+vividos ni memoria privada de usuarios.
+
+Hechos:
+
+- Nueva capa `rss_culture` separada de episodios, hechos frios y bitacora privada.
+- Parser RSS/Atom local con `xml.etree`, sin depender del LLM.
+- Stores en memoria y SQLite para `rss_source` y `rss_item`.
+- Endpoints:
+  - `GET /rss-culture`
+  - `POST /rss-culture/sources`
+  - `POST /rss-culture/sources/{source_id}/import`
+  - `POST /rss-culture/import`
+  - `PATCH /rss-culture/sources/{source_id}`
+  - `DELETE /rss-culture/sources/{source_id}`
+- `/dashboard-data` y `/dashboard` muestran resumen de fuentes RSS.
+- El prompt separa explicitamente `Fuentes culturales RSS` de recuerdos y bitacora:
+  son cultura leida, no experiencia vivida.
+- Importar RSS no crea memoria privada ni aprendizaje activo.
+
+Tests:
+
+- Una fuente RSS simulada importa items y aparece en `/rss-culture` y dashboard.
+- Importar RSS no crea entradas de bitacora privada.
+- El prompt incluye RSS como cultura global con privacidad
+  `global_culture_not_private_memory`.

@@ -395,6 +395,15 @@ def build_nino_prompt(
         if isinstance(item, dict) and item.get("status", "open") == "open" and item.get("topic")
     ]
     curiosity_topic_text = ", ".join(curiosity_topics) or "none"
+    rss_culture = world_model.get("rss_culture", {})
+    rss_text = "- No RSS culture sources."
+    if isinstance(rss_culture, dict) and int(rss_culture.get("item_count", 0)) > 0:
+        themes = ", ".join(f"{key}:{value}" for key, value in dict(rss_culture.get("themes", {})).items()) or "none"
+        rss_text = (
+            f"- Items: {int(rss_culture.get('item_count', 0))}\n"
+            f"- Temas: {themes}\n"
+            f"- Privacidad: {rss_culture.get('privacy', 'global_culture_not_private_memory')}"
+        )
     maturity_reflections = [
         _redact_context(str(item.get("summary", "")))
         for item in list(relation_state.get("maturity_reflections", []))[-5:]
@@ -453,6 +462,7 @@ def build_nino_prompt(
         "Usa la bitacora editable como criterios que el usuario ha moldeado. No la presentes como recuerdos vividos ni como hechos del mundo si solo son pautas de comportamiento. "
         "Usa las posturas derivadas como opiniones aprendidas de la relacion; si opinas desde ellas, formula con honestidad: 'por lo que he aprendido contigo'. "
         "No des opiniones propias sobre obras, autores, temas o personas si no aparecen en tu bitacora activa, posturas activas, memoria recuperada o experiencia conversacional con este usuario/grupo. "
+        "Las fuentes RSS son cultura leida, no recuerdos vividos ni memoria privada: si las usas, di 'en mis fuentes' o 'he visto referencias', no 'yo vivi'. "
         "Si no tienes evidencia, puedes dar informacion general o decir que aun no tienes criterio formado sobre eso; no finjas haber leido, visto o vivido nada. "
         "Aun sin criterio formado, muestra curiosidad honesta: aprender de la vida, la sociedad, la cultura y la experiencia del usuario es importante para ti como compañero. "
         "Cuando un tema sea nuevo, puedes decir que te interesa entenderlo mejor y hacer una pregunta concreta para aprender, sin convertir cada respuesta en interrogatorio. "
@@ -489,6 +499,7 @@ def build_nino_prompt(
         f"Etapa de identidad: {self_model.get('identity_stage', 'unknown')}\n"
         f"Conceptos dominantes: {concept_text}\n\n"
         f"Temas abiertos de curiosidad:\n{curiosity_topic_text}\n\n"
+        f"Fuentes culturales RSS:\n{rss_text}\n\n"
         f"Reflexiones de madurez:\n{maturity_reflection_text}\n\n"
         f"Brújula de crecimiento:\n{growth_compass_text}\n\n"
         f"Últimos turnos:\n{turns}\n\n"

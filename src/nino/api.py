@@ -1982,6 +1982,7 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel"><h2>Dominio por temas</h2><pre id="themeMastery">{}</pre></div>
       <div class="panel"><h2>Prioridades</h2><pre id="learningPriorities">[]</pre></div>
       <div class="panel"><h2>Tensiones</h2><pre id="contradictionWatch">{}</pre></div>
+      <div class="panel"><h2>Fuentes RSS</h2><pre id="rssCulture">{}</pre></div>
       <div class="panel"><h2>Hilo activo</h2><pre id="thread">{}</pre></div>
       <div class="panel"><h2>Señales recientes</h2><pre id="signals">[]</pre></div>
       <div class="panel wide"><h2>Bitácora editable</h2>
@@ -2180,6 +2181,7 @@ DASHBOARD_HTML = """<!doctype html>
       print("themeMastery", out.curiosity_topics?.theme_mastery || dash.theme_mastery || {});
       print("learningPriorities", out.curiosity_topics?.learning_priorities || dash.learning_priorities || []);
       print("contradictionWatch", out.curiosity_topics?.contradiction_watch || dash.contradiction_watch || {});
+      print("rssCulture", out.rss_culture || {});
       print("thread", dash.active_conversation_thread || {});
       print("signals", dash.relationship_learning?.recent_signals || []);
       renderJournal(out.learning_journal?.entries || dash.learning_journal?.recent_entries || []);
@@ -2229,6 +2231,12 @@ API_ENDPOINTS = [
     "GET /app",
     "GET /dashboard",
     "GET /dashboard-data",
+    "GET /rss-culture",
+    "POST /rss-culture/sources",
+    "POST /rss-culture/import",
+    "POST /rss-culture/sources/{source_id}/import",
+    "PATCH /rss-culture/sources/{source_id}",
+    "DELETE /rss-culture/sources/{source_id}",
     "GET /openapi.json",
     "GET /autonomy/status",
     "POST /autonomy/run-once",
@@ -2276,6 +2284,12 @@ API_ENDPOINTS = [
     "PATCH /users/{user_id}/agents/{agent_id}/curiosity-topics/{topic_key}",
     "GET /users/{user_id}/agents/{agent_id}/learning-stances",
     "PATCH /users/{user_id}/agents/{agent_id}/learning-stances/{theme}",
+    "GET /rss-culture",
+    "POST /rss-culture/sources",
+    "POST /rss-culture/import",
+    "POST /rss-culture/sources/{source_id}/import",
+    "PATCH /rss-culture/sources/{source_id}",
+    "DELETE /rss-culture/sources/{source_id}",
     "POST /users/{user_id}/agents/{agent_id}/memory/search",
     "GET /users/{user_id}/agents/{agent_id}/profile",
     "GET /users/{user_id}/agents/{agent_id}/metrics",
@@ -2800,6 +2814,7 @@ class NinoService:
             "learning_review": self.learning_review(agent_id),
             "learning_digest": self.learning_digest(agent_id),
             "curiosity_topics": self.curiosity_topics(agent_id),
+            "rss_culture": self.rss_culture(payload={"limit": 20}),
             "temporal_events": self.list_temporal_events(agent_id),
             "proactive_inbox": self.proactive_inbox(agent_id),
             "llm": self.llm_status(agent_id),
@@ -3847,6 +3862,25 @@ class NinoService:
         state = self.runtime.load_or_init_state(agent_id)
         return {"world_model": _to_jsonable(state.world_model)}
 
+    def rss_culture(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        payload = payload or {}
+        return _to_jsonable(self.runtime.rss_culture(theme=str(payload.get("theme", "all")), limit=int(payload.get("limit", 20))))
+
+    def add_rss_source(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.add_rss_source(payload))
+
+    def update_rss_source(self, source_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.update_rss_source(source_id, payload))
+
+    def delete_rss_source(self, source_id: str) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.delete_rss_source(source_id))
+
+    def import_rss_source(self, source_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.import_rss_source(source_id, xml_text=payload.get("xml") if isinstance(payload.get("xml"), str) else None))
+
+    def import_all_rss_sources(self) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.import_all_rss_sources())
+
     def get_narrative(self, agent_id: str) -> dict[str, Any]:
         return {"narrative": _to_jsonable(self.runtime.build_narrative(agent_id))}
 
@@ -4378,6 +4412,18 @@ class NinoHttpApp:
             return "200 OK", self.service.session_status(payload)
         if method == "POST" and parts == ["session", "logout"]:
             return "200 OK", self.service.logout(payload)
+        if method == "GET" and parts == ["rss-culture"]:
+            return "200 OK", self.service.rss_culture(payload)
+        if method == "POST" and parts == ["rss-culture", "sources"]:
+            return "200 OK", self.service.add_rss_source(payload)
+        if method == "POST" and parts == ["rss-culture", "import"]:
+            return "200 OK", self.service.import_all_rss_sources()
+        if method == "POST" and len(parts) == 4 and parts[:2] == ["rss-culture", "sources"] and parts[3] == "import":
+            return "200 OK", self.service.import_rss_source(parts[2], payload)
+        if method == "PATCH" and len(parts) == 3 and parts[:2] == ["rss-culture", "sources"]:
+            return "200 OK", self.service.update_rss_source(parts[2], payload)
+        if method == "DELETE" and len(parts) == 3 and parts[:2] == ["rss-culture", "sources"]:
+            return "200 OK", self.service.delete_rss_source(parts[2])
         if method == "GET" and parts == ["dashboard-data"]:
             auth = self.service.authorize_user_scope(str(payload.get("user_id", "mindora")), payload)
             if not auth["ok"]:

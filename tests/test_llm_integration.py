@@ -68,6 +68,25 @@ def test_llm_prompt_uses_relevant_learning_journal_entries() -> None:
     assert "John Byrne" not in prompt
 
 
+def test_llm_prompt_separates_rss_culture_from_private_memory() -> None:
+    llm = FakeLLM("Respuesta con fuente cultural.")
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+    created = runtime.add_rss_source({"name": "Cultura Test", "url": "https://example.test/rss", "theme": "comics"})
+    runtime.import_rss_source(
+        created["source"]["source_id"],
+        xml_text="<rss><channel><item><title>Ensayo cultural</title><link>https://example.test/a</link><description>Referencia sobre comics.</description></item></channel></rss>",
+    )
+
+    runtime.tick("agent-llm", {"intent": "question", "text": "qué tienes sobre comics?"})
+    prompt = llm.prompts[-1]["user"]
+    system = llm.prompts[-1]["system"]
+
+    assert "Fuentes culturales RSS:" in prompt
+    assert "Items: 1" in prompt
+    assert "global_culture_not_private_memory" in prompt
+    assert "Las fuentes RSS son cultura leida, no recuerdos vividos" in system
+
+
 def test_tick_context_memory_candidates_include_origin_fields() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

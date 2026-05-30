@@ -1799,11 +1799,49 @@ def test_dashboard_data_returns_complete_local_bundle(tmp_path) -> None:
     assert "relation" in out
     assert "self_model" in out
     assert "world_model" in out
+    assert "rss_culture" in out
     assert "conversation" in out
     assert "memory_facts" in out
     assert "learning_journal" in out
     assert "temporal_events" in out
     assert "proactive_inbox" in out
+
+
+def test_rss_culture_sources_import_and_dashboard_are_not_private_memory(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    xml = """<?xml version="1.0"?>
+    <rss><channel>
+      <item>
+        <title>Nuevo ensayo sobre comics</title>
+        <link>https://example.test/comics</link>
+        <description>Una lectura cultural sobre autores y continuidad.</description>
+        <pubDate>Sat, 30 May 2026 10:00:00 +0000</pubDate>
+      </item>
+    </channel></rss>"""
+
+    created = _request(
+        app,
+        "POST",
+        "/rss-culture/sources",
+        {"name": "Cultura Test", "url": "https://example.test/rss", "theme": "comics", "trust": 0.7},
+    )
+    assert created["ok"] is True
+    source_id = created["source"]["source_id"]
+
+    imported = _request(app, "POST", f"/rss-culture/sources/{source_id}/import", {"xml": xml})
+    assert imported["ok"] is True
+    assert imported["added_count"] == 1
+
+    culture = _request(app, "GET", "/rss-culture?theme=comics")
+    assert culture["item_count"] == 1
+    assert culture["items"][0]["title"] == "Nuevo ensayo sobre comics"
+    assert culture["privacy"] == "global_culture_sources_not_private_memory"
+
+    dashboard = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
+    assert dashboard["rss_culture"]["item_count"] == 1
+
+    journal = _request(app, "GET", "/users/mindora/agents/nino/learning-journal")
+    assert journal["count"] == 0
 
 
 def test_dashboard_contains_learning_journal_delete_button(tmp_path) -> None:
