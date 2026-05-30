@@ -69,12 +69,15 @@ def _update(chat_id: int, text: str, update_id: int = 1) -> dict[str, object]:
     return {"update_id": update_id, "message": {"chat": {"id": chat_id}, "text": text, "date": 1_779_977_600}}
 
 
-def _group_update(chat_id: int, text: str, user_id: int = 10, update_id: int = 1) -> dict[str, object]:
+def _group_update(chat_id: int, text: str, user_id: int = 10, update_id: int = 1, username: str | None = None) -> dict[str, object]:
+    sender: dict[str, object] = {"id": user_id, "is_bot": False, "first_name": "Pablo"}
+    if username:
+        sender["username"] = username
     return {
         "update_id": update_id,
         "message": {
             "chat": {"id": chat_id, "type": "supergroup", "title": "Grupo"},
-            "from": {"id": user_id, "is_bot": False, "first_name": "Pablo"},
+            "from": sender,
             "text": text,
             "date": 1_779_977_600,
         },
@@ -393,6 +396,55 @@ def test_group_ambient_cooldown_shortens_when_group_is_active(tmp_path) -> None:
 
     assert len(backend.ticks) == 2
     assert len(telegram.sent) == 2
+
+
+def test_group_reply_waits_before_sending(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    slept: list[float] = []
+    bot = TelegramBotService(telegram, backend, links, group_reply_delay_seconds=2.5, sleeper=slept.append)
+
+    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", update_id=1))
+
+    assert slept == [2.5]
+    assert telegram.sent[-1]["chat_id"] == "-100"
+
+
+def test_group_reply_mentions_sender_after_quiet_gap_when_username_exists(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(
+        _group_update(-100, "mensaje normal", user_id=10, update_id=1),
+        now=datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc),
+    )
+    bot.handle_update(
+        _group_update(-100, "alguien sabe cual es la capital de españa", user_id=11, update_id=2, username="maria"),
+        now=datetime(2026, 5, 28, 16, 5, tzinfo=timezone.utc),
+    )
+
+    assert str(telegram.sent[-1]["text"]).startswith("@maria ")
+
+
+def test_group_reply_does_not_mention_sender_during_active_flow(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(
+        _group_update(-100, "mensaje normal", user_id=10, update_id=1),
+        now=datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc),
+    )
+    bot.handle_update(
+        _group_update(-100, "alguien sabe cual es la capital de españa", user_id=11, update_id=2, username="maria"),
+        now=datetime(2026, 5, 28, 16, 1, tzinfo=timezone.utc),
+    )
+
+    assert not str(telegram.sent[-1]["text"]).startswith("@maria ")
 
 
 def test_group_sensitive_ambient_question_is_observed_without_reply(tmp_path) -> None:

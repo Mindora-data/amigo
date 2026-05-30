@@ -20,6 +20,7 @@ AGENT_ID = "nino"
 GROUP_AMBIENT_COOLDOWN_SECONDS = 600
 GROUP_AMBIENT_COOLDOWN_FAST_SECONDS = 180
 GROUP_AMBIENT_COOLDOWN_SLOW_SECONDS = 900
+GROUP_MENTION_AFTER_SECONDS = 120
 GROUP_AMBIENT_CUES = (
     "?",
     "¿",
@@ -416,6 +417,8 @@ class TelegramBotService:
         poll_timeout: int = 25,
         bot_username: str | None = None,
         local_tz: ZoneInfo | None = None,
+        group_reply_delay_seconds: float = 0.0,
+        sleeper: Any = time.sleep,
     ) -> None:
         self.telegram = telegram
         self.backend = backend
@@ -423,8 +426,11 @@ class TelegramBotService:
         self.poll_timeout = poll_timeout
         self.bot_username = bot_username.lower().lstrip("@") if bot_username else None
         self.local_tz = local_tz or telegram_local_timezone()
+        self.group_reply_delay_seconds = max(0.0, float(group_reply_delay_seconds))
+        self.sleeper = sleeper
         self.offset: int | None = None
         self._group_last_ambient_reply: dict[str, datetime] = {}
+        self._group_last_message_at: dict[str, datetime] = {}
         self._group_messages_since_ambient_reply: dict[str, int] = {}
         self._group_social_scores: dict[str, int] = {}
 
@@ -494,9 +500,33 @@ class TelegramBotService:
             return text
         return f"Contexto público del autor: {context}\nMensaje del grupo: {text}"
 
-    def _record_group_message(self, chat_id: int | str) -> None:
+    def _record_group_message(self, chat_id: int | str, now: datetime) -> None:
         key = str(chat_id)
         self._group_messages_since_ambient_reply[key] = self._group_messages_since_ambient_reply.get(key, 0) + 1
+        self._group_last_message_at[key] = now
+
+    def _sender_mention(self, message: dict[str, Any]) -> str:
+        sender = message.get("from") if isinstance(message.get("from"), dict) else {}
+        username = str(sender.get("username") or "").strip().lstrip("@")
+        if username:
+            return f"@{username}"
+        return ""
+
+    def _should_mention_sender(self, chat_id: int | str, now: datetime) -> bool:
+        last = self._group_last_message_at.get(str(chat_id))
+        return last is not None and (now - last).total_seconds() >= GROUP_MENTION_AFTER_SECONDS
+
+    def _format_group_reply(self, message: dict[str, Any], reply: str, should_mention: bool) -> str:
+        clean = reply.strip()
+        mention = self._sender_mention(message) if should_mention else ""
+        if mention and not clean.startswith(mention):
+            return f"{mention} {clean}"
+        return clean
+
+    def _send_group_reply(self, chat_id: int | str, text: str) -> None:
+        if self.group_reply_delay_seconds > 0:
+            self.sleeper(self.group_reply_delay_seconds)
+        self.telegram.send_message(chat_id, text)
 
     def _ambient_cooldown_seconds(self, chat_id: int | str) -> int:
         count = self._group_messages_since_ambient_reply.get(str(chat_id), 0)
@@ -594,11 +624,13 @@ class TelegramBotService:
     def _handle_group_message(self, message: dict[str, Any], chat_id: int | str, text: str, now: datetime) -> None:
         directed = self._is_directed_at_bot(message, text)
         clean_text = self._clean_group_text(text)
-        self._record_group_message(chat_id)
         if not clean_text:
             if directed:
-                self.telegram.send_message(chat_id, "Estoy aquí. Escríbeme la pregunta en el mismo mensaje o respóndeme directamente.")
+                self._send_group_reply(chat_id, "Estoy aquí. Escríbeme la pregunta en el mismo mensaje o respóndeme directamente.")
+            self._record_group_message(chat_id, now)
             return
+        reply_should_mention = self._should_mention_sender(chat_id, now)
+        self._record_group_message(chat_id, now)
         target_user_id = self._group_user_id(chat_id)
         context_text = self._with_public_sender_context(message, clean_text)
         reaction = self._classify_group_reaction(chat_id, message, clean_text, now)
@@ -631,7 +663,8 @@ class TelegramBotService:
             return
         reply = self.backend.tick(target_user_id, context_text, now)
         if reply:
-            self.telegram.send_message(chat_id, reply)
+            text_to_send = self._format_group_reply(message, reply, reply_should_mention)
+            self._send_group_reply(chat_id, text_to_send)
             self.links.record_social_decision(
                 chat_id=chat_id,
                 message_id=message.get("message_id"),
@@ -680,7 +713,13 @@ class TelegramBotService:
 def build_service(db_path: Path, base_url: str) -> TelegramBotService:
     token = telegram_token_from_env()
     password = os.environ.get("NINO_TELEGRAM_BACKEND_PASSWORD", "").strip()
-    return TelegramBotService(HTTPTelegramAPI(token), BackendClient(base_url, password=password), TelegramLinkStore(db_path))
+    delay = float(os.environ.get("NINO_TELEGRAM_GROUP_REPLY_DELAY_SECONDS", "2.5"))
+    return TelegramBotService(
+        HTTPTelegramAPI(token),
+        BackendClient(base_url, password=password),
+        TelegramLinkStore(db_path),
+        group_reply_delay_seconds=delay,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
