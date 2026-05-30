@@ -277,6 +277,13 @@ def test_http_api_serves_minimal_user_app(tmp_path) -> None:
     assert b"loginView" in body
     assert b"chatView" in body
     assert b"voiceButton" in body
+    assert b"togglePassword" in body
+    assert b"presence" in body
+    assert b"message-time" in body
+    assert b"resizeComposer" in body
+    assert b"showTyping" in body
+    assert b"event.key === \"Enter\" && !event.shiftKey" in body
+    assert "Privado y local".encode("utf-8") in body
     assert b"/session/login" in body
     assert b"/session/status" in body
     assert b"/session/logout" in body

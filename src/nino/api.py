@@ -1398,10 +1398,10 @@ USER_HTML = """<!doctype html>
       color-scheme: light;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: #182126;
-      background: #f4f6f2;
+      background: #f7f8f5;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: #f4f6f2; overflow: hidden; }
+    body { margin: 0; min-height: 100vh; background: #f7f8f5; overflow: hidden; }
     main {
       height: 100vh;
       height: 100dvh;
@@ -1418,8 +1418,13 @@ USER_HTML = """<!doctype html>
       justify-content: space-between;
       gap: 12px;
       min-height: 44px;
+      border-bottom: 1px solid #e0e6e0;
+      padding-bottom: 10px;
     }
+    .brand { display: grid; gap: 2px; }
     h1 { margin: 0; font-size: 22px; letter-spacing: 0; font-weight: 650; }
+    .presence { display: flex; align-items: center; gap: 7px; color: #68766f; font-size: 12px; min-height: 18px; }
+    .presence::before { content: ""; width: 7px; height: 7px; border-radius: 999px; background: #2d7a73; display: inline-block; }
     input, textarea, button {
       font: inherit;
       border: 1px solid #bac6c0;
@@ -1452,6 +1457,8 @@ USER_HTML = """<!doctype html>
       margin: 0 auto;
     }
     .login[hidden] { display: none; }
+    .password-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+    .login-note { color: #68766f; font-size: 13px; line-height: 1.4; margin: 2px 0 4px; }
     .chat {
       display: none;
       min-height: 0;
@@ -1467,7 +1474,7 @@ USER_HTML = """<!doctype html>
       scrollbar-width: thin;
     }
     .message {
-      max-width: 78%;
+      max-width: min(78%, 560px);
       line-height: 1.45;
       white-space: pre-wrap;
       padding: 10px 12px;
@@ -1475,6 +1482,7 @@ USER_HTML = """<!doctype html>
       border-radius: 8px;
       background: #fff;
       overflow-wrap: anywhere;
+      box-shadow: 0 1px 0 rgba(30, 42, 36, 0.04);
     }
     .message.user {
       align-self: flex-end;
@@ -1483,31 +1491,46 @@ USER_HTML = """<!doctype html>
       color: #fff;
     }
     .message.nino { align-self: flex-start; }
+    .message.typing { color: #68766f; font-style: italic; }
+    .message-time {
+      display: block;
+      margin-top: 5px;
+      font-size: 11px;
+      opacity: 0.62;
+    }
     .composer {
       display: grid;
       grid-template-columns: 48px minmax(0, 1fr) 86px;
       gap: 8px;
       align-items: stretch;
     }
-    .voiceActive { border-color: #9b4a1b; color: #9b4a1b; }
+    .voiceActive { border-color: #9b4a1b; color: #9b4a1b; background: #fff8f2; }
     .status { min-height: 20px; font-size: 12px; color: #68766f; }
     @media (max-width: 560px) {
       main { padding: 12px; }
-      .composer { grid-template-columns: 44px minmax(0, 1fr) 72px; }
+      .composer { grid-template-columns: 44px minmax(0, 1fr) 70px; }
       .message { max-width: 92%; }
       button { padding-left: 10px; padding-right: 10px; }
+      .password-row { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <main id="minimalUserApp">
     <header>
-      <h1>amigo</h1>
+      <div class="brand">
+        <h1>amigo</h1>
+        <div id="presence" class="presence">listo</div>
+      </div>
       <button id="logoutButton" class="secondary" hidden>Salir</button>
     </header>
     <form id="loginView" class="login">
       <input id="userId" autocomplete="username" placeholder="Usuario" aria-label="Usuario" required>
-      <input id="password" autocomplete="current-password" placeholder="Contraseña" aria-label="Contraseña" type="password">
+      <div class="password-row">
+        <input id="password" autocomplete="current-password" placeholder="Contraseña" aria-label="Contraseña" type="password">
+        <button id="togglePassword" class="secondary" type="button">Ver</button>
+      </div>
+      <p class="login-note">Privado y local. Sin registro abierto.</p>
       <button id="loginButton" type="submit">Entrar</button>
     </form>
     <section id="chatView" class="chat" aria-live="polite">
@@ -1540,6 +1563,7 @@ USER_HTML = """<!doctype html>
     let onboardingStep = 0;
     const deliveredInbox = new Set();
     const deliveredInboxText = new Set();
+    let typingNode = null;
 
     function currentUserId() {
       return ($("userId").value || localStorage.getItem(STORAGE_USER) || "usuario").trim();
@@ -1580,12 +1604,46 @@ USER_HTML = """<!doctype html>
     function setStatus(text) {
       $("status").textContent = text || "";
     }
-    function addMessage(role, text) {
+    function setPresence(text) {
+      $("presence").textContent = text || "listo";
+    }
+    function messageTime(value) {
+      const date = value ? new Date(value) : new Date();
+      if (Number.isNaN(date.getTime())) return "";
+      return date.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+    }
+    function removeTyping() {
+      if (typingNode) typingNode.remove();
+      typingNode = null;
+    }
+    function showTyping() {
+      removeTyping();
+      typingNode = document.createElement("div");
+      typingNode.className = "message nino typing";
+      typingNode.textContent = "amigo está pensando";
+      $("messages").appendChild(typingNode);
+      $("messages").scrollTop = $("messages").scrollHeight;
+      setPresence("pensando");
+    }
+    function addMessage(role, text, at = null) {
+      removeTyping();
       const row = document.createElement("div");
       row.className = `message ${role}`;
-      row.textContent = text;
+      const body = document.createElement("span");
+      body.textContent = text;
+      row.appendChild(body);
+      const time = document.createElement("span");
+      time.className = "message-time";
+      time.textContent = messageTime(at);
+      row.appendChild(time);
       $("messages").appendChild(row);
       $("messages").scrollTop = $("messages").scrollHeight;
+    }
+    function resizeComposer() {
+      const box = $("text");
+      box.style.height = "auto";
+      box.style.height = `${Math.min(box.scrollHeight, 150)}px`;
+      $("sendButton").disabled = !box.value.trim();
     }
     function speak(text) {
       if (!voiceReply || !("speechSynthesis" in window) || !text) return;
@@ -1602,9 +1660,11 @@ USER_HTML = """<!doctype html>
       try {
         localStorage.setItem(STORAGE_USER, userId);
         await api("/session/login", {method: "POST", body: JSON.stringify({user_id: userId, agent_id: AGENT_ID, password: $("password").value})});
+        setPresence("listo");
         await enterChat();
       } catch (err) {
         setStatus(err.message);
+        setPresence("sin sesión");
         $("password").select();
       } finally {
         $("loginButton").disabled = false;
@@ -1639,7 +1699,7 @@ USER_HTML = """<!doctype html>
       $("messages").replaceChildren();
       (out.turns || out.conversation || []).forEach((entry) => {
         const role = entry.role === "user" ? "user" : "nino";
-        addMessage(role, entry.text || entry.content || "");
+        addMessage(role, entry.text || entry.content || "", entry.timestamp || entry.created_at || entry.at);
       });
       return (out.turns || out.conversation || []).length;
     }
@@ -1689,9 +1749,11 @@ USER_HTML = """<!doctype html>
       const text = $("text").value.trim();
       if (!text) return;
       $("text").value = "";
+      resizeComposer();
       addMessage("user", text);
       $("sendButton").disabled = true;
-      setStatus("amigo está pensando");
+      setStatus("");
+      showTyping();
       try {
         if (onboardingActive) {
           await sendOnboardingAnswer(text);
@@ -1713,9 +1775,13 @@ USER_HTML = """<!doctype html>
         }
         setStatus("");
       } catch (err) {
+        removeTyping();
         setStatus(err.message);
       } finally {
+        removeTyping();
+        setPresence("listo");
         $("sendButton").disabled = false;
+        resizeComposer();
         $("text").focus();
       }
     }
@@ -1731,10 +1797,14 @@ USER_HTML = """<!doctype html>
       recognition.onstart = () => {
         listening = true;
         $("voiceButton").classList.add("voiceActive");
+        $("voiceButton").textContent = "Oyendo";
+        setPresence("escuchando");
       };
       recognition.onend = () => {
         listening = false;
         $("voiceButton").classList.remove("voiceActive");
+        $("voiceButton").textContent = "Voz";
+        setPresence("listo");
       };
       recognition.onresult = (event) => {
         const transcript = Array.from(event.results).map((result) => result[0].transcript).join(" ");
@@ -1798,7 +1868,15 @@ USER_HTML = """<!doctype html>
       $("logoutButton").hidden = true;
       $("messages").replaceChildren();
       $("password").value = "";
+      setPresence("sin sesión");
+      setStatus("");
       $("userId").focus();
+    };
+    $("togglePassword").onclick = () => {
+      const visible = $("password").type === "text";
+      $("password").type = visible ? "password" : "text";
+      $("togglePassword").textContent = visible ? "Ver" : "Ocultar";
+      $("password").focus();
     };
     $("voiceButton").onclick = () => {
       if (!recognition) return;
@@ -1806,6 +1884,14 @@ USER_HTML = """<!doctype html>
       if (listening) recognition.stop();
       else recognition.start();
     };
+    $("text").addEventListener("input", resizeComposer);
+    $("text").addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        $("composer").requestSubmit();
+      }
+    });
+    resizeComposer();
     setupVoice();
     resumeSession();
   </script>

@@ -1559,3 +1559,27 @@ Hechos:
 Tests:
 
 - Los controles de dashboard existen y la API de revision/fusion pasa pruebas.
+
+## Sprint 58 - UI final minimalista de usuario
+
+Estado: hecho inicial.
+
+Objetivo: que `/user` sea una experiencia limpia de login y conversacion, sin trazas
+internas ni paneles operativos.
+
+Hechos:
+
+- Login centrado con contraseña visible/oculta y nota breve de privacidad local.
+- Cabecera minimalista con presencia discreta: listo, pensando, escuchando o sin
+  sesion.
+- Chat con burbujas mas legibles, hora por mensaje, indicador de escritura y scroll
+  estable.
+- Composer mas comodo: auto-resize, enviar con Enter, salto con Shift+Enter, boton
+  deshabilitado si no hay texto.
+- Voz conserva el flujo anterior y muestra estado temporal sin ocupar la conversacion.
+
+Tests:
+
+- `/user` y `/chat` sirven el mismo HTML minimalista.
+- La pagina conserva login por sesion/cookie, onboarding, proactividad e inbox.
+- La pagina no expone rutas internas de operaciones ni tokens de sesion.
