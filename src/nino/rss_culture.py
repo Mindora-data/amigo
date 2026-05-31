@@ -33,7 +33,21 @@ class RssItem:
     fetched_at: datetime
 
 
-THEMES = {"cultura", "ciencia", "tecnologia", "filosofia", "libros", "cine", "comics", "noticias", "otros"}
+THEMES = {
+    "cultura",
+    "ciencia",
+    "tecnologia",
+    "filosofia",
+    "libros",
+    "cine",
+    "comics",
+    "noticias",
+    "mercados",
+    "inversion",
+    "etf",
+    "cripto",
+    "otros",
+}
 
 
 def _clean_text(value: str) -> str:

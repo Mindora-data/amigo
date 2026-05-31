@@ -1845,6 +1845,36 @@ def test_rss_culture_sources_import_and_dashboard_are_not_private_memory(tmp_pat
     assert journal["count"] == 0
 
 
+def test_rss_financial_themes_are_kept_separate_from_generic_other(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    xml = """<?xml version="1.0"?>
+    <rss><channel>
+      <item>
+        <title>ETF flows and crypto market update</title>
+        <link>https://example.test/markets</link>
+        <description>Market update about ETFs and digital assets.</description>
+      </item>
+    </channel></rss>"""
+
+    created = _request(
+        app,
+        "POST",
+        "/rss-culture/sources",
+        {"name": "ETF Test", "url": "https://example.test/etf-feed", "theme": "etf", "trust": 0.7},
+    )
+    assert created["ok"] is True
+    assert created["source"]["theme"] == "etf"
+
+    imported = _request(app, "POST", f"/rss-culture/sources/{created['source']['source_id']}/import", {"xml": xml})
+    assert imported["added_count"] == 1
+
+    etf = _request(app, "GET", "/rss-culture?theme=etf")
+    other = _request(app, "GET", "/rss-culture?theme=otros")
+    assert etf["themes"]["etf"] == 1
+    assert etf["items"][0]["theme"] == "etf"
+    assert other["items"] == []
+
+
 def test_dashboard_contains_learning_journal_delete_button(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

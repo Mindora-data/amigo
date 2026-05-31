@@ -81,10 +81,10 @@ def test_llm_prompt_separates_rss_culture_from_private_memory() -> None:
     prompt = llm.prompts[-1]["user"]
     system = llm.prompts[-1]["system"]
 
-    assert "Fuentes culturales RSS:" in prompt
+    assert "Fuentes RSS de conocimiento:" in prompt
     assert "Items: 1" in prompt
     assert "global_culture_not_private_memory" in prompt
-    assert "Las fuentes RSS son cultura leida, no recuerdos vividos" in system
+    assert "Las fuentes RSS son conocimiento leido, no recuerdos vividos" in system
 
 
 def test_tick_context_memory_candidates_include_origin_fields() -> None:
