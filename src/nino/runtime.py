@@ -1938,6 +1938,38 @@ def _maturity_profile(
     }
 
 
+def _dashboard_maturity(
+    *,
+    cognitive_time: dict[str, Any],
+    maturity_profile: dict[str, Any],
+    episode_count: int,
+    interaction_count: int,
+) -> dict[str, Any]:
+    raw_maturity = _clamp01(float(cognitive_time.get("maturity", 0.0)))
+    raw_age_ticks = float(cognitive_time.get("age_ticks", 0.0))
+    raw_experience_mass = float(cognitive_time.get("experience_mass", 0.0))
+    evidence_interactions = max(int(interaction_count), int(episode_count))
+    recovered_from_episodes = round(_clamp01(min(int(episode_count), 120) / 120.0), 6)
+    profile_score = _clamp01(float(maturity_profile.get("score", 0.0)))
+    visible_maturity = max(raw_maturity, recovered_from_episodes, profile_score)
+    source = "cognitive_time"
+    if visible_maturity == recovered_from_episodes and recovered_from_episodes > raw_maturity:
+        source = "persisted_episode_evidence"
+    elif visible_maturity == profile_score and profile_score > raw_maturity:
+        source = "relationship_profile"
+    return {
+        "age_ticks": max(raw_age_ticks, float(episode_count)),
+        "experience_mass": max(raw_experience_mass, round(recovered_from_episodes * 80.0, 6)),
+        "maturity": round(visible_maturity, 6),
+        "interaction_count": evidence_interactions,
+        "raw_cognitive_maturity": raw_maturity,
+        "raw_age_ticks": raw_age_ticks,
+        "raw_interaction_count": int(interaction_count),
+        "recovered_from_episode_count": int(episode_count),
+        "source": source,
+    }
+
+
 def _review_key(value: str) -> str:
     value = value.lower()
     value = value.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ñ", "n")
@@ -3027,12 +3059,12 @@ class NinoRuntime:
                 "raw_conversation_included": False,
                 "private_scope": "telegram_group" if agent_id.startswith("telegram-group-") else "user_private",
             },
-            "maturity": {
-                "age_ticks": state.cognitive_time.get("age_ticks", 0.0),
-                "experience_mass": state.cognitive_time.get("experience_mass", 0.0),
-                "maturity": state.cognitive_time.get("maturity", 0.0),
-                "interaction_count": int(relation.get("interaction_count", 0)),
-            },
+            "maturity": _dashboard_maturity(
+                cognitive_time=state.cognitive_time,
+                maturity_profile=maturity_profile,
+                episode_count=int(metrics["episode_count"]),
+                interaction_count=int(relation.get("interaction_count", 0)),
+            ),
             "maturity_profile": maturity_profile,
             "maturity_history": list(relation.get("maturity_history", []))[-20:],
             "maturity_reflections": list(relation.get("maturity_reflections", []))[-10:],

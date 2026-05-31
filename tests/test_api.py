@@ -4,6 +4,7 @@ from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import sqlite3
 from urllib.parse import urlsplit
 
 import pytest
@@ -2148,6 +2149,32 @@ def test_relationship_maturity_profile_tracks_learning_evidence(tmp_path) -> Non
     assert "usa aprendizajes aprobados" in profile["strengths"]
     assert profile["inputs"]["active_learning_count"] == 1
     assert profile["inputs"]["active_stance_count"] >= 1
+
+
+def test_dashboard_maturity_recovers_from_persisted_episodes_when_state_counter_resets(tmp_path) -> None:
+    db_path = tmp_path / "nino.db"
+    app = create_app(db_path)
+    for idx in range(12):
+        _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": f"mensaje {idx}"})
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE agent_states
+            SET cognitive_time_json = ?, relation_state_json = json_set(relation_state_json, '$.interaction_count', 1)
+            WHERE agent_id = ?
+            """,
+            (json.dumps({"age_ticks": 1.0, "experience_mass": 0.56, "maturity": 0.007}), "user::mindora::agent::nino"),
+        )
+
+    dashboard = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
+    maturity = dashboard["relationship_dashboard"]["dashboard"]["maturity"]
+
+    assert maturity["raw_cognitive_maturity"] == 0.007
+    assert maturity["recovered_from_episode_count"] == 12
+    assert maturity["interaction_count"] == 12
+    assert maturity["maturity"] > maturity["raw_cognitive_maturity"]
+    assert maturity["source"] == "persisted_episode_evidence"
 
 
 def test_curiosity_topics_are_tracked_and_visible_in_dashboard(tmp_path) -> None:
