@@ -1672,3 +1672,91 @@ Tests:
 - Importar RSS no crea entradas de bitacora privada.
 - El prompt incluye RSS como cultura global con privacidad
   `global_culture_not_private_memory`.
+
+## Sprint 63 - RSS financiero con temas cerrados
+
+Estado: hecho inicial.
+
+Objetivo: que las noticias de mercados, inversion, ETF y cripto no caigan en `otros`
+ni se mezclen con cultura privada.
+
+Hechos:
+
+- `rss_culture` acepta temas `mercados`, `inversion`, `etf` y `cripto`.
+- Las fuentes financieras siguen siendo conocimiento leido, no memoria vivida.
+- El dashboard puede filtrar RSS por esos temas.
+
+Tests:
+
+- Una fuente `etf` importa items y no aparece como `otros`.
+
+## Sprint 64 - Seguridad financiera en el prompt
+
+Estado: hecho inicial.
+
+Objetivo: permitir contexto financiero sin convertir amigo en asesor de inversion.
+
+Hechos:
+
+- El prompt prohíbe recomendaciones personalizadas de compra/venta.
+- El prompt prohíbe promesas de rentabilidad.
+- Amigo debe ofrecer contexto, riesgos y contraste cuando use fuentes de mercados,
+  inversion, ETF o cripto.
+
+Tests:
+
+- El prompt del LLM incluye la regla contra recomendaciones financieras
+  personalizadas.
+
+## Sprint 65 - Importacion RSS automatica
+
+Estado: hecho inicial.
+
+Objetivo: que las fuentes RSS se actualicen solas dentro del scheduler persistente.
+
+Hechos:
+
+- `NinoScheduler` puede importar RSS en intervalo global.
+- La autonomia expone si corrio importacion RSS y su resultado.
+- El intervalo por defecto queda en 6 horas.
+
+Tests:
+
+- El scheduler importa RSS cuando toca y no repite antes del intervalo.
+
+## Sprint 66 - Salud y trazabilidad de fuentes RSS
+
+Estado: hecho inicial.
+
+Objetivo: saber si una fuente RSS funciona, cuando se importo y cuantos items aporto.
+
+Hechos:
+
+- `rss_source` guarda `last_import_at`, `last_import_ok`, `last_import_error` y
+  `last_added_count`.
+- Los fallos de una fuente no tiran el runtime; quedan registrados en la propia
+  fuente.
+
+Tests:
+
+- Una importacion correcta marca la fuente como OK.
+- Un fallo simulado registra `TimeoutError` sin romper la API.
+
+## Sprint 67 - Semillas financieras y control en dashboard
+
+Estado: hecho inicial.
+
+Objetivo: reinstalar rapidamente fuentes financieras buenas y manejarlas desde
+dashboard.
+
+Hechos:
+
+- Nueva semilla financiera: Invezz mercados, macro, analisis, alternativos, cripto,
+  CoinDesk y ETF Trends.
+- Nuevo endpoint `POST /rss-culture/seed-financial`.
+- Dashboard con filtro RSS por tema, boton de importar y boton de añadir finanzas.
+
+Tests:
+
+- El endpoint de semilla crea fuentes con temas cerrados `mercados`, `inversion`,
+  `etf` y `cripto`.

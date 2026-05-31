@@ -54,7 +54,9 @@ class BackgroundAutonomy:
                     "agent_id": result.agent_id,
                     "ran_dream": result.ran_dream,
                     "ran_proactivity": result.ran_proactivity,
+                    "ran_rss_import": result.ran_rss_import,
                     "proactive_action": result.proactive_action,
+                    "rss_import": result.rss_import,
                     "reason_trace": result.reason_trace,
                 }
             )

@@ -19,6 +19,10 @@ class RssSource:
     trust: float
     created_at: datetime
     updated_at: datetime
+    last_import_at: datetime | None = None
+    last_import_ok: bool | None = None
+    last_import_error: str | None = None
+    last_added_count: int = 0
 
 
 @dataclass(slots=True)
@@ -48,6 +52,52 @@ THEMES = {
     "cripto",
     "otros",
 }
+
+
+DEFAULT_FINANCIAL_RSS_SOURCES = [
+    {
+        "name": "Invezz Stocks & Shares",
+        "url": "https://invezz.com/news/stock-market/feed/",
+        "theme": "mercados",
+        "trust": 0.70,
+    },
+    {
+        "name": "Invezz Economic News",
+        "url": "https://invezz.com/news/economic/feed/",
+        "theme": "mercados",
+        "trust": 0.70,
+    },
+    {
+        "name": "Invezz Market Analysis",
+        "url": "https://invezz.com/news/trading-ideas/feed/",
+        "theme": "inversion",
+        "trust": 0.70,
+    },
+    {
+        "name": "Invezz Alternative Investment",
+        "url": "https://invezz.com/news/alternative-investment/feed/",
+        "theme": "inversion",
+        "trust": 0.68,
+    },
+    {
+        "name": "CoinDesk",
+        "url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "theme": "cripto",
+        "trust": 0.78,
+    },
+    {
+        "name": "Invezz Cryptocurrency",
+        "url": "https://invezz.com/news/cryptocurrency/feed/",
+        "theme": "cripto",
+        "trust": 0.70,
+    },
+    {
+        "name": "ETF Trends",
+        "url": "https://www.etftrends.com/feed/",
+        "theme": "etf",
+        "trust": 0.66,
+    },
+]
 
 
 def _clean_text(value: str) -> str:

@@ -87,6 +87,22 @@ def test_llm_prompt_separates_rss_culture_from_private_memory() -> None:
     assert "Las fuentes RSS son conocimiento leido, no recuerdos vividos" in system
 
 
+def test_llm_prompt_warns_against_personalized_financial_advice() -> None:
+    llm = FakeLLM("Contexto, no recomendacion.")
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+    created = runtime.add_rss_source({"name": "Mercados Test", "url": "https://example.test/rss", "theme": "mercados"})
+    runtime.import_rss_source(
+        created["source"]["source_id"],
+        xml_text="<rss><channel><item><title>Mercados suben</title><link>https://example.test/m</link><description>ETF y cripto con volatilidad.</description></item></channel></rss>",
+    )
+
+    runtime.tick("agent-llm", {"intent": "question", "text": "deberia comprar este ETF?"})
+    system = llm.prompts[-1]["system"]
+
+    assert "no des recomendaciones personalizadas de compra/venta" in system
+    assert "promesas de rentabilidad" in system
+
+
 def test_tick_context_memory_candidates_include_origin_fields() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

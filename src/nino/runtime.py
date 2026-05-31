@@ -45,7 +45,15 @@ from .proactivity import (
     record_proactive_send,
     record_proactive_source,
 )
-from .rss_culture import RssItem, RssSource, fetch_rss_xml, normalize_theme, parse_rss_items, source_id_from_name
+from .rss_culture import (
+    DEFAULT_FINANCIAL_RSS_SOURCES,
+    RssItem,
+    RssSource,
+    fetch_rss_xml,
+    normalize_theme,
+    parse_rss_items,
+    source_id_from_name,
+)
 
 
 def _nino_context_summary(
@@ -2881,12 +2889,22 @@ class NinoRuntime:
             xml = xml_text if xml_text is not None else fetch_rss_xml(source.url)
             parsed = parse_rss_items(xml, source_id=source.source_id, theme=source.theme, fetched_at=now)
         except Exception as exc:
-            return {"ok": False, "error": "rss_import_failed", "detail": exc.__class__.__name__}
+            source.last_import_at = now
+            source.last_import_ok = False
+            source.last_import_error = exc.__class__.__name__
+            source.last_added_count = 0
+            source.updated_at = now
+            self.rss_culture_store.upsert_source(source)
+            return {"ok": False, "error": "rss_import_failed", "source_id": source_id, "detail": exc.__class__.__name__}
         added = 0
         for item in parsed:
             if self.rss_culture_store.upsert_item(item):
                 added += 1
         source.updated_at = now
+        source.last_import_at = now
+        source.last_import_ok = True
+        source.last_import_error = None
+        source.last_added_count = added
         self.rss_culture_store.upsert_source(source)
         self._refresh_rss_world_model(now)
         return {"ok": True, "source_id": source_id, "parsed_count": len(parsed), "added_count": added}
@@ -2899,6 +2917,15 @@ class NinoRuntime:
             "results": results,
             "added_count": sum(int(result.get("added_count", 0)) for result in results),
         }
+
+    def seed_financial_rss_sources(self, now: datetime | None = None) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        sources: list[dict[str, Any]] = []
+        for payload in DEFAULT_FINANCIAL_RSS_SOURCES:
+            out = self.add_rss_source(payload, now=now)
+            if out.get("ok") and isinstance(out.get("source"), dict):
+                sources.append(dict(out["source"]))
+        return {"ok": True, "added_count": len(sources), "sources": sources}
 
     def _refresh_rss_world_model(self, now: datetime) -> None:
         for agent_id in self.state_store.list_agent_ids():

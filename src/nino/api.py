@@ -1982,7 +1982,14 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel"><h2>Dominio por temas</h2><pre id="themeMastery">{}</pre></div>
       <div class="panel"><h2>Prioridades</h2><pre id="learningPriorities">[]</pre></div>
       <div class="panel"><h2>Tensiones</h2><pre id="contradictionWatch">{}</pre></div>
-      <div class="panel"><h2>Fuentes RSS</h2><pre id="rssCulture">{}</pre></div>
+      <div class="panel"><h2>Fuentes RSS</h2>
+        <div class="journal-row">
+          <select id="rssTheme"><option value="all">todos</option><option value="mercados">mercados</option><option value="inversion">inversion</option><option value="etf">etf</option><option value="cripto">cripto</option><option value="cultura">cultura</option><option value="ciencia">ciencia</option><option value="tecnologia">tecnologia</option></select>
+          <button id="rssImport" class="secondary">Importar</button>
+          <button id="rssSeedFinancial" class="secondary">Añadir finanzas</button>
+        </div>
+        <pre id="rssCulture">{}</pre>
+      </div>
       <div class="panel"><h2>Hilo activo</h2><pre id="thread">{}</pre></div>
       <div class="panel"><h2>Señales recientes</h2><pre id="signals">[]</pre></div>
       <div class="panel wide"><h2>Bitácora editable</h2>
@@ -2193,7 +2200,35 @@ DASHBOARD_HTML = """<!doctype html>
       print("raw", out);
       $("status").textContent = `Actualizado: ${new Date().toLocaleTimeString()}`;
     }
+    async function refreshRssPanel() {
+      const theme = $("rssTheme").value || "all";
+      const out = await requestJson(`/rss-culture?theme=${encodeURIComponent(theme)}&limit=20`);
+      print("rssCulture", out);
+      return out;
+    }
     $("refresh").onclick = () => loadDashboard().catch((err) => $("status").textContent = `Error: ${err.message}`);
+    $("rssTheme").onchange = () => refreshRssPanel().catch((err) => $("status").textContent = `Error RSS: ${err.message}`);
+    $("rssImport").onclick = async () => {
+      $("rssImport").disabled = true;
+      try {
+        await requestJson("/rss-culture/import", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+        await loadDashboard();
+        await refreshRssPanel();
+      } catch (err) {
+        $("status").textContent = `Error RSS: ${err.message}`;
+      } finally {
+        $("rssImport").disabled = false;
+      }
+    };
+    $("rssSeedFinancial").onclick = async () => {
+      try {
+        await requestJson("/rss-culture/seed-financial", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+        await loadDashboard();
+        await refreshRssPanel();
+      } catch (err) {
+        $("status").textContent = `Error RSS: ${err.message}`;
+      }
+    };
     $("journalSearch").oninput = () => { activeJournalQuery = $("journalSearch").value; renderJournal(lastJournal); };
     $("journalSource").onchange = () => { activeJournalSource = $("journalSource").value; renderJournal(lastJournal); };
     $("journalClearFilters").onclick = () => {
@@ -2234,6 +2269,7 @@ API_ENDPOINTS = [
     "GET /rss-culture",
     "POST /rss-culture/sources",
     "POST /rss-culture/import",
+    "POST /rss-culture/seed-financial",
     "POST /rss-culture/sources/{source_id}/import",
     "PATCH /rss-culture/sources/{source_id}",
     "DELETE /rss-culture/sources/{source_id}",
@@ -3881,6 +3917,9 @@ class NinoService:
     def import_all_rss_sources(self) -> dict[str, Any]:
         return _to_jsonable(self.runtime.import_all_rss_sources())
 
+    def seed_financial_rss_sources(self) -> dict[str, Any]:
+        return _to_jsonable(self.runtime.seed_financial_rss_sources())
+
     def get_narrative(self, agent_id: str) -> dict[str, Any]:
         return {"narrative": _to_jsonable(self.runtime.build_narrative(agent_id))}
 
@@ -4418,6 +4457,8 @@ class NinoHttpApp:
             return "200 OK", self.service.add_rss_source(payload)
         if method == "POST" and parts == ["rss-culture", "import"]:
             return "200 OK", self.service.import_all_rss_sources()
+        if method == "POST" and parts == ["rss-culture", "seed-financial"]:
+            return "200 OK", self.service.seed_financial_rss_sources()
         if method == "POST" and len(parts) == 4 and parts[:2] == ["rss-culture", "sources"] and parts[3] == "import":
             return "200 OK", self.service.import_rss_source(parts[2], payload)
         if method == "PATCH" and len(parts) == 3 and parts[:2] == ["rss-culture", "sources"]:

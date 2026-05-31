@@ -13,7 +13,9 @@ class SchedulerResult:
     agent_id: str
     ran_dream: bool = False
     ran_proactivity: bool = False
+    ran_rss_import: bool = False
     proactive_action: dict[str, Any] | None = None
+    rss_import: dict[str, Any] | None = None
     reason_trace: list[str] = field(default_factory=list)
 
 
@@ -32,11 +34,14 @@ class NinoScheduler:
         runtime: NinoRuntime,
         dream_interval_hours: float = 8.0,
         proactivity_interval_hours: float = 2.0,
+        rss_interval_hours: float = 6.0,
     ) -> None:
         self.runtime = runtime
         self.internal_loop = InternalLoop(runtime)
         self.dream_interval = timedelta(hours=dream_interval_hours)
         self.proactivity_interval = timedelta(hours=proactivity_interval_hours)
+        self.rss_interval = timedelta(hours=rss_interval_hours)
+        self._last_rss_import_at: datetime | None = None
 
     def run_pending(self, agent_id: str, now: datetime | None = None) -> SchedulerResult:
         now = now or datetime.now(timezone.utc)
@@ -70,18 +75,31 @@ class NinoScheduler:
             if proactivity.should_send:
                 proactive_action = proactivity.action
 
+        ran_rss_import = False
+        rss_import: dict[str, Any] | None = None
+        rss_due = self._last_rss_import_at is None or now - self._last_rss_import_at >= self.rss_interval
+        if rss_due and self.runtime.rss_culture_store.list_sources(active_only=True):
+            rss_import = self.runtime.import_all_rss_sources(now=now)
+            self._last_rss_import_at = now
+            ran_rss_import = True
+            reason_trace.append("rss_import_due")
+            if not rss_import.get("ok"):
+                reason_trace.append("rss_import_partial_failure")
+
         state = self.runtime.load_or_init_state(agent_id)
         state.relation_state = {**state.relation_state, "scheduler": scheduler_state}
         state.updated_at = now
         self.runtime.state_store.put(state)
 
-        if not ran_dream and not ran_proactivity:
+        if not ran_dream and not ran_proactivity and not ran_rss_import:
             reason_trace.append("nothing_due")
 
         return SchedulerResult(
             agent_id=agent_id,
             ran_dream=ran_dream,
             ran_proactivity=ran_proactivity,
+            ran_rss_import=ran_rss_import,
             proactive_action=proactive_action,
+            rss_import=rss_import,
             reason_trace=reason_trace,
         )

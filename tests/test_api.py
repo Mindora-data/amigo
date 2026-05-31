@@ -1875,6 +1875,52 @@ def test_rss_financial_themes_are_kept_separate_from_generic_other(tmp_path) -> 
     assert other["items"] == []
 
 
+def test_rss_source_import_status_records_success_and_failure(tmp_path, monkeypatch) -> None:
+    app = create_app(tmp_path / "nino.db")
+    xml = "<rss><channel><item><title>Mercado hoy</title><link>https://example.test/m</link></item></channel></rss>"
+    created = _request(
+        app,
+        "POST",
+        "/rss-culture/sources",
+        {"name": "Mercados Test", "url": "https://example.test/markets", "theme": "mercados"},
+    )
+    source_id = created["source"]["source_id"]
+
+    ok = _request(app, "POST", f"/rss-culture/sources/{source_id}/import", {"xml": xml})
+    assert ok["ok"] is True
+
+    after_ok = _request(app, "GET", "/rss-culture")
+    source = next(item for item in after_ok["sources"] if item["source_id"] == source_id)
+    assert source["last_import_ok"] is True
+    assert source["last_added_count"] == 1
+    assert source["last_import_error"] is None
+
+    def fail_fetch(url: str) -> str:
+        raise TimeoutError("offline")
+
+    monkeypatch.setattr("nino.runtime.fetch_rss_xml", fail_fetch)
+    failed = _request(app, "POST", f"/rss-culture/sources/{source_id}/import", {})
+    assert failed["ok"] is False
+    assert failed["source_id"] == source_id
+
+    after_failure = _request(app, "GET", "/rss-culture")
+    source = next(item for item in after_failure["sources"] if item["source_id"] == source_id)
+    assert source["last_import_ok"] is False
+    assert source["last_import_error"] == "TimeoutError"
+    assert source["last_added_count"] == 0
+
+
+def test_seed_financial_rss_sources_endpoint_adds_closed_financial_themes(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    out = _request(app, "POST", "/rss-culture/seed-financial", {})
+    themes = {source["theme"] for source in out["sources"]}
+
+    assert out["ok"] is True
+    assert out["added_count"] >= 4
+    assert {"mercados", "inversion", "etf", "cripto"}.issubset(themes)
+
+
 def test_dashboard_contains_learning_journal_delete_button(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

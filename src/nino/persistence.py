@@ -881,6 +881,10 @@ class SQLiteRssCultureStore:
             )
             """
         )
+        self._ensure_source_column("last_import_at", "TEXT")
+        self._ensure_source_column("last_import_ok", "INTEGER")
+        self._ensure_source_column("last_import_error", "TEXT")
+        self._ensure_source_column("last_added_count", "INTEGER NOT NULL DEFAULT 0")
         self.conn.execute(
             """
             CREATE TABLE IF NOT EXISTS rss_item (
@@ -900,18 +904,31 @@ class SQLiteRssCultureStore:
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_rss_item_theme_time ON rss_item(theme, fetched_at)")
         self.conn.commit()
 
+    def _ensure_source_column(self, name: str, definition: str) -> None:
+        rows = self.conn.execute("PRAGMA table_info(rss_source)").fetchall()
+        existing = {row["name"] for row in rows}
+        if name not in existing:
+            self.conn.execute(f"ALTER TABLE rss_source ADD COLUMN {name} {definition}")
+
     def upsert_source(self, source: RssSource) -> None:
         self.conn.execute(
             """
-            INSERT INTO rss_source (source_id, name, url, theme, active, trust, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO rss_source (
+                source_id, name, url, theme, active, trust, created_at, updated_at,
+                last_import_at, last_import_ok, last_import_error, last_added_count
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(source_id) DO UPDATE SET
                 name = excluded.name,
                 url = excluded.url,
                 theme = excluded.theme,
                 active = excluded.active,
                 trust = excluded.trust,
-                updated_at = excluded.updated_at
+                updated_at = excluded.updated_at,
+                last_import_at = excluded.last_import_at,
+                last_import_ok = excluded.last_import_ok,
+                last_import_error = excluded.last_import_error,
+                last_added_count = excluded.last_added_count
             """,
             (
                 source.source_id,
@@ -922,6 +939,10 @@ class SQLiteRssCultureStore:
                 source.trust,
                 source.created_at.isoformat(),
                 source.updated_at.isoformat(),
+                source.last_import_at.isoformat() if source.last_import_at else None,
+                None if source.last_import_ok is None else 1 if source.last_import_ok else 0,
+                source.last_import_error,
+                int(source.last_added_count),
             ),
         )
         self.conn.commit()
@@ -936,6 +957,10 @@ class SQLiteRssCultureStore:
             trust=float(row["trust"]),
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
+            last_import_at=datetime.fromisoformat(row["last_import_at"]) if row["last_import_at"] else None,
+            last_import_ok=None if row["last_import_ok"] is None else bool(row["last_import_ok"]),
+            last_import_error=row["last_import_error"],
+            last_added_count=int(row["last_added_count"] or 0),
         )
 
     def list_sources(self, active_only: bool = False) -> list[RssSource]:
