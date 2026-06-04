@@ -22,7 +22,7 @@ CLAUDE_SETUP_COMMANDS = [
 def claude_setup_commands(*, include_cd: bool = False) -> list[str]:
     commands = list(CLAUDE_SETUP_COMMANDS)
     if include_cd:
-        return ["cd ~/Developer/bebe", *commands]
+        return ["cd ~/Developer/amigo", *commands]
     return commands
 
 

@@ -10,7 +10,7 @@ from nino.claude_live import claude_setup_commands, run_live_claude_probe
 def test_claude_setup_commands_can_include_runtime_directory() -> None:
     commands = claude_setup_commands(include_cd=True)
 
-    assert commands[0] == "cd ~/Developer/bebe"
+    assert commands[0] == "cd ~/Developer/amigo"
     assert "scripts/ninoctl finish --key-stdin" in commands
     assert "scripts/ninoctl finish --key-env" in commands
     assert "scripts/ninoctl finish --skip-configure" in commands

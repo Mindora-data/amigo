@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 CLOSEOUT_COMMAND_ORDER = [
-    "cd ~/Developer/bebe",
+    "cd ~/Developer/amigo",
     "scripts/ninoctl finish --key-stdin",
     "scripts/ninoctl finish --key-env",
     "scripts/ninoctl finish --skip-configure",

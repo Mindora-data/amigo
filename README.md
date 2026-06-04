@@ -1,4 +1,9 @@
-# NIÑO
+# amigo
+
+amigo es el compañero personal construido sobre el motor NIÑO: memoria
+longitudinal privada, continuidad conversacional, proactividad con límites,
+eventos temporales, Telegram personal y aprendizaje relacional controlado.
+El documento ético raíz es `AMIGO_ETHICS.md`.
 
 NIÑO is a persistent cognitive runtime prototype. It keeps agent state, episodes,
 consolidated memory and safe proactivity configuration in SQLite.
@@ -146,7 +151,7 @@ Install as a macOS user service:
 
 ```bash
 scripts/nino-install-local install
-cd ~/Developer/bebe
+cd ~/Developer/amigo
 scripts/nino-launchd install
 scripts/nino-launchd status
 scripts/nino-launchd doctor
@@ -160,7 +165,7 @@ If the project lives under `Desktop`, `Documents` or `Downloads`, macOS privacy
 controls can prevent launchd from reading the project and the service may exit
 with `Operation not permitted`. Run `scripts/nino-launchd doctor` to confirm.
 For unattended startup, keep the project in a non-protected folder such as
-`~/Developer/bebe`; `scripts/nino-install-local install` copies the runtime
+`~/Developer/amigo`; `scripts/nino-install-local install` copies the runtime
 there while keeping an existing target `data/nino.db` and `.env.local`.
 
 Defaults:
@@ -283,7 +288,7 @@ If using the macOS service copy, configure Claude in that installed folder and
 restart launchd:
 
 ```bash
-cd ~/Developer/bebe
+cd ~/Developer/amigo
 scripts/ninoctl configure-claude
 scripts/nino-launchd stop
 scripts/nino-launchd start
@@ -322,7 +327,7 @@ Run `scripts/ninoctl final-preflight` before spending a live Claude call. It
 requires launchd, the same audited SQLite database served over HTTP, and a valid
 Claude configuration, but it does not send a prompt.
 Run `scripts/ninoctl final-audit` from the installed runtime folder used by
-launchd, normally `~/Developer/bebe`; it adds the live Claude response check.
+launchd, normally `~/Developer/amigo`; it adds the live Claude response check.
 The JSON result is marked with `audit_profile.strict_final: true` only for this
 strict final profile, and `audit_profile.required_checks` lists every check
 required for the selected profile.

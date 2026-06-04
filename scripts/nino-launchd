@@ -55,7 +55,7 @@ Warning: NIÑO is installed under a macOS privacy-protected folder:
   $ROOT_DIR
 launchd may fail with "Operation not permitted" unless Terminal/launchd has
 permission or the project is moved to a non-protected folder such as
-  $HOME/Developer/bebe
+  $HOME/Developer/amigo
 EOF
       ;;
   esac

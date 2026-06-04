@@ -125,7 +125,7 @@ Hecho:
 Criterios de salida:
 
 - NIÑO puede arrancar automaticamente o con un unico comando documentado.
-- Arranque automatico macOS. Hecho inicial: `scripts/nino-launchd install`; si el repo vive en `Desktop/Documents/Downloads`, `scripts/nino-launchd doctor` detecta el bloqueo de privacidad de macOS y `scripts/nino-install-local` prepara una copia en `~/Developer/bebe`.
+- Arranque automatico macOS. Hecho inicial: `scripts/nino-launchd install`; si el repo vive en `Desktop/Documents/Downloads`, `scripts/nino-launchd doctor` detecta el bloqueo de privacidad de macOS y `scripts/nino-install-local` prepara una copia en `~/Developer/amigo`.
 - Hay al menos un agente vivo con memoria persistente no vacia.
 - La UI permite interactuar, revisar memoria y entender el estado sin usar `curl`.
 - Existe backup local manual o automatico de la base.

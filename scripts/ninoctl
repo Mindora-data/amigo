@@ -64,6 +64,7 @@ Commands:
   finish      Configure Claude, restart launchd, audit, write evidence and audit completion.
               Use --key-env when ANTHROPIC_API_KEY is already exported.
               Use --skip-configure when Claude is already configured.
+  sync-runtime Pull, reinstall if needed and close against the official runtime.
   product-status Summarize final readiness, evaluation and blockers.
   next-action Print only the recommended next command.
   completion-audit Audit every completion requirement and remaining blockers.
@@ -86,6 +87,7 @@ Commands:
 Environment overrides:
   NINO_ENV_FILE, NINO_HOST, NINO_PORT, NINO_DB_PATH, NINO_SCHEDULER_INTERVAL, NINO_PYTHON
   NINO_LLM_PROVIDER, NINO_CLAUDE_MODEL, ANTHROPIC_API_KEY, NINO_DEEPSEEK_API_KEY
+  NINO_RUNTIME_DIR for sync-runtime; defaults to $HOME/Developer/amigo
 
 Local env:
   By default scripts/ninoctl loads $ROOT_DIR/.env.local when it exists.
@@ -578,6 +580,10 @@ product_status() {
   "$ROOT_DIR/scripts/nino-status" "$@"
 }
 
+sync_runtime() {
+  "$ROOT_DIR/scripts/nino-sync-runtime" "$@"
+}
+
 completion_audit() {
   "$ROOT_DIR/scripts/nino-completion-audit" "$@"
 }
@@ -810,6 +816,7 @@ case "$command" in
   final-preflight) final_preflight ;;
   final-audit) final_audit ;;
   finish) finish "$@" ;;
+  sync-runtime) sync_runtime "$@" ;;
   product-status) product_status "$@" ;;
   next-action) product_status --next-action ;;
   completion-audit) completion_audit "$@" ;;

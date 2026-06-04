@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RUNTIME_DIR="${NINO_RUNTIME_DIR:-$HOME/Developer/amigo}"
+
+usage() {
+  cat <<EOF
+Usage: scripts/nino-sync-runtime
+
+Synchronize the official local runtime from GitHub main, keeping this editing
+checkout separate from the launchd-safe runtime.
+
+Environment:
+  NINO_RUNTIME_DIR defaults to $HOME/Developer/amigo
+  NINO_SYNC_ALLOW_EXTERNAL_DB=1 allows an explicit NINO_DB_PATH outside runtime/data/nino.db
+
+The command never copies or overwrites data/nino.db, .env.local or Keychain.
+EOF
+}
+
+die() {
+  echo "sync-runtime: $*" >&2
+  exit 1
+}
+
+runtime_python() {
+  if [[ -x "$RUNTIME_DIR/.venv/bin/python" ]]; then
+    printf '%s\n' "$RUNTIME_DIR/.venv/bin/python"
+  else
+    local base_python
+    base_python="$(command -v python3)"
+    echo "sync-runtime: creating runtime virtualenv with $base_python" >&2
+    "$base_python" -m venv "$RUNTIME_DIR/.venv"
+    printf '%s\n' "$RUNTIME_DIR/.venv/bin/python"
+  fi
+}
+
+runtime_imports_ok() {
+  local py="$1"
+  "$py" -c 'import cryptography; import nino.sync_runtime' >/dev/null 2>&1
+}
+
+runtime_db_path() {
+  local env_file="$RUNTIME_DIR/.env.local"
+  if [[ -f "$env_file" ]]; then
+    (
+      set -a
+      # shellcheck source=/dev/null
+      source "$env_file"
+      set +a
+      printf '%s\n' "${NINO_DB_PATH:-$RUNTIME_DIR/data/nino.db}"
+    )
+  else
+    printf '%s\n' "$RUNTIME_DIR/data/nino.db"
+  fi
+}
+
+resolve_path() {
+  local path="$1"
+  python3 - "$path" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).expanduser().resolve())
+PY
+}
+
+check_runtime() {
+  [[ -d "$RUNTIME_DIR" ]] || die "runtime directory not found: $RUNTIME_DIR"
+  [[ -d "$RUNTIME_DIR/.git" ]] || die "runtime is not a git checkout: $RUNTIME_DIR"
+  [[ -x "$RUNTIME_DIR/scripts/nino-launchd" ]] || die "runtime missing scripts/nino-launchd: $RUNTIME_DIR"
+  [[ -x "$RUNTIME_DIR/scripts/ninoctl" ]] || die "runtime missing scripts/ninoctl: $RUNTIME_DIR"
+
+  local status
+  status="$(git -C "$RUNTIME_DIR" status --porcelain)"
+  if [[ -n "$status" ]]; then
+    echo "$status" >&2
+    die "runtime has local changes; commit, stash or clean them before sync-runtime"
+  fi
+
+  local expected_db actual_db expected_resolved actual_resolved
+  expected_db="$RUNTIME_DIR/data/nino.db"
+  actual_db="$(runtime_db_path)"
+  expected_resolved="$(resolve_path "$expected_db")"
+  actual_resolved="$(resolve_path "$actual_db")"
+  if [[ "${NINO_SYNC_ALLOW_EXTERNAL_DB:-}" != "1" && "$actual_resolved" != "$expected_resolved" ]]; then
+    die "runtime DB is not aligned: expected $expected_resolved but .env resolves to $actual_resolved"
+  fi
+  [[ -f "$actual_resolved" ]] || die "runtime DB not found: $actual_resolved"
+}
+
+main() {
+  case "${1:-}" in
+    -h|--help|help)
+      usage
+      return 0
+      ;;
+    "")
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      return 2
+      ;;
+  esac
+
+  check_runtime
+
+  local before_pyproject after_pyproject py
+  before_pyproject="$(git -C "$RUNTIME_DIR" rev-parse HEAD:pyproject.toml 2>/dev/null || true)"
+
+  echo "sync-runtime: runtime=$RUNTIME_DIR"
+  echo "sync-runtime: fetching main"
+  git -C "$RUNTIME_DIR" fetch origin main
+  git -C "$RUNTIME_DIR" pull --ff-only origin main
+
+  after_pyproject="$(git -C "$RUNTIME_DIR" rev-parse HEAD:pyproject.toml 2>/dev/null || true)"
+  py="$(runtime_python)"
+  if [[ "$before_pyproject" != "$after_pyproject" ]] || ! runtime_imports_ok "$py"; then
+    echo "sync-runtime: installing runtime package and console scripts with $py"
+    (cd "$RUNTIME_DIR" && "$py" -m pip install -e .)
+  else
+    echo "sync-runtime: pyproject unchanged; console scripts already current"
+  fi
+
+  echo "sync-runtime: restarting launchd"
+  (cd "$RUNTIME_DIR" && NINO_ROOT_DIR="$RUNTIME_DIR" scripts/nino-launchd install)
+  (cd "$RUNTIME_DIR" && scripts/ninoctl wait-health 120)
+
+  echo "sync-runtime: final audit"
+  (cd "$RUNTIME_DIR" && scripts/ninoctl final-audit)
+  echo "sync-runtime: closing report"
+  (cd "$RUNTIME_DIR" && scripts/ninoctl closing-report --json)
+  echo "sync-runtime: completion audit"
+  (cd "$RUNTIME_DIR" && scripts/ninoctl completion-audit)
+  echo "sync-runtime: product status"
+  (cd "$RUNTIME_DIR" && scripts/ninoctl product-status)
+}
+
+main "$@"

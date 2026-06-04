@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-INSTALL_DIR="${NINO_INSTALL_DIR:-$HOME/Developer/bebe}"
+INSTALL_DIR="${NINO_INSTALL_DIR:-$HOME/Developer/amigo}"
 
 usage() {
   cat <<EOF
@@ -13,7 +13,7 @@ Commands:
   launchd-install  Copy runtime, then install launchd from the copied folder.
 
 Environment overrides:
-  NINO_INSTALL_DIR defaults to $HOME/Developer/bebe
+  NINO_INSTALL_DIR defaults to $HOME/Developer/amigo
 
 The installer copies source code, scripts and docs. It keeps an existing target
 data/nino.db and .env.local, and only seeds them from the source when missing.
