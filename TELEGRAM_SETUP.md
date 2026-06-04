@@ -14,7 +14,7 @@ proactividad y privacidad siguen en el backend local.
 Opción `.env.local` local con permisos `600`:
 
 ```sh
-cd ~/Developer/bebe
+cd ~/Developer/amigo
 read -rs "NINO_TELEGRAM_BOT_TOKEN?Telegram token: "
 printf '\nNINO_TELEGRAM_BOT_TOKEN=%s\n' "$NINO_TELEGRAM_BOT_TOKEN" >> .env.local
 chmod 600 .env.local
@@ -46,7 +46,7 @@ unset NINO_TELEGRAM_BACKEND_PASSWORD
 Genera un código de un solo uso para tu usuario:
 
 ```sh
-cd ~/Developer/bebe
+cd ~/Developer/amigo
 scripts/ninoctl telegram --create-link-code mindora
 ```
 
@@ -63,7 +63,7 @@ Un chat no vinculado no accede a ninguna memoria.
 El backend `nino` debe estar arrancado primero.
 
 ```sh
-cd ~/Developer/bebe
+cd ~/Developer/amigo
 scripts/ninoctl telegram-launchd install
 scripts/ninoctl telegram-launchd status
 scripts/ninoctl telegram-launchd stop
