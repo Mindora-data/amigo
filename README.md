@@ -5,6 +5,10 @@ longitudinal privada, continuidad conversacional, proactividad con límites,
 eventos temporales, Telegram personal y aprendizaje relacional controlado.
 El documento ético raíz es `AMIGO_ETHICS.md`.
 
+Este repositorio se extrajo desde el historial previo a la etapa corporativa
+de Aliado, manteniendo el producto personal sin cuentas/CRM, roles de empresa
+ni módulos comerciales.
+
 NIÑO is a persistent cognitive runtime prototype. It keeps agent state, episodes,
 consolidated memory and safe proactivity configuration in SQLite.
 
