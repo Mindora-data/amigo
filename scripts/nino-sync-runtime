@@ -43,16 +43,22 @@ runtime_imports_ok() {
 
 runtime_db_path() {
   local env_file="$RUNTIME_DIR/.env.local"
+  local db_path
   if [[ -f "$env_file" ]]; then
-    (
+    db_path="$(
       set -a
       # shellcheck source=/dev/null
       source "$env_file"
       set +a
       printf '%s\n' "${NINO_DB_PATH:-$RUNTIME_DIR/data/nino.db}"
-    )
+    )"
   else
-    printf '%s\n' "$RUNTIME_DIR/data/nino.db"
+    db_path="$RUNTIME_DIR/data/nino.db"
+  fi
+  if [[ "$db_path" = /* ]]; then
+    printf '%s\n' "$db_path"
+  else
+    printf '%s\n' "$RUNTIME_DIR/$db_path"
   fi
 }
 
