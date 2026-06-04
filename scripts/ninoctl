@@ -31,6 +31,7 @@ else
   PYTHON_BIN="${NINO_PYTHON:-$(command -v python3)}"
 fi
 BASE_URL="http://$HOST:$PORT"
+export NINO_BASE_URL="$BASE_URL"
 HEALTH_ERROR=""
 
 usage() {
