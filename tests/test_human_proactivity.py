@@ -177,6 +177,31 @@ def test_runtime_delivers_due_human_followup_candidate_once() -> None:
     assert store.pending("agent-a", now) == []
 
 
+def test_runtime_does_not_deliver_followup_candidate_created_minutes_ago() -> None:
+    now = datetime(2026, 5, 26, 10, 0, tzinfo=timezone.utc)
+    store = InMemoryProactiveCandidateStore()
+    runtime = NinoRuntime(InMemoryStateStore(), proactive_candidate_store=store, llm_client=None)
+    runtime.configure_proactivity("agent-a", runtime_proactivity_settings())
+    store.add(
+        "agent-a",
+        {
+            "kind": "followup",
+            "topic": "eso que acabas de contar",
+            "earliest_at": (now - timedelta(minutes=1)).isoformat(),
+            "expires_at": (now + timedelta(days=1)).isoformat(),
+            "created_at": (now - timedelta(minutes=3)).isoformat(),
+            "weight": 3,
+        },
+    )
+
+    out = runtime.evaluate_proactivity("agent-a", now=now)
+
+    assert out.should_send is False
+    assert "human_followup_candidate_too_recent" in out.reason_trace
+    assert out.next_allowed_at == now - timedelta(minutes=3) + timedelta(hours=24)
+    assert len(store.pending("agent-a", now)) == 1
+
+
 def runtime_proactivity_settings():
     from nino.contracts import ProactivitySettings
 

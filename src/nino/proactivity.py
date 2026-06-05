@@ -278,6 +278,16 @@ def _latest_open_question(world_model: dict[str, Any], now: datetime, *, min_age
         return latest if isinstance(latest, dict) else None, True
     return latest if isinstance(latest, dict) else None, False
 
+
+def _followup_candidate_next_allowed(candidate: dict[str, Any], now: datetime) -> datetime | None:
+    if str(candidate.get("kind", "followup")) != "followup":
+        return None
+    created_at = _parse_dt(candidate.get("created_at"))
+    if created_at is None:
+        return None
+    next_allowed = created_at + timedelta(hours=GENERAL_FOLLOWUP_MIN_AGE_HOURS)
+    return next_allowed if now < next_allowed else None
+
 def _top_preference(relation_state: dict[str, Any]) -> str | None:
     preferences = relation_state.get("preferences", {})
     if not isinstance(preferences, dict) or not preferences:
@@ -756,7 +766,24 @@ class ProactivityEngine:
         ensure_checkin_candidate(self.candidate_store, agent_id, relation_state, now, checkin_prior=checkin_prior)
         allowed, candidate_reason = should_deliver_candidate(self.candidate_store, agent_id, now)
         if allowed:
-            proactive_candidate = next(iter(self.candidate_store.pending(agent_id, now)), None)
+            pending_candidates = self.candidate_store.pending(agent_id, now)
+            blocked_until = [
+                next_allowed
+                for candidate in pending_candidates
+                if (next_allowed := _followup_candidate_next_allowed(candidate, now)) is not None
+            ]
+            proactive_candidate = next(
+                (
+                    candidate
+                    for candidate in pending_candidates
+                    if _followup_candidate_next_allowed(candidate, now) is None
+                ),
+                None,
+            )
+            if proactive_candidate is None and blocked_until:
+                next_allowed = min(blocked_until)
+                reason_trace.append("human_followup_candidate_too_recent")
+                return ProactivityResponse(False, None, reason_trace, next_allowed)
             if proactive_candidate is not None:
                 reason_trace.extend(["human_proactivity", proactive_candidate.get("kind", "candidate")])
                 message = redact_proactive(proactive_candidate, self.llm_client)
