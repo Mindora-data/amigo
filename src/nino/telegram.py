@@ -1143,6 +1143,8 @@ class TelegramBotService:
     def poll_once(self) -> None:
         try:
             updates = self.telegram.get_updates(self.offset, self.poll_timeout)
+        except TimeoutError:
+            updates = []
         except Exception as exc:
             print(f"telegram_poll_error: {exc.__class__.__name__}", file=sys.stderr)
             updates = []

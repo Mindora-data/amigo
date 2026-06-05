@@ -38,6 +38,11 @@ class TimeoutTelegram(FakeTelegram):
         raise TimeoutError("telegram timeout")
 
 
+class BrokenPollTelegram(FakeTelegram):
+    def get_updates(self, offset: int | None, timeout: int) -> list[dict[str, object]]:
+        raise RuntimeError("telegram broken")
+
+
 class FailingSendTelegram(FakeTelegram):
     def send_message(self, chat_id: int | str, text: str) -> dict[str, object]:
         raise TimeoutError("telegram send timeout")
@@ -355,7 +360,7 @@ def test_proactive_candidate_sends_only_to_linked_chat(tmp_path) -> None:
     assert telegram.sent == [{"chat_id": "111", "text": "recuerda beber agua"}]
 
 
-def test_telegram_poll_timeout_still_pushes_due_proactivity(tmp_path) -> None:
+def test_telegram_poll_timeout_still_pushes_due_proactivity(tmp_path, capsys: pytest.CaptureFixture[str]) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     assert links.link_with_code(111, links.create_code("Ana"))
     telegram = TimeoutTelegram()
@@ -366,6 +371,18 @@ def test_telegram_poll_timeout_still_pushes_due_proactivity(tmp_path) -> None:
     bot.poll_once()
 
     assert telegram.sent == [{"chat_id": "111", "text": "recuerda beber agua"}]
+    assert "telegram_poll_error" not in capsys.readouterr().err
+
+
+def test_telegram_poll_real_error_is_logged(tmp_path, capsys: pytest.CaptureFixture[str]) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = BrokenPollTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.poll_once()
+
+    assert "telegram_poll_error: RuntimeError" in capsys.readouterr().err
 
 
 def test_telegram_send_failure_does_not_stop_poll_loop(tmp_path) -> None:
