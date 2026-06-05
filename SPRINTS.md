@@ -1791,3 +1791,54 @@ Tests:
 - Foto privada no vinculada exige vincular antes de analizar.
 - Foto de grupo no dirigida no se describe.
 - Foto de grupo dirigida al bot se describe.
+
+## Sprint 69 - Recuerdo explicito de imagenes
+
+Estado: hecho inicial.
+
+Objetivo: permitir que una imagen enviada por Telegram pueda convertirse en
+memoria solo si el usuario lo pide de forma clara.
+
+Hechos:
+
+- Captions con `recuerda`, `acuérdate`, `guarda`, `memoriza`, `no olvides` o
+  equivalentes activan el guardado.
+- Se guarda una descripcion textual generada por vision, nunca la imagen cruda.
+- Si la imagen no pudo analizarse o no hay vision activa, no se guarda nada.
+
+Tests:
+
+- Foto privada con peticion de recuerdo llama a `tick` con descripcion textual.
+- Foto privada sin peticion de recuerdo no entra en memoria.
+
+## Sprint 70 - Limites seguros para imagenes Telegram
+
+Estado: hecho inicial.
+
+Objetivo: evitar descargas pesadas o inseguras desde Telegram.
+
+Hechos:
+
+- Límite configurable `NINO_TELEGRAM_IMAGE_MAX_BYTES`.
+- Si Telegram informa un tamaño superior al límite, amigo no descarga la imagen.
+- La respuesta explica que debe enviarse una version mas ligera.
+
+Tests:
+
+- Foto superior al limite no se descarga, no llama a vision y no entra en memoria.
+
+## Sprint 71 - Diagnostico de vision Telegram
+
+Estado: hecho inicial.
+
+Objetivo: que el usuario pueda saber desde Telegram si amigo tiene vision activa.
+
+Hechos:
+
+- Comando `/vision` responde si la vision esta activa o no.
+- El mensaje recuerda que las imagenes no se guardan salvo peticion explicita.
+
+Tests:
+
+- `/vision` sin adaptador informa vision no activa.
+- `/vision` con adaptador informa vision activa.

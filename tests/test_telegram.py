@@ -102,10 +102,10 @@ def _group_update(chat_id: int, text: str, user_id: int = 10, update_id: int = 1
     }
 
 
-def _photo_update(chat_id: int, *, caption: str = "", update_id: int = 1, group: bool = False) -> dict[str, object]:
+def _photo_update(chat_id: int, *, caption: str = "", update_id: int = 1, group: bool = False, big_size: int = 20) -> dict[str, object]:
     message: dict[str, object] = {
         "chat": {"id": chat_id, **({"type": "supergroup", "title": "Grupo"} if group else {})},
-        "photo": [{"file_id": "small", "file_size": 10}, {"file_id": "big", "file_size": 20}],
+        "photo": [{"file_id": "small", "file_size": 10}, {"file_id": "big", "file_size": big_size}],
         "date": 1_779_977_600,
     }
     if caption:
@@ -148,6 +148,45 @@ def test_linked_private_photo_is_described_without_backend_memory(tmp_path) -> N
     assert "libreta" in str(telegram.sent[-1]["text"])
 
 
+def test_linked_private_photo_is_remembered_only_when_requested(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    telegram.files["big"] = {"file_path": "photos/mesa.jpg"}
+    telegram.downloads["photos/mesa.jpg"] = b"fake-image"
+    backend = FakeBackend()
+    vision = FakeVision("Veo una mesa con un cuaderno rojo.")
+    bot = TelegramBotService(telegram, backend, links, vision_client=vision)
+
+    bot.handle_update(_photo_update(111, caption="acuérdate de esta imagen"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert backend.ticks == [
+        {
+            "user_id": "ana",
+            "text": "Recuerda esta imagen por su descripcion, no la imagen cruda: Veo una mesa con un cuaderno rojo.",
+            "now": "2026-05-28T10:00:00+00:00",
+        }
+    ]
+    assert "cuaderno rojo" in str(telegram.sent[-2]["text"])
+    assert telegram.sent[-1]["text"] == "Lo dejo recordado como descripción, no como imagen."
+
+
+def test_linked_private_photo_without_memory_cue_is_not_saved(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    telegram.files["big"] = {"file_path": "photos/mesa.jpg"}
+    telegram.downloads["photos/mesa.jpg"] = b"fake-image"
+    backend = FakeBackend()
+    vision = FakeVision("Veo una mesa con un cuaderno rojo.")
+    bot = TelegramBotService(telegram, backend, links, vision_client=vision)
+
+    bot.handle_update(_photo_update(111, caption="¿qué ves?"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert backend.ticks == []
+    assert len(telegram.sent) == 1
+
+
 def test_linked_private_photo_without_vision_is_honest(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     assert links.link_with_code(111, links.create_code("Ana"))
@@ -159,6 +198,21 @@ def test_linked_private_photo_without_vision_is_honest(tmp_path) -> None:
 
     assert backend.ticks == []
     assert "no tengo visión activa" in str(telegram.sent[-1]["text"])
+
+
+def test_linked_private_photo_too_large_is_not_downloaded(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    vision = FakeVision()
+    bot = TelegramBotService(telegram, backend, links, vision_client=vision, image_max_bytes=15)
+
+    bot.handle_update(_photo_update(111, big_size=20), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert vision.calls == []
+    assert backend.ticks == []
+    assert "demasiado grande" in str(telegram.sent[-1]["text"])
 
 
 def test_unlinked_private_photo_requires_link_before_vision(tmp_path) -> None:
@@ -173,6 +227,28 @@ def test_unlinked_private_photo_requires_link_before_vision(tmp_path) -> None:
     assert backend.ticks == []
     assert vision.calls == []
     assert "vincular este chat antes de ver imágenes" in str(telegram.sent[-1]["text"])
+
+
+def test_vision_command_reports_status(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_update(111, "/vision"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert "Visión no activa" in str(telegram.sent[-1]["text"])
+
+
+def test_vision_command_reports_active_status(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links, vision_client=FakeVision())
+
+    bot.handle_update(_update(111, "/vision"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert "Visión activa" in str(telegram.sent[-1]["text"])
 
 
 def test_telegram_message_date_is_passed_to_backend_in_local_timezone(tmp_path) -> None:

@@ -23,6 +23,16 @@ GROUP_AMBIENT_COOLDOWN_SECONDS = 600
 GROUP_AMBIENT_COOLDOWN_FAST_SECONDS = 180
 GROUP_AMBIENT_COOLDOWN_SLOW_SECONDS = 900
 GROUP_MENTION_AFTER_SECONDS = 120
+DEFAULT_TELEGRAM_IMAGE_MAX_BYTES = 8 * 1024 * 1024
+IMAGE_MEMORY_CUES = (
+    "recuerda",
+    "acuérdate",
+    "acuerdate",
+    "guarda",
+    "memoriza",
+    "no olvides",
+    "ten presente",
+)
 GROUP_AMBIENT_CUES = (
     "?",
     "¿",
@@ -151,6 +161,15 @@ def telegram_local_timezone() -> ZoneInfo:
         return ZoneInfo(name)
     except ZoneInfoNotFoundError:
         return ZoneInfo("UTC")
+
+
+def _telegram_image_max_bytes() -> int:
+    raw = os.environ.get("NINO_TELEGRAM_IMAGE_MAX_BYTES", str(DEFAULT_TELEGRAM_IMAGE_MAX_BYTES)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_TELEGRAM_IMAGE_MAX_BYTES
+    return value if value > 0 else DEFAULT_TELEGRAM_IMAGE_MAX_BYTES
 
 
 class TelegramLinkStore:
@@ -438,6 +457,7 @@ class TelegramBotService:
         group_reply_delay_seconds: float = 0.0,
         sleeper: Any = time.sleep,
         vision_client: VisionLLMClient | None = None,
+        image_max_bytes: int | None = None,
     ) -> None:
         self.telegram = telegram
         self.backend = backend
@@ -448,6 +468,7 @@ class TelegramBotService:
         self.group_reply_delay_seconds = max(0.0, float(group_reply_delay_seconds))
         self.sleeper = sleeper
         self.vision_client = vision_client
+        self.image_max_bytes = image_max_bytes if image_max_bytes is not None else _telegram_image_max_bytes()
         self.offset: int | None = None
         self._group_last_ambient_reply: dict[str, datetime] = {}
         self._group_last_message_at: dict[str, datetime] = {}
@@ -611,23 +632,50 @@ class TelegramBotService:
             self._group_social_scores[key] = self._group_social_scores.get(key, 0) + 1
         return outcome
 
-    def _image_file_id_and_mime(self, message: dict[str, Any]) -> tuple[str, str] | None:
+    def _image_file_id_mime_and_size(self, message: dict[str, Any]) -> tuple[str, str, int | None] | None:
         photos = message.get("photo")
         if isinstance(photos, list) and photos:
             candidates = [item for item in photos if isinstance(item, dict) and item.get("file_id")]
             if candidates:
                 best = max(candidates, key=lambda item: int(item.get("file_size") or 0))
-                return str(best["file_id"]), "image/jpeg"
+                size = int(best["file_size"]) if best.get("file_size") is not None else None
+                return str(best["file_id"]), "image/jpeg", size
         document = message.get("document") if isinstance(message.get("document"), dict) else {}
         mime_type = str(document.get("mime_type") or "")
         if mime_type.startswith("image/") and document.get("file_id"):
-            return str(document["file_id"]), mime_type
+            size = int(document["file_size"]) if document.get("file_size") is not None else None
+            return str(document["file_id"]), mime_type, size
         return None
+
+    def _image_file_id_and_mime(self, message: dict[str, Any]) -> tuple[str, str] | None:
+        image = self._image_file_id_mime_and_size(message)
+        if image is None:
+            return None
+        file_id, mime_type, _ = image
+        return file_id, mime_type
+
+    def _image_too_large(self, message: dict[str, Any]) -> bool:
+        image = self._image_file_id_mime_and_size(message)
+        if image is None:
+            return False
+        _, _, size = image
+        return size is not None and size > self.image_max_bytes
+
+    def _image_memory_requested(self, caption: str) -> bool:
+        lowered = caption.casefold()
+        return any(cue in lowered for cue in IMAGE_MEMORY_CUES)
+
+    def _vision_status_text(self) -> str:
+        if self.vision_client is None:
+            return "Visión no activa: puedo recibir imágenes, pero no interpretarlas todavía."
+        return "Visión activa: puedo comentar imágenes. No las guardo salvo que me lo pidas explícitamente."
 
     def _describe_telegram_image(self, message: dict[str, Any]) -> str:
         image = self._image_file_id_and_mime(message)
         if image is None:
             return ""
+        if self._image_too_large(message):
+            return "La imagen es demasiado grande para analizarla con seguridad por Telegram. Envíame una versión más ligera."
         if self.vision_client is None:
             return "Puedo recibir la imagen, pero ahora mismo no tengo visión activa para interpretarla."
         file_id, mime_type = image
@@ -655,6 +703,9 @@ class TelegramBotService:
         if chat_id is None or (not text and image is None):
             return
         current_time = now or datetime.fromtimestamp(int(message.get("date") or time.time()), tz=timezone.utc).astimezone(self.local_tz)
+        if text.lower() == "/vision":
+            self.telegram.send_message(chat_id, self._vision_status_text())
+            return
         if image is not None:
             self._handle_image_message(message, chat, chat_id, text, current_time)
             return
@@ -709,6 +760,10 @@ class TelegramBotService:
         reply = self._describe_telegram_image(message)
         if reply:
             self.telegram.send_message(chat_id, reply)
+            if caption and self._image_memory_requested(caption) and not reply.startswith(("Puedo recibir", "La imagen es demasiado grande", "He recibido")):
+                memory_text = f"Recuerda esta imagen por su descripcion, no la imagen cruda: {reply}"
+                self.backend.tick(user_id, memory_text, now)
+                self.telegram.send_message(chat_id, "Lo dejo recordado como descripción, no como imagen.")
 
     def _handle_group_message(self, message: dict[str, Any], chat_id: int | str, text: str, now: datetime) -> None:
         directed = self._is_directed_at_bot(message, text)
@@ -809,6 +864,7 @@ def build_service(db_path: Path, base_url: str) -> TelegramBotService:
         TelegramLinkStore(db_path),
         group_reply_delay_seconds=delay,
         vision_client=build_configured_vision_llm(),
+        image_max_bytes=_telegram_image_max_bytes(),
     )
 
 
