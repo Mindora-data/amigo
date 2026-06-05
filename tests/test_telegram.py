@@ -43,6 +43,13 @@ class FailingSendTelegram(FakeTelegram):
         raise TimeoutError("telegram send timeout")
 
 
+class FailingGroupSendTelegram(FakeTelegram):
+    def send_message(self, chat_id: int | str, text: str) -> dict[str, object]:
+        if str(chat_id).startswith("-"):
+            raise TimeoutError("telegram group send timeout")
+        return super().send_message(chat_id, text)
+
+
 class FakeBackend:
     def __init__(self) -> None:
         self.ticks: list[dict[str, object]] = []
@@ -478,6 +485,71 @@ def test_group_photo_directed_to_bot_is_described(tmp_path) -> None:
         }
     ]
     assert "imagen compartida" in str(telegram.sent[-1]["text"])
+
+
+def test_private_request_to_post_in_group_sends_real_group_message(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "mensaje normal", update_id=1), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+    bot.handle_update(
+        _update(111, "di en el grupo que no me he leído el cómic", update_id=2),
+        now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc),
+    )
+
+    assert {"chat_id": "-100", "text": "no me he leído el cómic"} in telegram.sent
+    assert telegram.sent[-1] == {"chat_id": "111", "text": "He escrito en Grupo: no me he leído el cómic"}
+    assert backend.ticks == []
+
+
+def test_private_request_to_post_in_group_without_known_group_does_not_claim_success(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_update(111, "di en el grupo que perdón por la confusión"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert len(telegram.sent) == 1
+    assert telegram.sent[-1]["chat_id"] == "111"
+    assert "No tengo ningún grupo registrado" in str(telegram.sent[-1]["text"])
+    assert backend.ticks == []
+
+
+def test_private_request_to_post_in_group_reports_send_failure(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FailingGroupSendTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "mensaje normal", update_id=1), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+    bot.handle_update(
+        _update(111, "di en el grupo que no debería haber opinado del cómic", update_id=2),
+        now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc),
+    )
+
+    assert telegram.sent[-1]["chat_id"] == "111"
+    assert "No he podido escribir en Grupo" in str(telegram.sent[-1]["text"])
+    assert "No voy a decir que lo he hecho" in str(telegram.sent[-1]["text"])
+    assert backend.ticks == []
+
+
+def test_private_groups_command_lists_known_groups(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "mensaje normal", update_id=1), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+    bot.handle_update(_update(111, "/grupos", update_id=2), now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc))
+
+    assert "Grupo (-100)" in str(telegram.sent[-1]["text"])
 
 
 def test_group_ambient_question_can_reply_without_private_memory(tmp_path) -> None:

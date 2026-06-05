@@ -109,6 +109,21 @@ GROUP_POSITIVE_REACTION_CUES = (
     "eso era",
     "correcto",
 )
+PRIVATE_GROUP_POST_CUES = (
+    "di ",
+    "dile ",
+    "diles ",
+    "escribe ",
+    "pon ",
+    "publica ",
+    "manda ",
+    "envia ",
+    "envía ",
+    "pide perdon",
+    "pide perdón",
+    "disculpate",
+    "discúlpate",
+)
 
 
 def _connect(path: str | Path) -> sqlite3.Connection:
@@ -213,6 +228,15 @@ class TelegramLinkStore:
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_telegram_social_decision_chat_time ON telegram_social_decision(chat_id, created_at)"
         )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS telegram_group (
+                chat_id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+            )
+            """
+        )
         self.conn.commit()
 
     def create_code(self, user_id: str, now: datetime | None = None) -> str:
@@ -260,6 +284,26 @@ class TelegramLinkStore:
     def links(self) -> list[dict[str, str]]:
         rows = self.conn.execute("SELECT chat_id, user_id, created_at FROM telegram_link ORDER BY created_at").fetchall()
         return [{"chat_id": str(row["chat_id"]), "user_id": str(row["user_id"]), "created_at": str(row["created_at"])} for row in rows]
+
+    def record_group(self, chat_id: int | str, title: str, now: datetime) -> None:
+        clean_title = title.strip() or f"grupo {chat_id}"
+        self.conn.execute(
+            """
+            INSERT INTO telegram_group (chat_id, title, last_seen_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET title = excluded.title, last_seen_at = excluded.last_seen_at
+            """,
+            (str(chat_id), clean_title, now.isoformat()),
+        )
+        self.conn.commit()
+
+    def groups(self) -> list[dict[str, str]]:
+        rows = self.conn.execute("SELECT chat_id, title, last_seen_at FROM telegram_group ORDER BY last_seen_at DESC").fetchall()
+        return [{"chat_id": str(row["chat_id"]), "title": str(row["title"]), "last_seen_at": str(row["last_seen_at"])} for row in rows]
+
+    def latest_group(self) -> dict[str, str] | None:
+        rows = self.groups()
+        return rows[0] if rows else None
 
     def record_social_decision(
         self,
@@ -541,10 +585,11 @@ class TelegramBotService:
             return text
         return f"Contexto público del autor: {context}\nMensaje del grupo: {text}"
 
-    def _record_group_message(self, chat_id: int | str, now: datetime) -> None:
+    def _record_group_message(self, chat_id: int | str, now: datetime, title: str = "") -> None:
         key = str(chat_id)
         self._group_messages_since_ambient_reply[key] = self._group_messages_since_ambient_reply.get(key, 0) + 1
         self._group_last_message_at[key] = now
+        self.links.record_group(chat_id, title or f"grupo {chat_id}", now)
 
     def _sender_mention(self, message: dict[str, Any]) -> str:
         sender = message.get("from") if isinstance(message.get("from"), dict) else {}
@@ -673,6 +718,43 @@ class TelegramBotService:
     def _valid_image_description(self, text: str) -> bool:
         return bool(text.strip()) and not text.startswith(("Puedo recibir", "La imagen es demasiado grande", "He recibido"))
 
+    def _private_group_post_text(self, text: str) -> str | None:
+        normalized = " ".join(text.strip().split())
+        lower = normalized.casefold()
+        if "grupo" not in lower:
+            return None
+        if not any(cue in lower for cue in PRIVATE_GROUP_POST_CUES):
+            return None
+        marker = " que "
+        if marker in lower:
+            idx = lower.rfind(marker)
+            candidate = normalized[idx + len(marker) :].strip()
+        elif ":" in normalized:
+            candidate = normalized.split(":", 1)[1].strip()
+        else:
+            candidate = ""
+        if not candidate and ("perdon" in lower or "perdón" in lower or "disculp" in lower):
+            candidate = "No debería haber hablado como si supiera más de lo que sabía. Perdón por la confusión."
+        if len(candidate) < 3:
+            return None
+        return candidate[:1200]
+
+    def _send_private_group_post(self, private_chat_id: int | str, text: str) -> None:
+        group = self.links.latest_group()
+        if group is None:
+            self.telegram.send_message(
+                private_chat_id,
+                "No tengo ningún grupo registrado todavía. Escríbeme o mencióname una vez dentro del grupo y después podré publicar allí si me lo pides claramente.",
+            )
+            return
+        title = group["title"]
+        try:
+            self.telegram.send_message(group["chat_id"], text)
+        except Exception:
+            self.telegram.send_message(private_chat_id, f"No he podido escribir en {title}. No voy a decir que lo he hecho.")
+            return
+        self.telegram.send_message(private_chat_id, f"He escrito en {title}: {text}")
+
     def _is_command(self, text: str, command: str) -> bool:
         first = text.strip().split(maxsplit=1)[0].casefold() if text.strip() else ""
         if not first.startswith("/"):
@@ -736,6 +818,18 @@ class TelegramBotService:
                 "Soy amigo, un asistente con memoria, no una persona. Para proteger tu privacidad necesito vincular este chat. En tu Mac genera un código y envíame: /link CODIGO",
             )
             return
+        if self._is_command(text, "grupos"):
+            groups = self.links.groups()
+            if not groups:
+                self.telegram.send_message(chat_id, "Todavía no tengo grupos registrados.")
+            else:
+                lines = [f"- {group['title']} ({group['chat_id']})" for group in groups[:10]]
+                self.telegram.send_message(chat_id, "Grupos donde te puedo ayudar si ya estoy dentro:\n" + "\n".join(lines))
+            return
+        group_post_text = self._private_group_post_text(text)
+        if group_post_text is not None:
+            self._send_private_group_post(chat_id, group_post_text)
+            return
         reply = self.backend.tick(user_id, text, current_time)
         if reply:
             self.telegram.send_message(chat_id, reply)
@@ -744,7 +838,7 @@ class TelegramBotService:
         caption = str(message.get("caption") or text or "").strip()
         if self._is_group_chat(chat):
             directed = self._is_directed_at_bot(message, caption)
-            self._record_group_message(chat_id, now)
+            self._record_group_message(chat_id, now, str(chat.get("title") or ""))
             if not directed:
                 self.links.record_social_decision(
                     chat_id=chat_id,
@@ -785,10 +879,12 @@ class TelegramBotService:
         if not clean_text:
             if directed:
                 self._send_group_reply(chat_id, "Estoy aquí. Escríbeme la pregunta en el mismo mensaje o respóndeme directamente.")
-            self._record_group_message(chat_id, now)
+            chat = message.get("chat") if isinstance(message.get("chat"), dict) else {}
+            self._record_group_message(chat_id, now, str(chat.get("title") or ""))
             return
         reply_should_mention = self._should_mention_sender(chat_id, now)
-        self._record_group_message(chat_id, now)
+        chat = message.get("chat") if isinstance(message.get("chat"), dict) else {}
+        self._record_group_message(chat_id, now, str(chat.get("title") or ""))
         target_user_id = self._group_user_id(chat_id)
         context_text = self._with_public_sender_context(message, clean_text)
         reaction = self._classify_group_reaction(chat_id, message, clean_text, now)
