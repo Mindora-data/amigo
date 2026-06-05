@@ -237,6 +237,24 @@ class TelegramLinkStore:
             )
             """
         )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS telegram_action_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action_type TEXT NOT NULL,
+                chat_id TEXT,
+                target_title TEXT,
+                user_chat_id TEXT,
+                text_preview TEXT NOT NULL,
+                sent_ok INTEGER NOT NULL,
+                error TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_telegram_action_log_time ON telegram_action_log(created_at)"
+        )
         self.conn.commit()
 
     def create_code(self, user_id: str, now: datetime | None = None) -> str:
@@ -325,6 +343,63 @@ class TelegramLinkStore:
         if rows:
             return rows[0]
         return None
+
+    def record_action(
+        self,
+        *,
+        action_type: str,
+        chat_id: int | str | None,
+        target_title: str = "",
+        user_chat_id: int | str | None = None,
+        text: str,
+        sent_ok: bool,
+        error: str = "",
+        now: datetime | None = None,
+    ) -> None:
+        created_at = (now or datetime.now(timezone.utc)).isoformat()
+        self.conn.execute(
+            """
+            INSERT INTO telegram_action_log (
+                action_type, chat_id, target_title, user_chat_id, text_preview, sent_ok, error, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                action_type,
+                None if chat_id is None else str(chat_id),
+                target_title[:120],
+                None if user_chat_id is None else str(user_chat_id),
+                text[:300],
+                1 if sent_ok else 0,
+                error[:180],
+                created_at,
+            ),
+        )
+        self.conn.commit()
+
+    def action_logs(self, limit: int = 30) -> list[dict[str, str | bool]]:
+        rows = self.conn.execute(
+            """
+            SELECT action_type, chat_id, target_title, user_chat_id, text_preview, sent_ok, error, created_at
+            FROM telegram_action_log
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (max(1, min(int(limit), 100)),),
+        ).fetchall()
+        return [
+            {
+                "action_type": str(row["action_type"]),
+                "chat_id": "" if row["chat_id"] is None else str(row["chat_id"]),
+                "target_title": str(row["target_title"] or ""),
+                "user_chat_id": "" if row["user_chat_id"] is None else str(row["user_chat_id"]),
+                "text_preview": str(row["text_preview"]),
+                "sent_ok": bool(row["sent_ok"]),
+                "error": str(row["error"] or ""),
+                "created_at": str(row["created_at"]),
+            }
+            for row in rows
+        ]
 
     def record_social_decision(
         self,
@@ -775,9 +850,69 @@ class TelegramBotService:
             return None
         return candidate[:1200]
 
-    def _send_private_group_post(self, private_chat_id: int | str, text: str) -> None:
+    def _is_private_social_correction(self, text: str) -> bool:
+        lower = text.casefold()
+        correction = any(
+            cue in lower
+            for cue in (
+                "mientes",
+                "has mentido",
+                "me mientes",
+                "no lo has hecho",
+                "no has hecho nada",
+                "dices que lo has hecho",
+                "opinas sin",
+                "has opinado sin",
+                "no te lo has leído",
+                "no te lo has leido",
+                "no lo has leído",
+                "no lo has leido",
+                "discúlpate",
+                "disculpate",
+                "pide perdón",
+                "pide perdon",
+            )
+        )
+        return correction and any(cue in lower for cue in ("grupo", "canal", "chat", "comic", "cómic", "puntuacomics"))
+
+    def _record_private_social_correction(self, user_chat_id: int | str, text: str, now: datetime, *, notify: bool = True) -> bool:
+        if not self._is_private_social_correction(text):
+            return False
         group = self.links.latest_group()
         if group is None:
+            return False
+        group_user_id = self._group_user_id(group["chat_id"])
+        self.backend.observe(group_user_id, "social_feedback:negative", now)
+        self.backend.observe(
+            group_user_id,
+            "Correccion privada: si no ha ejecutado una accion en Telegram o no tiene evidencia de una obra, debe reconocer el limite y no decir que lo hizo o que sabe.",
+            now,
+        )
+        self.links.record_action(
+            action_type="private_social_correction",
+            chat_id=group["chat_id"],
+            target_title=group["title"],
+            user_chat_id=user_chat_id,
+            text=text,
+            sent_ok=True,
+            now=now,
+        )
+        if notify:
+            self.telegram.send_message(user_chat_id, "Lo registro como corrección: no debo afirmar acciones que no he ejecutado ni opinar como si hubiera leído algo sin evidencia.")
+        return True
+
+    def _send_private_group_post(self, private_chat_id: int | str, text: str, now: datetime) -> None:
+        group = self.links.latest_group()
+        if group is None:
+            self.links.record_action(
+                action_type="private_group_post",
+                chat_id=None,
+                user_chat_id=private_chat_id,
+                text=text,
+                sent_ok=False,
+                error="no_known_group",
+                now=now,
+            )
             self.telegram.send_message(
                 private_chat_id,
                 "No tengo ningún grupo registrado todavía. Escríbeme o mencióname una vez dentro del grupo y después podré publicar allí si me lo pides claramente.",
@@ -786,9 +921,28 @@ class TelegramBotService:
         title = group["title"]
         try:
             self.telegram.send_message(group["chat_id"], text)
-        except Exception:
+        except Exception as exc:
+            self.links.record_action(
+                action_type="private_group_post",
+                chat_id=group["chat_id"],
+                target_title=title,
+                user_chat_id=private_chat_id,
+                text=text,
+                sent_ok=False,
+                error=exc.__class__.__name__,
+                now=now,
+            )
             self.telegram.send_message(private_chat_id, f"No he podido escribir en {title}. No voy a decir que lo he hecho.")
             return
+        self.links.record_action(
+            action_type="private_group_post",
+            chat_id=group["chat_id"],
+            target_title=title,
+            user_chat_id=private_chat_id,
+            text=text,
+            sent_ok=True,
+            now=now,
+        )
         self.telegram.send_message(private_chat_id, f"He escrito en {title}: {text}")
 
     def _is_command(self, text: str, command: str) -> bool:
@@ -864,7 +1018,10 @@ class TelegramBotService:
             return
         group_post_text = self._private_group_post_text(text)
         if group_post_text is not None:
-            self._send_private_group_post(chat_id, group_post_text)
+            self._record_private_social_correction(chat_id, text, current_time, notify=False)
+            self._send_private_group_post(chat_id, group_post_text, current_time)
+            return
+        if self._record_private_social_correction(chat_id, text, current_time):
             return
         reply = self.backend.tick(user_id, text, current_time)
         if reply:
@@ -955,6 +1112,14 @@ class TelegramBotService:
         if reply:
             text_to_send = self._format_group_reply(message, reply, reply_should_mention)
             self._send_group_reply(chat_id, text_to_send)
+            self.links.record_action(
+                action_type="group_reply",
+                chat_id=chat_id,
+                target_title=str(chat.get("title") or ""),
+                text=text_to_send,
+                sent_ok=True,
+                now=now,
+            )
             self.links.record_social_decision(
                 chat_id=chat_id,
                 message_id=message.get("message_id"),

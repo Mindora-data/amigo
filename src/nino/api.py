@@ -1990,6 +1990,7 @@ DASHBOARD_HTML = """<!doctype html>
         </div>
         <pre id="rssCulture">{}</pre>
       </div>
+      <div class="panel wide"><h2>Telegram social fiable</h2><pre id="telegramActions">[]</pre></div>
       <div class="panel"><h2>Hilo activo</h2><pre id="thread">{}</pre></div>
       <div class="panel"><h2>Señales recientes</h2><pre id="signals">[]</pre></div>
       <div class="panel wide"><h2>Bitácora editable</h2>
@@ -2189,6 +2190,7 @@ DASHBOARD_HTML = """<!doctype html>
       print("learningPriorities", out.curiosity_topics?.learning_priorities || dash.learning_priorities || []);
       print("contradictionWatch", out.curiosity_topics?.contradiction_watch || dash.contradiction_watch || {});
       print("rssCulture", out.rss_culture || {});
+      print("telegramActions", out.telegram_social || {});
       print("thread", dash.active_conversation_thread || {});
       print("signals", dash.relationship_learning?.recent_signals || []);
       renderJournal(out.learning_journal?.entries || dash.learning_journal?.recent_entries || []);
@@ -2802,6 +2804,78 @@ class NinoService:
             "privacy": "private_user_scopes_never_shared",
         }
 
+    def telegram_social_overview(self) -> dict[str, Any]:
+        conn = getattr(self.runtime.episode_store, "conn", None)
+        if conn is None:
+            return {"action_logs": [], "social_decisions": [], "groups": [], "error": "db_unavailable"}
+        try:
+            action_rows = conn.execute(
+                """
+                SELECT action_type, chat_id, target_title, user_chat_id, text_preview, sent_ok, error, created_at
+                FROM telegram_action_log
+                ORDER BY id DESC
+                LIMIT 30
+                """
+            ).fetchall()
+        except sqlite3.Error:
+            action_rows = []
+        try:
+            decision_rows = conn.execute(
+                """
+                SELECT chat_id, message_id, sender_id, text_preview, decision, reason, created_at, outcome, outcome_at
+                FROM telegram_social_decision
+                ORDER BY id DESC
+                LIMIT 30
+                """
+            ).fetchall()
+        except sqlite3.Error:
+            decision_rows = []
+        try:
+            group_rows = conn.execute(
+                """
+                SELECT chat_id, title, last_seen_at
+                FROM telegram_group
+                ORDER BY last_seen_at DESC
+                LIMIT 20
+                """
+            ).fetchall()
+        except sqlite3.Error:
+            group_rows = []
+        return {
+            "action_logs": [
+                {
+                    "action_type": str(row["action_type"]),
+                    "chat_id": "" if row["chat_id"] is None else str(row["chat_id"]),
+                    "target_title": str(row["target_title"] or ""),
+                    "user_chat_id": "" if row["user_chat_id"] is None else str(row["user_chat_id"]),
+                    "text_preview": str(row["text_preview"]),
+                    "sent_ok": bool(row["sent_ok"]),
+                    "error": str(row["error"] or ""),
+                    "created_at": str(row["created_at"]),
+                }
+                for row in action_rows
+            ],
+            "social_decisions": [
+                {
+                    "chat_id": str(row["chat_id"]),
+                    "message_id": "" if row["message_id"] is None else str(row["message_id"]),
+                    "sender_id": "" if row["sender_id"] is None else str(row["sender_id"]),
+                    "text_preview": str(row["text_preview"]),
+                    "decision": str(row["decision"]),
+                    "reason": str(row["reason"]),
+                    "created_at": str(row["created_at"]),
+                    "outcome": "" if row["outcome"] is None else str(row["outcome"]),
+                    "outcome_at": "" if row["outcome_at"] is None else str(row["outcome_at"]),
+                }
+                for row in decision_rows
+            ],
+            "groups": [
+                {"chat_id": str(row["chat_id"]), "title": str(row["title"]), "last_seen_at": str(row["last_seen_at"])}
+                for row in group_rows
+            ],
+            "privacy": "telegram_action_metadata_no_private_chat_content",
+        }
+
     def dashboard_data(self, payload: dict[str, Any]) -> dict[str, Any]:
         user_id = _identity_slug(str(payload.get("user_id", "mindora")), "mindora")
         public_agent_id = _identity_slug(str(payload.get("agent_id", "nino")), "nino")
@@ -2851,6 +2925,7 @@ class NinoService:
             "learning_digest": self.learning_digest(agent_id),
             "curiosity_topics": self.curiosity_topics(agent_id),
             "rss_culture": self.rss_culture(payload={"limit": 20}),
+            "telegram_social": self.telegram_social_overview(),
             "temporal_events": self.list_temporal_events(agent_id),
             "proactive_inbox": self.proactive_inbox(agent_id),
             "llm": self.llm_status(agent_id),

@@ -503,6 +503,11 @@ def test_private_request_to_post_in_group_sends_real_group_message(tmp_path) -> 
     assert {"chat_id": "-100", "text": "no me he leído el cómic"} in telegram.sent
     assert telegram.sent[-1] == {"chat_id": "111", "text": "He escrito en Grupo: no me he leído el cómic"}
     assert backend.ticks == []
+    actions = links.action_logs()
+    assert actions[0]["action_type"] == "private_group_post"
+    assert actions[0]["chat_id"] == "-100"
+    assert actions[0]["sent_ok"] is True
+    assert actions[0]["text_preview"] == "no me he leído el cómic"
 
 
 def test_private_apology_request_can_use_recent_group_history(tmp_path) -> None:
@@ -535,6 +540,40 @@ def test_private_apology_request_can_use_recent_group_history(tmp_path) -> None:
         "text": "He escrito en grupo -1001391487472: No debería haber hablado como si supiera más de lo que sabía. Perdón por la confusión.",
     }
     assert backend.ticks == []
+    assert any(item["user_id"] == "telegram-group-1001391487472" and item["text"] == "social_feedback:negative" for item in backend.observations)
+
+
+def test_private_correction_without_action_request_teaches_group_without_claiming_action(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    links.record_social_decision(
+        chat_id=-1001391487472,
+        message_id=10,
+        sender_id=20,
+        text="mensaje anterior del grupo",
+        decision="reply",
+        reason="directed",
+        now=datetime(2026, 5, 28, 9, tzinfo=timezone.utc),
+    )
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(
+        _update(111, "me mientes en el grupo, dices que lo has hecho y no lo has hecho", update_id=2),
+        now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc),
+    )
+
+    assert telegram.sent == [
+        {
+            "chat_id": "111",
+            "text": "Lo registro como corrección: no debo afirmar acciones que no he ejecutado ni opinar como si hubiera leído algo sin evidencia.",
+        }
+    ]
+    assert backend.ticks == []
+    assert any(item["text"] == "social_feedback:negative" for item in backend.observations)
+    assert any("no ha ejecutado una accion" in item["text"] for item in backend.observations)
+    assert links.action_logs()[0]["action_type"] == "private_social_correction"
 
 
 def test_private_request_to_post_in_group_without_known_group_does_not_claim_success(tmp_path) -> None:
@@ -550,6 +589,9 @@ def test_private_request_to_post_in_group_without_known_group_does_not_claim_suc
     assert telegram.sent[-1]["chat_id"] == "111"
     assert "No tengo ningún grupo registrado" in str(telegram.sent[-1]["text"])
     assert backend.ticks == []
+    actions = links.action_logs()
+    assert actions[0]["sent_ok"] is False
+    assert actions[0]["error"] == "no_known_group"
 
 
 def test_private_request_to_post_in_group_reports_send_failure(tmp_path) -> None:
@@ -569,6 +611,9 @@ def test_private_request_to_post_in_group_reports_send_failure(tmp_path) -> None
     assert "No he podido escribir en Grupo" in str(telegram.sent[-1]["text"])
     assert "No voy a decir que lo he hecho" in str(telegram.sent[-1]["text"])
     assert backend.ticks == []
+    actions = links.action_logs()
+    assert actions[0]["sent_ok"] is False
+    assert actions[0]["error"] == "TimeoutError"
 
 
 def test_private_groups_command_lists_known_groups(tmp_path) -> None:

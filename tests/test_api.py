@@ -119,6 +119,7 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"journalTabs" in dashboard_body
     assert b"cultura" in dashboard_body
     assert b"Opiniones derivadas" in dashboard_body
+    assert b"Telegram social fiable" in dashboard_body
     assert b"/learning-stances/" in dashboard_body
     assert b"Madurez relacional" in dashboard_body
     assert b"/internal/cycle" in body
@@ -1782,7 +1783,20 @@ def test_active_conversation_thread_connects_short_followups(tmp_path) -> None:
 
 
 def test_dashboard_data_returns_complete_local_bundle(tmp_path) -> None:
-    app = create_app(tmp_path / "nino.db")
+    db_path = tmp_path / "nino.db"
+    app = create_app(db_path)
+    from nino.telegram import TelegramLinkStore
+
+    links = TelegramLinkStore(db_path)
+    links.record_action(
+        action_type="private_group_post",
+        chat_id=-100,
+        target_title="Grupo",
+        user_chat_id=111,
+        text="mensaje operativo",
+        sent_ok=True,
+        now=datetime(2026, 5, 29, 13, tzinfo=timezone.utc),
+    )
     _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": "hola dashboard"})
 
     out = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
@@ -1801,6 +1815,8 @@ def test_dashboard_data_returns_complete_local_bundle(tmp_path) -> None:
     assert "self_model" in out
     assert "world_model" in out
     assert "rss_culture" in out
+    assert out["telegram_social"]["action_logs"][0]["action_type"] == "private_group_post"
+    assert out["telegram_social"]["action_logs"][0]["sent_ok"] is True
     assert "conversation" in out
     assert "memory_facts" in out
     assert "learning_journal" in out
