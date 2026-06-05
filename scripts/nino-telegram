@@ -19,7 +19,9 @@ else
   PYTHON_BIN="${NINO_PYTHON:-$(command -v python3)}"
 fi
 DB_PATH="${NINO_DB_PATH:-$ROOT_DIR/data/nino.db}"
-BASE_URL="${NINO_BASE_URL:-http://127.0.0.1:8000}"
+HOST="${NINO_HOST:-127.0.0.1}"
+PORT="${NINO_PORT:-8000}"
+BASE_URL="${NINO_BASE_URL:-http://$HOST:$PORT}"
 
 cd "$ROOT_DIR"
 PYTHONPATH=src "$PYTHON_BIN" -m nino.telegram --db "$DB_PATH" --base-url "$BASE_URL" "$@"
