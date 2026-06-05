@@ -2195,6 +2195,43 @@ def _learning_review(agent_id: str, entries: list[LearningJournalEntry]) -> dict
         if quality_items
         else 1.0
     )
+    quality_by_id = {str(item.get("entry_id", "")): item for item in quality_items}
+    review_queue: list[dict[str, Any]] = []
+    for entry in drafts:
+        theme = classify_learning_theme(entry.title, entry.lesson, entry.tags)
+        quality = quality_by_id.get(entry.entry_id, {})
+        score = 1
+        reasons: list[str] = []
+        if theme in {"comportamiento", "amistad"}:
+            score += 4
+            reasons.append("moldea comportamiento")
+        if any(tag in {"social", "relationship_feedback"} for tag in entry.tags):
+            score += 3
+            reasons.append("sale de interaccion real")
+        if float(quality.get("score", 1.0)) < 0.7 or quality.get("issues"):
+            score += 2
+            reasons.append("necesita edicion")
+        age_hours = max((datetime.now(timezone.utc) - entry.created_at).total_seconds() / 3600.0, 0.0)
+        if age_hours >= 24:
+            score += 1
+            reasons.append("pendiente desde hace mas de un dia")
+        action = "activar_si_encaja"
+        if float(quality.get("score", 1.0)) < 0.7 or quality.get("issues"):
+            action = "editar_antes_de_activar"
+        review_queue.append(
+            {
+                "entry_id": entry.entry_id,
+                "title": entry.title,
+                "theme": theme,
+                "source": entry.source,
+                "tags": list(entry.tags),
+                "priority": score,
+                "recommended_action": action,
+                "reasons": reasons or ["revisar si debe moldear a amigo"],
+                "created_at": entry.created_at.isoformat(),
+            }
+        )
+    review_queue.sort(key=lambda item: (int(item["priority"]), str(item["created_at"])), reverse=True)
     next_actions: list[str] = []
     if drafts:
         next_actions.append("Revisar detectados: activar solo lo que de verdad quieras que moldee a amigo.")
@@ -2216,6 +2253,7 @@ def _learning_review(agent_id: str, entries: list[LearningJournalEntry]) -> dict
             "weak_count": len(weak_entries),
             "weak_entries": weak_entries,
         },
+        "review_queue": review_queue[:12],
         "next_actions": next_actions,
         "privacy": "private_review_queue_no_raw_global_export",
     }

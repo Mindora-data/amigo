@@ -124,6 +124,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"personalTreatment" in dashboard_body
     assert b"Contrato de comportamiento" in dashboard_body
     assert b"behaviorContract" in dashboard_body
+    assert "Cola de revisión".encode("utf-8") in dashboard_body
+    assert b"reviewQueue" in dashboard_body
     assert b"/learning-stances/" in dashboard_body
     assert b"Madurez relacional" in dashboard_body
     assert b"/internal/cycle" in body
@@ -2188,6 +2190,8 @@ def test_learning_review_bulk_digest_maturity_history_and_private_preferences(tm
     review = _request(app, "GET", "/users/mindora/agents/nino/learning-review")
     assert review["draft_count"] == 1
     assert review["by_theme"]["cultura"]["draft"] == 1
+    assert review["review_queue"][0]["title"] == detected["title"]
+    assert review["review_queue"][0]["recommended_action"] in {"activar_si_encaja", "editar_antes_de_activar"}
     assert review["next_actions"]
 
     bulk = _request(
@@ -2208,6 +2212,7 @@ def test_learning_review_bulk_digest_maturity_history_and_private_preferences(tm
 
     dashboard_data = _request(app, "GET", "/dashboard-data?user_id=mindora&agent_id=nino")
     assert dashboard_data["learning_review"]["by_theme"]["cultura"]["active"] == 1
+    assert "review_queue" in dashboard_data["learning_review"]
     assert dashboard_data["learning_digest"]["by_theme"]["cultura"]["active_count"] == 1
     assert dashboard_data["relationship_dashboard"]["dashboard"]["maturity_history"]
 
@@ -2467,6 +2472,25 @@ def test_relationship_friction_creates_reviewable_learning_drafts(tmp_path) -> N
     rendered = json.dumps(journal)
     assert "te pierdes" not in rendered
     assert "has fallado" not in rendered
+
+
+def test_learning_review_queue_prioritizes_behavior_feedback(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/learning-journal",
+        {"title": "Cultura", "lesson": "Le interesa aprender sobre comics", "tags": ["cultura"], "status": "draft"},
+    )
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "te pierdes y no relacionas el contexto"})
+
+    review = _request(app, "GET", "/agents/api-agent/learning-review")
+
+    assert review["review_queue"][0]["title"] == "Continuidad de hilo"
+    assert review["review_queue"][0]["priority"] > review["review_queue"][-1]["priority"]
+    assert "moldea comportamiento" in review["review_queue"][0]["reasons"]
+    assert "sale de interaccion real" in review["review_queue"][0]["reasons"]
 
 
 def test_relationship_stop_signal_creates_single_do_not_insist_draft(tmp_path) -> None:

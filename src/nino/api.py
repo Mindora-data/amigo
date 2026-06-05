@@ -1977,6 +1977,7 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel"><h2>Madurez relacional</h2><pre id="maturityProfile">{}</pre></div>
       <div class="panel"><h2>Historial de madurez</h2><pre id="maturityHistory">[]</pre></div>
       <div class="panel"><h2>Revisión aprendizajes</h2><pre id="learningReview">{}</pre></div>
+      <div class="panel wide"><h2>Cola de revisión</h2><pre id="reviewQueue">[]</pre></div>
       <div class="panel"><h2>Digest aprendizaje</h2><pre id="learningDigest">{}</pre></div>
       <div class="panel"><h2>Curiosidad</h2><pre id="curiosity">{}</pre></div>
       <div class="panel"><h2>Reflexiones de madurez</h2><pre id="maturityReflections">[]</pre></div>
@@ -2186,6 +2187,7 @@ DASHBOARD_HTML = """<!doctype html>
       print("maturityProfile", dash.maturity_profile || {});
       print("maturityHistory", dash.maturity_history || []);
       print("learningReview", out.learning_review || dash.learning_review || {});
+      print("reviewQueue", out.learning_review?.review_queue || dash.learning_review?.review_queue || []);
       print("learningDigest", out.learning_digest || dash.learning_digest || {});
       print("curiosity", out.curiosity_topics?.curiosity || dash.conversation?.curiosity || dash.conversation?.curiosity_topics || []);
       print("maturityReflections", out.curiosity_topics?.maturity_reflections || dash.maturity_reflections || []);
