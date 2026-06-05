@@ -49,6 +49,20 @@ def test_tick_uses_configured_llm_response() -> None:
     assert "Usa al menos un recuerdo" in llm.prompts[-1]["system"]
 
 
+def test_llm_prompt_uses_learned_address_preference_and_defaults_to_neutral_treatment() -> None:
+    llm = FakeLLM("Respuesta neutra.")
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.tick("agent-llm", {"intent": "chat", "text": "no me llames colega"})
+    runtime.tick("agent-llm", {"intent": "chat", "text": "hola"})
+
+    prompt = llm.prompts[-1]["user"]
+    system = llm.prompts[-1]["system"]
+    assert "Preferencia de trato: no usar 'colega' para dirigirse al usuario" in prompt
+    assert "Trato por defecto: neutro" in system
+    assert "No uses apelativos de confianza como 'colega'" in system
+
+
 def test_llm_prompt_uses_relevant_learning_journal_entries() -> None:
     llm = FakeLLM("Respuesta con criterio contextual.")
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

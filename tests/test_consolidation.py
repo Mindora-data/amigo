@@ -7,6 +7,19 @@ from nino.contracts import ConsolidationRequest
 from nino.memory import Episode
 from nino.runtime import InMemoryStateStore, NinoRuntime
 
+
+def test_tick_auto_consolidates_address_preference_with_default_confidence() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+
+    out = runtime.tick("agent-c", {"intent": "chat", "text": "no me llames colega"})
+
+    facts = [fact for fact in runtime.cold_store.list_for_agent("agent-c") if fact.valid_to is None]
+    assert ("address_preference", "no usar 'colega' para dirigirse al usuario") in {
+        (fact.key, fact.value) for fact in facts
+    }
+    assert out["auto_consolidated_count"] == 1
+
+
 def test_consolidation_detects_preference_contradiction() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     runtime.tick("agent-c", {"intent": "chat", "text": "prefiero mañanas"})

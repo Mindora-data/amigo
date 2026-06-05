@@ -6,7 +6,7 @@ import re
 from typing import Any
 from uuid import uuid4
 
-from .consolidation import Consolidator, InMemoryColdStore
+from .consolidation import Consolidator, InMemoryColdStore, extract_address_preference
 from .consolidation import MemoryFact
 from .contracts import (
     AgentState,
@@ -104,7 +104,7 @@ def _should_auto_consolidate(percept_frame: dict[str, Any]) -> bool:
     if not text:
         return False
     confidence = _clamp01(float(percept_frame.get("confidence", 0.8)))
-    return confidence >= 0.9
+    return confidence >= 0.9 or extract_address_preference(text) is not None
 
 
 class InMemoryStateStore:
@@ -3539,6 +3539,16 @@ class NinoRuntime:
                 reason_trace=["context_policy", "onboarding"],
             )
 
+        if extract_address_preference(text) is not None:
+            return PolicyResponse(
+                chosen_action={
+                    "type": "external_message",
+                    "payload": {"text": "Anotado. Ajusto cómo me dirijo a ti a partir de ahora."},
+                },
+                confidence=0.76,
+                reason_trace=["context_policy", "address_preference_correction"],
+            )
+
         profile_correction = _profile_correction_from_text(text)
         if profile_correction:
             key, value = profile_correction
@@ -4020,6 +4030,7 @@ class NinoRuntime:
                 "reminder_declined",
                 "direct_reminder_created",
                 "onboarding",
+                "address_preference_correction",
                 "profile_correction",
                 "profile_forget",
                 "profile_query",
@@ -4124,12 +4135,13 @@ class NinoRuntime:
 
         auto_consolidation = {"cold_memory_updates": [], "contradictions": []}
         if _should_auto_consolidate(percept_frame):
+            auto_min_confidence = 0.8 if extract_address_preference(text) is not None else 0.9
             auto_consolidation = self.consolidator.consolidate(
                 agent_id=agent_id,
                 episodes=[episode],
                 since=now - timedelta(seconds=1),
                 until=now + timedelta(seconds=1),
-                min_confidence=0.9,
+                min_confidence=auto_min_confidence,
             )
             ingest_episodes_graph(self.graph_store, agent_id, [episode])
             if auto_consolidation["cold_memory_updates"] or auto_consolidation["contradictions"]:

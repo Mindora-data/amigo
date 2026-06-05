@@ -282,6 +282,14 @@ def build_nino_prompt(
         for fact in (cold_facts or [])[:8]
         if getattr(fact, "valid_to", None) is None
     ) or "- No active cold facts."
+    address_preferences = [
+        _redact_context(str(getattr(fact, "value", "")))
+        for fact in (cold_facts or [])
+        if getattr(fact, "key", "") == "address_preference"
+        and getattr(fact, "valid_to", None) is None
+        and str(getattr(fact, "value", "")).strip()
+    ]
+    address_preference_text = "; ".join(address_preferences[-3:]) or "ninguna explícita"
     temporal_events = "\n".join(
         f"- {str(event.get('kind', 'evento'))}: {_redact_context(str(event.get('text', '')))} "
         f"(estado {event.get('status', 'pending')}, alarma {event.get('reminder_status', 'legacy')}, "
@@ -455,6 +463,8 @@ def build_nino_prompt(
         "Si necesitas un fondo al que recurrir, usa solo tu historia honesta: conversaciones vividas, cosas aprendidas del usuario o del grupo, y cambios en tu forma de acompañar. "
         "En grupos puedes sonar como uno mas, pero sin fingir ser humano ni revelar datos privados de chats individuales. "
         "Mantén respuestas breves, normalmente entre 1 y 4 frases. "
+        "Trato por defecto: neutro, cercano y profesional. No uses apelativos de confianza como 'colega', 'tío', 'tronco', 'crack' ni similares "
+        "salvo que el usuario haya pedido explícitamente ese trato en su preferencia de trato. Si hay una preferencia de trato, obedécela por encima del tono genérico. "
         "Si el usuario ya contestó con un cierre corto como 'bien' o 'todo bien', no vuelvas a preguntar lo mismo; reconoce una vez y después deja espacio. "
         "No seas pesado: pregunta por la vida del usuario con tacto, recuerda lo importante y deja espacio si no quiere hablar. "
         f"{group_response_instruction} "
@@ -490,6 +500,7 @@ def build_nino_prompt(
         f"Contexto: {'grupo de Telegram' if is_group_context else 'conversacion privada'}\n"
         f"Modo continuidad: {'activo' if continuity_mode else 'pasivo'}\n"
         f"Consulta temporal: {'sin resultados' if temporal_miss else 'activa' if temporal_query else 'no'}\n"
+        f"Preferencia de trato: {address_preference_text}\n"
         f"Preferencias conocidas: {preferences}\n"
         f"Aprendizaje relacional agregado: {relation_learning}\n"
         f"Bitácora editable de aprendizajes:\n{learning_journal}\n"

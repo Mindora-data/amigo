@@ -11,6 +11,20 @@ PREFERENCE_RE = re.compile(
     r"\b(prefiero|me gusta)\s+(?P<value>[^.?!\n\r,;]{1,160})",
     re.IGNORECASE,
 )
+ADDRESS_NEGATIVE_RE = re.compile(
+    r"\bno\s+me\s+(?:llames|digas|trates\s+de)\s+(?P<value>[^.?!\n\r,;]{1,80})",
+    re.IGNORECASE,
+)
+ADDRESS_POSITIVE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:trátame|tratame)\s+(?:de|como\s+)?(?P<value>[^.?!\n\r,;]{1,80})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:quiero|prefiero|me gusta)\s+que\s+me\s+(?:llames|trates)\s+(?:de|como\s+)?(?P<value>[^.?!\n\r,;]{1,80})",
+        re.IGNORECASE,
+    ),
+)
 FACT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "user_name",
@@ -95,6 +109,13 @@ def _clean_fact_value(value: str) -> str:
     return " ".join(words[:12])
 
 
+def _clean_address_value(value: str) -> str:
+    value = value.strip().strip("\"'“”‘’").lower()
+    value = re.sub(r"\s+", " ", value)
+    value = re.sub(r"\b(?:por favor|gracias)\b", "", value).strip()
+    return value[:80]
+
+
 def _preferences_conflict(old_value: str, new_value: str) -> bool:
     old = set(re.findall(r"[\wáéíóúñ]+", old_value.lower()))
     new = set(re.findall(r"[\wáéíóúñ]+", new_value.lower()))
@@ -104,7 +125,15 @@ def _preferences_conflict(old_value: str, new_value: str) -> bool:
     return bool(old & new) and old_value != new_value
 
 
-SINGLETON_FACT_KEYS = {"user_name", "user_role", "user_location", "user_study", "project_name", "current_project_focus"}
+SINGLETON_FACT_KEYS = {
+    "user_name",
+    "user_role",
+    "user_location",
+    "user_study",
+    "project_name",
+    "current_project_focus",
+    "address_preference",
+}
 
 
 def _facts_conflict(key: str, old_value: str, new_value: str) -> bool:
@@ -127,6 +156,22 @@ def _contextual_memory_facts(text: str) -> list[tuple[str, str]]:
     return facts
 
 
+def extract_address_preference(text: str) -> str | None:
+    negative = ADDRESS_NEGATIVE_RE.search(text)
+    if negative:
+        value = _clean_address_value(negative.group("value"))
+        if value:
+            return f"no usar '{value}' para dirigirse al usuario"
+    for pattern in ADDRESS_POSITIVE_PATTERNS:
+        match = pattern.search(text)
+        if not match:
+            continue
+        value = _clean_address_value(match.group("value"))
+        if value:
+            return f"dirigirse al usuario como '{value}'"
+    return None
+
+
 def _cold_fact_id(episode_id: str, key: str, value: str) -> str:
     if key == "preference":
         return f"cold::{episode_id}"
@@ -136,6 +181,9 @@ def _cold_fact_id(episode_id: str, key: str, value: str) -> str:
 
 def _extract_memory_facts(text: str) -> list[tuple[str, str]]:
     facts: list[tuple[str, str]] = []
+    address_preference = extract_address_preference(text)
+    if address_preference:
+        facts.append(("address_preference", address_preference))
     preference = PREFERENCE_RE.search(text)
     if preference:
         value = _clean_preference_value(preference.group("value"))
