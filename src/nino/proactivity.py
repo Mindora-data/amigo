@@ -521,6 +521,74 @@ def _top_global_concept(global_model: dict[str, Any]) -> str | None:
     return ranked[0][0] if ranked else None
 
 
+def _short_topic(value: Any, *, limit: int = 120) -> str:
+    return " ".join(str(value or "").strip().split())[:limit]
+
+
+def _dedupe_topic_items(items: list[dict[str, str]]) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in items:
+        topic = _short_topic(item.get("topic"))
+        if not topic:
+            continue
+        key = (str(item.get("kind", "")), topic.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({**item, "topic": topic})
+    return out
+
+
+def _learning_suggestion_topics(entries: list[dict[str, Any]]) -> list[dict[str, str]]:
+    suggestions: list[dict[str, str]] = []
+    for entry in entries:
+        if not isinstance(entry, dict) or str(entry.get("status", "active")) != "active":
+            continue
+        title = _short_topic(entry.get("title") or entry.get("lesson"))
+        if not title:
+            continue
+        tags = [str(tag).lower() for tag in entry.get("tags", []) if str(tag).strip()] if isinstance(entry.get("tags"), list) else []
+        if {"comportamiento", "amistad", "cultura", "vida"} & set(tags):
+            suggestions.append(
+                {
+                    "kind": "learned_lesson",
+                    "topic": title,
+                    "why": "aprendizaje activo aprobado por la relacion",
+                }
+            )
+    return suggestions
+
+
+def _curiosity_suggestion_topics(world_model: dict[str, Any], now: datetime) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    suggestions: list[dict[str, str]] = []
+    avoid: list[dict[str, str]] = []
+    for item in world_model.get("curiosity_topics", []):
+        if not isinstance(item, dict):
+            continue
+        topic = _short_topic(item.get("topic"))
+        if not topic:
+            continue
+        status = str(item.get("status", "open"))
+        evidence_count = int(item.get("evidence_count") or 0)
+        last_seen = _parse_dt(item.get("last_seen_at"))
+        too_recent = last_seen is not None and now - last_seen < timedelta(hours=24)
+        if status == "grounded" and evidence_count > 0:
+            suggestions.append(
+                {
+                    "kind": "grounded_curiosity",
+                    "topic": topic,
+                    "why": "tema con curiosidad previa y evidencia activa",
+                }
+            )
+        elif status == "open":
+            reason = "curiosidad abierta sin evidencia suficiente"
+            if too_recent:
+                reason = "tema demasiado reciente; esperar antes de retomarlo"
+            avoid.append({"kind": "ungrounded_curiosity", "topic": topic, "why": reason})
+    return suggestions, avoid
+
+
 def adaptive_proactivity_summary(
     relation_state: dict[str, Any],
     store: InMemoryProactiveCandidateStore | None,
@@ -528,6 +596,7 @@ def adaptive_proactivity_summary(
     now: datetime,
     *,
     world_model: dict[str, Any] | None = None,
+    learning_journal_entries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     learning = dict(relation_state.get("relationship_learning", {}))
     counts = {str(key): int(value) for key, value in dict(learning.get("counts", {})).items()}
@@ -580,12 +649,25 @@ def adaptive_proactivity_summary(
 
     score = _clamp01(score)
     suggested_topics: list[dict[str, str]] = []
+    avoid_topics: list[dict[str, str]] = []
     preference = _top_preference(relation_state)
     if preference:
         suggested_topics.append({"kind": "preference", "topic": preference, "why": "preferencia recurrente de la relacion"})
     open_question, too_recent = _latest_open_question(world_model or {}, now)
     if open_question is not None and not too_recent:
         suggested_topics.append({"kind": "open_question", "topic": str(open_question.get("text", ""))[:120], "why": "pregunta abierta pendiente"})
+    elif open_question is not None and too_recent:
+        avoid_topics.append(
+            {
+                "kind": "open_question",
+                "topic": _short_topic(open_question.get("text")),
+                "why": "pregunta abierta demasiado reciente; no insistir",
+            }
+        )
+    suggested_topics.extend(_learning_suggestion_topics(learning_journal_entries or []))
+    curiosity_suggestions, curiosity_avoid = _curiosity_suggestion_topics(world_model or {}, now)
+    suggested_topics.extend(curiosity_suggestions)
+    avoid_topics.extend(curiosity_avoid)
     return {
         "score": round(score, 4),
         "threshold": 0.55,
@@ -594,7 +676,8 @@ def adaptive_proactivity_summary(
         "counts": counts,
         "last_outcome": last_outcome,
         "recent_ignored_proactives": ignored_count,
-        "suggested_topics": suggested_topics[:5],
+        "suggested_topics": _dedupe_topic_items(suggested_topics)[:5],
+        "avoid_topics": _dedupe_topic_items(avoid_topics)[:5],
         "principle": "optimiza pertinencia y minima intrusion; si duda, calla",
     }
 

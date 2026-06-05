@@ -66,6 +66,33 @@ def test_adaptive_proactivity_blocks_after_recent_negative_feedback() -> None:
     assert "recent_negative_signal" in dashboard["proactivity"]["adaptive"]["reasons"]
 
 
+def test_adaptive_proactivity_surfaces_learned_topics_and_recent_topics_to_avoid() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime.now(timezone.utc)
+    runtime.add_learning_journal_entry(
+        "agent-p",
+        {
+            "title": "Preguntar por comics solo con evidencia",
+            "lesson": "Si no ha leído una obra, debe mostrar curiosidad sin opinar como si la conociera.",
+            "tags": ["cultura", "comportamiento"],
+        },
+        now=now,
+    )
+    state = runtime.load_or_init_state("agent-p")
+    state.world_model["curiosity_topics"] = [
+        {"topic": "Byrne", "status": "grounded", "evidence_count": 2, "last_seen_at": (now - timedelta(days=2)).isoformat()},
+        {"topic": "Watchmen", "status": "open", "evidence_count": 0, "last_seen_at": now.isoformat()},
+    ]
+    runtime.state_store.put(state)
+
+    dashboard = runtime.relationship_dashboard("agent-p")
+    adaptive = dashboard["proactivity"]["adaptive"]
+
+    assert any(item["kind"] == "learned_lesson" and "comics" in item["topic"].lower() for item in adaptive["suggested_topics"])
+    assert any(item["kind"] == "grounded_curiosity" and item["topic"] == "Byrne" for item in adaptive["suggested_topics"])
+    assert any(item["kind"] == "ungrounded_curiosity" and item["topic"] == "Watchmen" for item in adaptive["avoid_topics"])
+
+
 def test_proactivity_does_not_follow_salient_memory_after_only_minutes() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)

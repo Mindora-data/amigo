@@ -3228,6 +3228,7 @@ class NinoRuntime:
                     agent_id,
                     datetime.now(timezone.utc),
                     world_model=state.world_model,
+                    learning_journal_entries=[asdict(entry) for entry in journal_entries],
                 ),
             },
             "conversation": {
