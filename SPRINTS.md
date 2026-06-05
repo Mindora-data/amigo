@@ -1842,3 +1842,25 @@ Tests:
 
 - `/vision` sin adaptador informa vision no activa.
 - `/vision` con adaptador informa vision activa.
+
+## Sprint 72 - Continuidad temporal de imagenes Telegram
+
+Estado: hecho inicial.
+
+Objetivo: evitar que amigo parezca tener dos sistemas distintos cuando analiza una
+imagen por Telegram y el usuario pregunta por ella justo despues.
+
+Hechos:
+
+- El bot conserva en memoria de proceso la ultima descripcion textual valida de una
+  imagen por chat o grupo.
+- Si el siguiente mensaje referencia la imagen o foto reciente, el tick recibe ese
+  contexto textual temporal junto al mensaje del usuario.
+- No se guardan bytes ni imagen cruda; solo se reutiliza una descripcion generada
+  por vision, y no se inyecta contexto si el mensaje cambia de tema.
+
+Tests:
+
+- Tras enviar una foto privada y preguntar `la reconoces`, el backend recibe el
+  contexto de la ultima imagen.
+- Un mensaje posterior que no referencia la imagen no recibe ese contexto.

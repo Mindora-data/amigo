@@ -220,6 +220,42 @@ def test_linked_private_photo_without_memory_cue_is_not_saved(tmp_path) -> None:
     assert len(telegram.sent) == 1
 
 
+def test_linked_private_photo_context_is_available_on_followup_question(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    telegram.files["big"] = {"file_path": "photos/mesa.jpg"}
+    telegram.downloads["photos/mesa.jpg"] = b"fake-image"
+    backend = FakeBackend()
+    vision = FakeVision("Veo una mesa con un cuaderno rojo.")
+    bot = TelegramBotService(telegram, backend, links, vision_client=vision)
+
+    bot.handle_update(_photo_update(111, caption="¿qué ves?"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+    bot.handle_update(_update(111, "¿la reconoces?"), now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc))
+
+    assert len(backend.ticks) == 1
+    assert backend.ticks[0]["user_id"] == "ana"
+    assert "Contexto de la última imagen de Telegram" in str(backend.ticks[0]["text"])
+    assert "Veo una mesa con un cuaderno rojo." in str(backend.ticks[0]["text"])
+    assert "Mensaje del usuario: ¿la reconoces?" in str(backend.ticks[0]["text"])
+
+
+def test_private_text_without_image_reference_does_not_receive_image_context(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    telegram.files["big"] = {"file_path": "photos/mesa.jpg"}
+    telegram.downloads["photos/mesa.jpg"] = b"fake-image"
+    backend = FakeBackend()
+    vision = FakeVision("Veo una mesa con un cuaderno rojo.")
+    bot = TelegramBotService(telegram, backend, links, vision_client=vision)
+
+    bot.handle_update(_photo_update(111, caption="¿qué ves?"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+    bot.handle_update(_update(111, "cambiando de tema, hola"), now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc))
+
+    assert backend.ticks[-1]["text"] == "cambiando de tema, hola"
+
+
 def test_linked_private_photo_without_vision_is_honest(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     assert links.link_with_code(111, links.create_code("Ana"))

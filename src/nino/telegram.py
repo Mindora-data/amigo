@@ -614,6 +614,7 @@ class TelegramBotService:
         self._group_last_message_at: dict[str, datetime] = {}
         self._group_messages_since_ambient_reply: dict[str, int] = {}
         self._group_social_scores: dict[str, int] = {}
+        self._last_image_descriptions: dict[str, str] = {}
 
     def _bot_username(self) -> str | None:
         if self.bot_username is None:
@@ -813,6 +814,41 @@ class TelegramBotService:
 
     def _valid_image_description(self, text: str) -> bool:
         return bool(text.strip()) and not text.startswith(("Puedo recibir", "La imagen es demasiado grande", "He recibido"))
+
+    def _remember_last_image_description(self, scope: int | str, description: str) -> None:
+        if self._valid_image_description(description):
+            self._last_image_descriptions[str(scope)] = description.strip()
+
+    def _text_references_recent_image(self, text: str) -> bool:
+        lowered = text.casefold()
+        return any(
+            marker in lowered
+            for marker in (
+                "imagen",
+                "foto",
+                "fotografía",
+                "fotografia",
+                "lo reconoces",
+                "la reconoces",
+                "qué era",
+                "que era",
+                "qué ves",
+                "que ves",
+                "lo que viste",
+                "la que te mandé",
+                "la que te mande",
+            )
+        )
+
+    def _with_recent_image_context(self, scope: int | str, text: str) -> str:
+        description = self._last_image_descriptions.get(str(scope), "").strip()
+        if not description or not self._text_references_recent_image(text):
+            return text
+        return (
+            "Contexto de la última imagen de Telegram analizada en esta conversación "
+            f"(descripción temporal, no imagen guardada): {description}\n\n"
+            f"Mensaje del usuario: {text}"
+        )
 
     def _private_group_post_text(self, text: str) -> str | None:
         normalized = " ".join(text.strip().split())
@@ -1023,7 +1059,7 @@ class TelegramBotService:
             return
         if self._record_private_social_correction(chat_id, text, current_time):
             return
-        reply = self.backend.tick(user_id, text, current_time)
+        reply = self.backend.tick(user_id, self._with_recent_image_context(chat_id, text), current_time)
         if reply:
             self.telegram.send_message(chat_id, reply)
 
@@ -1047,6 +1083,7 @@ class TelegramBotService:
             if reply:
                 self._send_group_reply(chat_id, self._format_group_reply(message, reply, self._should_mention_sender(chat_id, now)))
                 if self._valid_image_description(reply):
+                    self._remember_last_image_description(chat_id, reply)
                     self.backend.observe(self._group_user_id(chat_id), f"Imagen vista en Telegram: {reply}", now, intent="image_observation")
             return
         user_id = self.links.user_for_chat(chat_id)
@@ -1060,6 +1097,7 @@ class TelegramBotService:
         if reply:
             self.telegram.send_message(chat_id, reply)
             if self._valid_image_description(reply):
+                self._remember_last_image_description(chat_id, reply)
                 self.backend.observe(user_id, f"Imagen vista en Telegram: {reply}", now, intent="image_observation")
             if caption and self._image_memory_requested(caption) and self._valid_image_description(reply):
                 memory_text = f"Recuerda esta imagen por su descripcion, no la imagen cruda: {reply}"
@@ -1108,7 +1146,7 @@ class TelegramBotService:
             )
             self.backend.observe(target_user_id, context_text, now)
             return
-        reply = self.backend.tick(target_user_id, context_text, now)
+        reply = self.backend.tick(target_user_id, self._with_recent_image_context(chat_id, context_text), now)
         if reply:
             text_to_send = self._format_group_reply(message, reply, reply_should_mention)
             self._send_group_reply(chat_id, text_to_send)
