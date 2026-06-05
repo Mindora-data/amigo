@@ -15,6 +15,8 @@ from typing import Any, Protocol
 from urllib import error, parse, request
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .llm import VisionLLMClient, build_configured_vision_llm
+
 
 AGENT_ID = "nino"
 GROUP_AMBIENT_COOLDOWN_SECONDS = 600
@@ -293,11 +295,19 @@ class TelegramAPI(Protocol):
     def get_me(self) -> dict[str, Any]:
         ...
 
+    def get_file(self, file_id: str) -> dict[str, Any]:
+        ...
+
+    def download_file(self, file_path: str) -> bytes:
+        ...
+
 
 class HTTPTelegramAPI:
     def __init__(self, token: str, base_url: str = "https://api.telegram.org") -> None:
         if not token.strip():
             raise RuntimeError("missing_telegram_bot_token")
+        self.token = token
+        self.root_url = base_url.rstrip("/")
         self.base_url = f"{base_url.rstrip('/')}/bot{token}"
 
     def _call(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -325,6 +335,14 @@ class HTTPTelegramAPI:
 
     def get_me(self) -> dict[str, Any]:
         return dict(self._call("getMe", {}).get("result", {}))
+
+    def get_file(self, file_id: str) -> dict[str, Any]:
+        return dict(self._call("getFile", {"file_id": file_id}).get("result", {}))
+
+    def download_file(self, file_path: str) -> bytes:
+        req = request.Request(f"{self.root_url}/file/bot{self.token}/{file_path.lstrip('/')}", method="GET")
+        with request.urlopen(req, timeout=35) as response:
+            return response.read()
 
 
 @dataclass
@@ -419,6 +437,7 @@ class TelegramBotService:
         local_tz: ZoneInfo | None = None,
         group_reply_delay_seconds: float = 0.0,
         sleeper: Any = time.sleep,
+        vision_client: VisionLLMClient | None = None,
     ) -> None:
         self.telegram = telegram
         self.backend = backend
@@ -428,6 +447,7 @@ class TelegramBotService:
         self.local_tz = local_tz or telegram_local_timezone()
         self.group_reply_delay_seconds = max(0.0, float(group_reply_delay_seconds))
         self.sleeper = sleeper
+        self.vision_client = vision_client
         self.offset: int | None = None
         self._group_last_ambient_reply: dict[str, datetime] = {}
         self._group_last_message_at: dict[str, datetime] = {}
@@ -591,15 +611,53 @@ class TelegramBotService:
             self._group_social_scores[key] = self._group_social_scores.get(key, 0) + 1
         return outcome
 
+    def _image_file_id_and_mime(self, message: dict[str, Any]) -> tuple[str, str] | None:
+        photos = message.get("photo")
+        if isinstance(photos, list) and photos:
+            candidates = [item for item in photos if isinstance(item, dict) and item.get("file_id")]
+            if candidates:
+                best = max(candidates, key=lambda item: int(item.get("file_size") or 0))
+                return str(best["file_id"]), "image/jpeg"
+        document = message.get("document") if isinstance(message.get("document"), dict) else {}
+        mime_type = str(document.get("mime_type") or "")
+        if mime_type.startswith("image/") and document.get("file_id"):
+            return str(document["file_id"]), mime_type
+        return None
+
+    def _describe_telegram_image(self, message: dict[str, Any]) -> str:
+        image = self._image_file_id_and_mime(message)
+        if image is None:
+            return ""
+        if self.vision_client is None:
+            return "Puedo recibir la imagen, pero ahora mismo no tengo visión activa para interpretarla."
+        file_id, mime_type = image
+        try:
+            file_info = self.telegram.get_file(file_id)
+            file_path = str(file_info.get("file_path") or "").strip()
+            if not file_path:
+                return "He recibido la imagen, pero Telegram no me ha dado el archivo para poder verla."
+            image_bytes = self.telegram.download_file(file_path)
+            caption = str(message.get("caption") or "").strip()
+            description = self.vision_client.describe_image(image_bytes=image_bytes, mime_type=mime_type, caption=caption)
+        except Exception:
+            return "He recibido la imagen, pero no he podido analizarla ahora mismo."
+        if not description.strip():
+            return "He recibido la imagen, pero no he conseguido sacar una descripción útil."
+        return description.strip()
+
     def handle_update(self, update: dict[str, Any], now: datetime | None = None) -> None:
         self.offset = int(update.get("update_id", 0)) + 1
         message = update.get("message") if isinstance(update.get("message"), dict) else {}
         chat = message.get("chat") if isinstance(message.get("chat"), dict) else {}
         chat_id = chat.get("id")
         text = str(message.get("text") or "").strip()
-        if chat_id is None or not text:
+        image = self._image_file_id_and_mime(message)
+        if chat_id is None or (not text and image is None):
             return
         current_time = now or datetime.fromtimestamp(int(message.get("date") or time.time()), tz=timezone.utc).astimezone(self.local_tz)
+        if image is not None:
+            self._handle_image_message(message, chat, chat_id, text, current_time)
+            return
         if self._is_group_chat(chat):
             self._handle_group_message(message, chat_id, text, current_time)
             return
@@ -618,6 +676,37 @@ class TelegramBotService:
             )
             return
         reply = self.backend.tick(user_id, text, current_time)
+        if reply:
+            self.telegram.send_message(chat_id, reply)
+
+    def _handle_image_message(self, message: dict[str, Any], chat: dict[str, Any], chat_id: int | str, text: str, now: datetime) -> None:
+        caption = str(message.get("caption") or text or "").strip()
+        if self._is_group_chat(chat):
+            directed = self._is_directed_at_bot(message, caption)
+            self._record_group_message(chat_id, now)
+            if not directed:
+                self.links.record_social_decision(
+                    chat_id=chat_id,
+                    message_id=message.get("message_id"),
+                    sender_id=self._sender_id(message),
+                    text="[imagen]",
+                    decision="observe",
+                    reason="group_image_not_directed",
+                    now=now,
+                )
+                return
+            reply = self._describe_telegram_image(message)
+            if reply:
+                self._send_group_reply(chat_id, self._format_group_reply(message, reply, self._should_mention_sender(chat_id, now)))
+            return
+        user_id = self.links.user_for_chat(chat_id)
+        if user_id is None:
+            self.telegram.send_message(
+                chat_id,
+                "Soy amigo, un asistente con memoria, no una persona. Para proteger tu privacidad necesito vincular este chat antes de ver imágenes. En tu Mac genera un código y envíame: /link CODIGO",
+            )
+            return
+        reply = self._describe_telegram_image(message)
         if reply:
             self.telegram.send_message(chat_id, reply)
 
@@ -719,6 +808,7 @@ def build_service(db_path: Path, base_url: str) -> TelegramBotService:
         BackendClient(base_url, password=password),
         TelegramLinkStore(db_path),
         group_reply_delay_seconds=delay,
+        vision_client=build_configured_vision_llm(),
     )
 
 

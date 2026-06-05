@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 import json
 import os
@@ -25,6 +26,11 @@ class LLMClient(Protocol):
         ...
 
 
+class VisionLLMClient(Protocol):
+    def describe_image(self, *, image_bytes: bytes, mime_type: str, caption: str = "") -> str:
+        ...
+
+
 @dataclass(slots=True)
 class ClaudeClient:
     api_key: str
@@ -41,6 +47,56 @@ class ClaudeClient:
             "max_tokens": self.max_tokens,
             "system": prompt["system"],
             "messages": [{"role": "user", "content": prompt["user"]}],
+        }
+        req = request.Request(
+            self.base_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "content-type": "application/json",
+                "x-api-key": self.api_key,
+                "anthropic-version": self.anthropic_version,
+            },
+            method="POST",
+        )
+        with request.urlopen(req, timeout=self.timeout_seconds) as res:
+            data = json.loads(res.read().decode("utf-8"))
+        text_blocks = [
+            block.get("text", "")
+            for block in data.get("content", [])
+            if block.get("type") == "text"
+        ]
+        return "\n".join(block for block in text_blocks if block).strip()
+
+    def describe_image(self, *, image_bytes: bytes, mime_type: str, caption: str = "") -> str:
+        media_type = mime_type if mime_type in {"image/jpeg", "image/png", "image/gif", "image/webp"} else "image/jpeg"
+        user_text = (
+            "Describe esta imagen de forma breve, natural y prudente para una conversacion de Telegram. "
+            "Si contiene texto visible, resumelo. No identifiques personas ni infieras datos sensibles "
+            "como salud, edad, origen, emociones o identidad. No digas que has guardado la imagen. "
+            "Si el usuario pidio algo concreto en el pie de foto, responde a eso con honestidad."
+        )
+        if caption.strip():
+            user_text += f"\n\nPie de foto o mensaje del usuario: {caption.strip()}"
+        payload = {
+            "model": self.model,
+            "max_tokens": min(self.max_tokens, 320),
+            "system": AMIGO_ETHICS,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": base64.b64encode(image_bytes).decode("ascii"),
+                            },
+                        },
+                        {"type": "text", "text": user_text},
+                    ],
+                }
+            ],
         }
         req = request.Request(
             self.base_url,
@@ -110,6 +166,18 @@ def build_configured_llm() -> LLMClient | None:
             base_url=status["base_url"],
             timeout_seconds=status["timeout_seconds"],
         )
+    return ClaudeClient(
+        api_key=_anthropic_api_key() or "",
+        model=status["model"],
+        max_tokens=status["max_tokens"],
+        timeout_seconds=status["timeout_seconds"],
+    )
+
+
+def build_configured_vision_llm() -> VisionLLMClient | None:
+    status = llm_config_status()
+    if not status["enabled"] or status["provider"] != "claude":
+        return None
     return ClaudeClient(
         api_key=_anthropic_api_key() or "",
         model=status["model"],

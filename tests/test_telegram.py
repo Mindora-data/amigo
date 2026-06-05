@@ -12,6 +12,8 @@ class FakeTelegram:
     def __init__(self) -> None:
         self.sent: list[dict[str, object]] = []
         self.updates: list[dict[str, object]] = []
+        self.files: dict[str, dict[str, object]] = {}
+        self.downloads: dict[str, bytes] = {}
 
     def get_updates(self, offset: int | None, timeout: int) -> list[dict[str, object]]:
         return self.updates
@@ -23,6 +25,12 @@ class FakeTelegram:
 
     def get_me(self) -> dict[str, object]:
         return {"id": 999, "is_bot": True, "username": "amigo_test_bot"}
+
+    def get_file(self, file_id: str) -> dict[str, object]:
+        return self.files[file_id]
+
+    def download_file(self, file_path: str) -> bytes:
+        return self.downloads[file_path]
 
 
 class TimeoutTelegram(FakeTelegram):
@@ -65,6 +73,16 @@ class FakeBackend:
         return self.public_contexts.get(user_id, "")
 
 
+class FakeVision:
+    def __init__(self, text: str = "Veo una imagen de prueba.") -> None:
+        self.text = text
+        self.calls: list[dict[str, object]] = []
+
+    def describe_image(self, *, image_bytes: bytes, mime_type: str, caption: str = "") -> str:
+        self.calls.append({"image_bytes": image_bytes, "mime_type": mime_type, "caption": caption})
+        return self.text
+
+
 def _update(chat_id: int, text: str, update_id: int = 1) -> dict[str, object]:
     return {"update_id": update_id, "message": {"chat": {"id": chat_id}, "text": text, "date": 1_779_977_600}}
 
@@ -84,6 +102,19 @@ def _group_update(chat_id: int, text: str, user_id: int = 10, update_id: int = 1
     }
 
 
+def _photo_update(chat_id: int, *, caption: str = "", update_id: int = 1, group: bool = False) -> dict[str, object]:
+    message: dict[str, object] = {
+        "chat": {"id": chat_id, **({"type": "supergroup", "title": "Grupo"} if group else {})},
+        "photo": [{"file_id": "small", "file_size": 10}, {"file_id": "big", "file_size": 20}],
+        "date": 1_779_977_600,
+    }
+    if caption:
+        message["caption"] = caption
+    if group:
+        message["from"] = {"id": 10, "is_bot": False, "first_name": "Pablo", "username": "pablo"}
+    return {"update_id": update_id, "message": message}
+
+
 def test_linked_chat_resolves_user_and_replies(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     code = links.create_code("Ana")
@@ -97,6 +128,51 @@ def test_linked_chat_resolves_user_and_replies(tmp_path) -> None:
     assert backend.ticks == [{"user_id": "ana", "text": "hola", "now": "2026-05-28T10:00:00+00:00"}]
     assert telegram.sent[-1]["chat_id"] == "111"
     assert "respuesta para ana" in str(telegram.sent[-1]["text"])
+
+
+def test_linked_private_photo_is_described_without_backend_memory(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    telegram.files["big"] = {"file_path": "photos/big.jpg"}
+    telegram.downloads["photos/big.jpg"] = b"fake-image"
+    backend = FakeBackend()
+    vision = FakeVision("Veo una foto con una libreta y un portatil.")
+    bot = TelegramBotService(telegram, backend, links, vision_client=vision)
+
+    bot.handle_update(_photo_update(111, caption="¿qué ves?"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert backend.ticks == []
+    assert vision.calls == [{"image_bytes": b"fake-image", "mime_type": "image/jpeg", "caption": "¿qué ves?"}]
+    assert telegram.sent[-1]["chat_id"] == "111"
+    assert "libreta" in str(telegram.sent[-1]["text"])
+
+
+def test_linked_private_photo_without_vision_is_honest(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_photo_update(111), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert backend.ticks == []
+    assert "no tengo visión activa" in str(telegram.sent[-1]["text"])
+
+
+def test_unlinked_private_photo_requires_link_before_vision(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    vision = FakeVision()
+    bot = TelegramBotService(telegram, backend, links, vision_client=vision)
+
+    bot.handle_update(_photo_update(222), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert backend.ticks == []
+    assert vision.calls == []
+    assert "vincular este chat antes de ver imágenes" in str(telegram.sent[-1]["text"])
 
 
 def test_telegram_message_date_is_passed_to_backend_in_local_timezone(tmp_path) -> None:
@@ -256,6 +332,34 @@ def test_group_message_not_directed_to_bot_is_observed_without_reply(tmp_path) -
     assert backend.ticks == []
     assert backend.observations == [{"user_id": "telegram-group-100", "text": "mensaje del grupo", "now": "2026-05-28T16:13:20+02:00"}]
     assert telegram.sent == []
+
+
+def test_group_photo_not_directed_to_bot_is_not_described(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    vision = FakeVision()
+    bot = TelegramBotService(telegram, backend, links, vision_client=vision)
+
+    bot.handle_update(_photo_update(-100, group=True), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert vision.calls == []
+    assert telegram.sent == []
+
+
+def test_group_photo_directed_to_bot_is_described(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    telegram.files["big"] = {"file_path": "photos/group.jpg"}
+    telegram.downloads["photos/group.jpg"] = b"group-image"
+    backend = FakeBackend()
+    vision = FakeVision("Veo una imagen compartida en el grupo.")
+    bot = TelegramBotService(telegram, backend, links, vision_client=vision)
+
+    bot.handle_update(_photo_update(-100, caption="@amigo_test_bot mira esto", group=True), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert vision.calls == [{"image_bytes": b"group-image", "mime_type": "image/jpeg", "caption": "@amigo_test_bot mira esto"}]
+    assert "imagen compartida" in str(telegram.sent[-1]["text"])
 
 
 def test_group_ambient_question_can_reply_without_private_memory(tmp_path) -> None:

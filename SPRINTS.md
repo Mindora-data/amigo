@@ -1760,3 +1760,34 @@ Tests:
 
 - El endpoint de semilla crea fuentes con temas cerrados `mercados`, `inversion`,
   `etf` y `cripto`.
+
+## Sprint 68 - Vision de imagenes en Telegram
+
+Estado: hecho inicial.
+
+Objetivo: que amigo pueda recibir fotos o imagenes por Telegram, comentarlas si
+hay un adaptador de vision disponible y reconocer honestamente el limite si no lo
+hay.
+
+Hechos:
+
+- Telegram detecta `photo` y documentos `image/*`.
+- El cliente HTTP de Telegram puede pedir `getFile` y descargar el archivo para
+  analisis temporal.
+- Claude implementa `describe_image` con bloque de imagen y reglas eticas:
+  prudencia, no identificar personas, no inferir datos sensibles y no afirmar que
+  la imagen queda guardada.
+- DeepSeek queda sin vision en este sprint; si es el proveedor activo, amigo dice
+  que puede recibir la imagen pero no tiene vision activa.
+- Las imagenes no pasan por `tick` ni se guardan en memoria automaticamente.
+- En grupos, las imagenes solo se comentan si van dirigidas al bot; si no, se
+  observan como evento social sin descripcion.
+
+Tests:
+
+- Foto privada vinculada se descarga, se describe con mock de vision y no entra en
+  memoria.
+- Foto privada sin vision devuelve limite honesto.
+- Foto privada no vinculada exige vincular antes de analizar.
+- Foto de grupo no dirigida no se describe.
+- Foto de grupo dirigida al bot se describe.
