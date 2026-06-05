@@ -1563,6 +1563,51 @@ def _theme_mastery_summary(entries: list[LearningJournalEntry], stances: dict[st
         "privacy": "private_theme_mastery_from_learning_journal",
     }
 
+
+def _personal_treatment_summary(
+    *,
+    facts: list[MemoryFact],
+    journal_entries: list[LearningJournalEntry],
+    style: dict[str, float],
+) -> dict[str, Any]:
+    address_preferences = [
+        {
+            "fact_id": fact.fact_id,
+            "value": fact.value,
+            "confidence": round(float(fact.confidence), 4),
+            "valid_from": fact.valid_from.isoformat(),
+        }
+        for fact in facts
+        if fact.valid_to is None and fact.key == "address_preference"
+    ]
+    treatment_terms = re.compile(
+        r"\b(?:trato|tratar|trates|llam|nombre|colega|t[ií]o|tronco|crack|tono|pregunt|insist|responde)\b",
+        re.IGNORECASE,
+    )
+    recent_tone_lessons = [
+        {
+            "entry_id": entry.entry_id,
+            "title": entry.title,
+            "lesson": entry.lesson,
+            "status": entry.status,
+            "source": entry.source,
+            "tags": list(entry.tags),
+            "updated_at": entry.updated_at.isoformat(),
+        }
+        for entry in journal_entries
+        if entry.status == "active" and treatment_terms.search(f"{entry.title} {entry.lesson} {' '.join(entry.tags)}")
+    ][:8]
+    return {
+        "default_rule": "trato_neutro_hasta_preferencia_explicita",
+        "blocked_familiar_terms_by_default": ["colega", "tio", "tronco", "crack"],
+        "address_preferences": address_preferences,
+        "recent_tone_lessons": recent_tone_lessons,
+        "response_style": {key: round(float(value), 4) for key, value in style.items()},
+        "status": "learned_preference" if address_preferences or recent_tone_lessons else "neutral_default",
+        "privacy": "private_user_treatment_no_raw_conversation",
+    }
+
+
 def _learning_priorities(
     entries: list[LearningJournalEntry],
     curiosity: dict[str, Any],
@@ -3109,6 +3154,12 @@ class NinoRuntime:
         theme_mastery = _theme_mastery_summary(journal_entries, stances)
         learning_priorities = _learning_priorities(journal_entries, curiosity_summary, theme_mastery)
         contradiction_watch = _learning_contradiction_watch(journal_entries)
+        cold_facts = self.cold_store.list_for_agent(agent_id)
+        personal_treatment = _personal_treatment_summary(
+            facts=cold_facts,
+            journal_entries=journal_entries,
+            style=style,
+        )
         growth_compass = _growth_compass(
             maturity_profile=maturity_profile,
             curiosity=curiosity_summary,
@@ -3145,6 +3196,7 @@ class NinoRuntime:
                 "updated_at": (_active_thread_context(relation) or {}).get("updated_at"),
             },
             "response_style": {key: round(float(value), 4) for key, value in style.items()},
+            "personal_treatment": personal_treatment,
             "memory": {
                 "episode_count": metrics["episode_count"],
                 "cold_memory_count": metrics["cold_memory_count"],

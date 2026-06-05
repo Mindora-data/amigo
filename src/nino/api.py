@@ -1970,6 +1970,7 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel metric"><span>Detectados</span><strong id="journalDraft">0</strong></div>
       <div class="panel wide"><h2>Usuarios y uso</h2><pre id="userOverview">{}</pre></div>
       <div class="panel"><h2>Estilo</h2><pre id="style">{}</pre></div>
+      <div class="panel"><h2>Trato personal</h2><pre id="personalTreatment">{}</pre></div>
       <div class="panel"><h2>Memoria</h2><pre id="memory">{}</pre></div>
       <div class="panel"><h2>Proactividad</h2><pre id="proactivity">{}</pre></div>
       <div class="panel"><h2>Madurez relacional</h2><pre id="maturityProfile">{}</pre></div>
@@ -2177,6 +2178,7 @@ DASHBOARD_HTML = """<!doctype html>
       $("journalDraft").textContent = dash.learning_journal?.draft_count ?? 0;
       print("userOverview", out.users || {});
       print("style", dash.response_style || {});
+      print("personalTreatment", dash.personal_treatment || {});
       print("memory", dash.memory || {});
       print("proactivity", dash.proactivity || {});
       print("maturityProfile", dash.maturity_profile || {});

@@ -120,6 +120,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"cultura" in dashboard_body
     assert b"Opiniones derivadas" in dashboard_body
     assert b"Telegram social fiable" in dashboard_body
+    assert b"Trato personal" in dashboard_body
+    assert b"personalTreatment" in dashboard_body
     assert b"/learning-stances/" in dashboard_body
     assert b"Madurez relacional" in dashboard_body
     assert b"/internal/cycle" in body
@@ -1672,6 +1674,23 @@ def test_relationship_dashboard_learns_from_hits_mistakes_and_limits(tmp_path) -
     assert dashboard["privacy"]["raw_conversation_included"] is False
     assert "no era eso" not in json.dumps(dashboard)
     assert state["relation_state"]["relationship_learning"]["last_outcome"] == "stop"
+
+
+def test_relationship_dashboard_exposes_personal_treatment_preferences(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "no me llames colega"})
+    dashboard = _request(app, "GET", "/agents/api-agent/relationship-dashboard")["dashboard"]
+
+    treatment = dashboard["personal_treatment"]
+    assert treatment["status"] == "learned_preference"
+    assert treatment["default_rule"] == "trato_neutro_hasta_preferencia_explicita"
+    assert "colega" in treatment["blocked_familiar_terms_by_default"]
+    assert any(
+        item["value"] == "no usar 'colega' para dirigirse al usuario"
+        for item in treatment["address_preferences"]
+    )
+    assert treatment["privacy"] == "private_user_treatment_no_raw_conversation"
 
 
 def test_group_maturity_is_honest_and_group_scoped(tmp_path) -> None:

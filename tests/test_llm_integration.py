@@ -54,7 +54,7 @@ def test_llm_prompt_uses_learned_address_preference_and_defaults_to_neutral_trea
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
 
     runtime.tick("agent-llm", {"intent": "chat", "text": "no me llames colega"})
-    runtime.tick("agent-llm", {"intent": "chat", "text": "hola"})
+    runtime.tick("agent-llm", {"intent": "question", "text": "qué recuerdas de cómo quiero que me trates?"})
 
     prompt = llm.prompts[-1]["user"]
     system = llm.prompts[-1]["system"]
