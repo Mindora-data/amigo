@@ -1977,7 +1977,7 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="panel"><h2>Madurez relacional</h2><pre id="maturityProfile">{}</pre></div>
       <div class="panel"><h2>Historial de madurez</h2><pre id="maturityHistory">[]</pre></div>
       <div class="panel"><h2>Revisión aprendizajes</h2><pre id="learningReview">{}</pre></div>
-      <div class="panel wide"><h2>Cola de revisión</h2><pre id="reviewQueue">[]</pre></div>
+      <div class="panel wide"><h2>Cola de revisión</h2><div id="reviewQueue" class="journal-list"></div></div>
       <div class="panel"><h2>Digest aprendizaje</h2><pre id="learningDigest">{}</pre></div>
       <div class="panel"><h2>Curiosidad</h2><pre id="curiosity">{}</pre></div>
       <div class="panel"><h2>Reflexiones de madurez</h2><pre id="maturityReflections">[]</pre></div>
@@ -2159,6 +2159,64 @@ DASHBOARD_HTML = """<!doctype html>
         return wrap;
       }));
     }
+    function renderReviewQueue(items) {
+      const queue = items || [];
+      if (!queue.length) {
+        const empty = document.createElement("div");
+        empty.className = "muted";
+        empty.textContent = "No hay aprendizajes detectados pendientes.";
+        $("reviewQueue").replaceChildren(empty);
+        return;
+      }
+      $("reviewQueue").replaceChildren(...queue.map((item) => {
+        const wrap = document.createElement("div");
+        wrap.className = "journal-entry";
+        const row = document.createElement("div");
+        row.className = "journal-row";
+        const title = document.createElement("strong");
+        title.textContent = `${item.title || "Aprendizaje"} · prioridad ${item.priority || 0}`;
+        const theme = document.createElement("div");
+        theme.className = "muted";
+        theme.textContent = `${item.theme || "otros"} · ${item.recommended_action || "revisar"}`;
+        const activate = document.createElement("button");
+        activate.textContent = "Activar";
+        const archive = document.createElement("button");
+        archive.textContent = "Archivar";
+        archive.className = "secondary";
+        const open = document.createElement("button");
+        open.textContent = "Editar";
+        open.className = "secondary";
+        const reasons = document.createElement("div");
+        reasons.className = "muted";
+        reasons.textContent = (item.reasons || []).join(" · ") || "revisar si debe moldear a amigo";
+        activate.onclick = async () => {
+          await requestJson(currentAgentPath(`/learning-journal/${encodeURIComponent(item.entry_id)}`), {
+            method: "PATCH",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({status: "active"})
+          });
+          await loadDashboard();
+        };
+        archive.onclick = async () => {
+          await requestJson(currentAgentPath(`/learning-journal/${encodeURIComponent(item.entry_id)}`), {
+            method: "PATCH",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({status: "archived"})
+          });
+          await loadDashboard();
+        };
+        open.onclick = () => {
+          activeJournalTheme = "detectados";
+          activeJournalQuery = item.title || "";
+          $("journalSearch").value = activeJournalQuery;
+          renderJournal(lastJournal);
+          $("journalList").scrollIntoView({behavior: "smooth", block: "start"});
+        };
+        row.append(title, theme, activate, archive, open);
+        wrap.append(row, reasons);
+        return wrap;
+      }));
+    }
     async function loadDashboard() {
       const user = ($("userId").value || "mindora").trim();
       const agent = ($("agentId").value || "nino").trim();
@@ -2187,7 +2245,7 @@ DASHBOARD_HTML = """<!doctype html>
       print("maturityProfile", dash.maturity_profile || {});
       print("maturityHistory", dash.maturity_history || []);
       print("learningReview", out.learning_review || dash.learning_review || {});
-      print("reviewQueue", out.learning_review?.review_queue || dash.learning_review?.review_queue || []);
+      renderReviewQueue(out.learning_review?.review_queue || dash.learning_review?.review_queue || []);
       print("learningDigest", out.learning_digest || dash.learning_digest || {});
       print("curiosity", out.curiosity_topics?.curiosity || dash.conversation?.curiosity || dash.conversation?.curiosity_topics || []);
       print("maturityReflections", out.curiosity_topics?.maturity_reflections || dash.maturity_reflections || []);

@@ -126,6 +126,9 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"behaviorContract" in dashboard_body
     assert "Cola de revisión".encode("utf-8") in dashboard_body
     assert b"reviewQueue" in dashboard_body
+    assert b"renderReviewQueue" in dashboard_body
+    assert b"Activar" in dashboard_body
+    assert b"Archivar" in dashboard_body
     assert b"/learning-stances/" in dashboard_body
     assert b"Madurez relacional" in dashboard_body
     assert b"/internal/cycle" in body
