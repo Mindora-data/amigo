@@ -505,6 +505,38 @@ def test_private_request_to_post_in_group_sends_real_group_message(tmp_path) -> 
     assert backend.ticks == []
 
 
+def test_private_apology_request_can_use_recent_group_history(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    links.record_social_decision(
+        chat_id=-1001391487472,
+        message_id=10,
+        sender_id=20,
+        text="mensaje anterior del grupo",
+        decision="reply",
+        reason="directed",
+        now=datetime(2026, 5, 28, 9, tzinfo=timezone.utc),
+    )
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(
+        _update(111, "discúlpate, no te has leído el cómic", update_id=2),
+        now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc),
+    )
+
+    assert telegram.sent[0] == {
+        "chat_id": "-1001391487472",
+        "text": "No debería haber hablado como si supiera más de lo que sabía. Perdón por la confusión.",
+    }
+    assert telegram.sent[-1] == {
+        "chat_id": "111",
+        "text": "He escrito en grupo -1001391487472: No debería haber hablado como si supiera más de lo que sabía. Perdón por la confusión.",
+    }
+    assert backend.ticks == []
+
+
 def test_private_request_to_post_in_group_without_known_group_does_not_claim_success(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     assert links.link_with_code(111, links.create_code("Ana"))
@@ -550,6 +582,27 @@ def test_private_groups_command_lists_known_groups(tmp_path) -> None:
     bot.handle_update(_update(111, "/grupos", update_id=2), now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc))
 
     assert "Grupo (-100)" in str(telegram.sent[-1]["text"])
+
+
+def test_private_groups_command_lists_group_from_recent_history(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    links.record_social_decision(
+        chat_id=-1001391487472,
+        message_id=10,
+        sender_id=20,
+        text="mensaje anterior del grupo",
+        decision="reply",
+        reason="directed",
+        now=datetime(2026, 5, 28, 9, tzinfo=timezone.utc),
+    )
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_update(111, "/grupos", update_id=2), now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc))
+
+    assert "grupo -1001391487472" in str(telegram.sent[-1]["text"])
 
 
 def test_group_ambient_question_can_reply_without_private_memory(tmp_path) -> None:

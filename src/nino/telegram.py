@@ -301,9 +301,30 @@ class TelegramLinkStore:
         rows = self.conn.execute("SELECT chat_id, title, last_seen_at FROM telegram_group ORDER BY last_seen_at DESC").fetchall()
         return [{"chat_id": str(row["chat_id"]), "title": str(row["title"]), "last_seen_at": str(row["last_seen_at"])} for row in rows]
 
+    def known_groups(self) -> list[dict[str, str]]:
+        groups = self.groups()
+        if groups:
+            return groups
+        rows = self.conn.execute(
+            """
+            SELECT chat_id, MAX(created_at) AS last_seen_at
+            FROM telegram_social_decision
+            WHERE CAST(chat_id AS TEXT) LIKE '-%'
+            GROUP BY chat_id
+            ORDER BY last_seen_at DESC
+            LIMIT 10
+            """
+        ).fetchall()
+        return [
+            {"chat_id": str(row["chat_id"]), "title": f"grupo {row['chat_id']}", "last_seen_at": str(row["last_seen_at"])}
+            for row in rows
+        ]
+
     def latest_group(self) -> dict[str, str] | None:
-        rows = self.groups()
-        return rows[0] if rows else None
+        rows = self.known_groups()
+        if rows:
+            return rows[0]
+        return None
 
     def record_social_decision(
         self,
@@ -721,9 +742,24 @@ class TelegramBotService:
     def _private_group_post_text(self, text: str) -> str | None:
         normalized = " ".join(text.strip().split())
         lower = normalized.casefold()
-        if "grupo" not in lower:
-            return None
         if not any(cue in lower for cue in PRIVATE_GROUP_POST_CUES):
+            return None
+        target_is_group = any(
+            cue in lower
+            for cue in (
+                "grupo",
+                "canal",
+                "chat",
+                "puntuacomics",
+                "puntua comics",
+                "allí",
+                "alli",
+                "ahí",
+                "ahi",
+            )
+        )
+        apology_requested = "perdon" in lower or "perdón" in lower or "disculp" in lower or "discúlp" in lower
+        if not target_is_group and not apology_requested:
             return None
         marker = " que "
         if marker in lower:
@@ -733,7 +769,7 @@ class TelegramBotService:
             candidate = normalized.split(":", 1)[1].strip()
         else:
             candidate = ""
-        if not candidate and ("perdon" in lower or "perdón" in lower or "disculp" in lower):
+        if (not candidate or apology_requested) and apology_requested:
             candidate = "No debería haber hablado como si supiera más de lo que sabía. Perdón por la confusión."
         if len(candidate) < 3:
             return None
@@ -819,7 +855,7 @@ class TelegramBotService:
             )
             return
         if self._is_command(text, "grupos"):
-            groups = self.links.groups()
+            groups = self.links.known_groups()
             if not groups:
                 self.telegram.send_message(chat_id, "Todavía no tengo grupos registrados.")
             else:
