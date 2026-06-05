@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from nino.contracts import ProactivitySettings
 from nino.persistence import create_persistent_runtime
@@ -79,7 +79,7 @@ def test_proactivity_records_inbox_item(tmp_path) -> None:
     runtime = create_persistent_runtime(tmp_path / "nino.db")
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
     runtime.configure_proactivity("agent-p", ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=0))
-    runtime.tick("agent-p", {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6})
+    runtime.tick("agent-p", {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6, "now": (now - timedelta(hours=26)).isoformat()})
 
     out = runtime.evaluate_proactivity("agent-p", now=now)
     inbox = runtime.list_proactive_inbox("agent-p")

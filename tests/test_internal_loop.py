@@ -18,6 +18,9 @@ def test_internal_cycle_consolidates_and_emits_allowed_proactive_action(tmp_path
     runtime.episode_store.append(
         Episode("e1", "agent-loop", now - timedelta(minutes=5), "prefiero piano", "music", 0.9, 0.9)
     )
+    runtime.episode_store.append(
+        Episode("e2", "agent-loop", now - timedelta(hours=26), "mañana tengo examen", "school", 0.9, 0.9)
+    )
 
     out = InternalLoop(runtime).cycle_once("agent-loop", now=now)
     retrieved = runtime.retrieve_memory(

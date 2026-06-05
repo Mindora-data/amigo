@@ -16,7 +16,13 @@ def test_scheduler_runs_due_dream_and_proactivity(tmp_path) -> None:
     )
     runtime.tick(
         "agent-s",
-        {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6, "confidence": 0.9},
+        {
+            "intent": "question",
+            "text": "por qué la música me calma?",
+            "salience": 0.6,
+            "confidence": 0.9,
+            "now": (now - timedelta(hours=26)).isoformat(),
+        },
     )
 
     out = NinoScheduler(runtime).run_pending("agent-s", now=now)

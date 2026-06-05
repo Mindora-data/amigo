@@ -37,6 +37,7 @@ FOLLOWUP_COOLDOWN_HOURS = 6
 FOLLOWUP_ACTIVE_HOURS_START = 9
 FOLLOWUP_ACTIVE_HOURS_END = 22
 CHECKIN_BASE_THRESHOLD_DAYS = 7
+GENERAL_FOLLOWUP_MIN_AGE_HOURS = 24
 
 
 class InMemoryProactiveCandidateStore:
@@ -249,12 +250,13 @@ def _next_active_hour(now: datetime, settings: ProactivitySettings) -> datetime 
     return candidate
 
 
-def _latest_candidate(episodes: list[Episode], now: datetime) -> Episode | None:
+def _latest_candidate(episodes: list[Episode], now: datetime, *, min_age_hours: float = GENERAL_FOLLOWUP_MIN_AGE_HOURS) -> Episode | None:
     horizon = now - timedelta(days=14)
+    newest_allowed = now - timedelta(hours=min_age_hours)
     candidates = [
         ep
         for ep in episodes
-        if ep.timestamp >= horizon and ep.salience >= 0.7 and ep.confidence >= 0.55
+        if horizon <= ep.timestamp <= newest_allowed and ep.salience >= 0.7 and ep.confidence >= 0.55
     ]
     if not candidates:
         return None
@@ -266,9 +268,15 @@ def _contains_sensitive_term(text: str) -> bool:
     lowered = text.lower()
     return any(term in lowered for term in SENSITIVE_TERMS)
 
-def _latest_open_question(world_model: dict[str, Any]) -> dict[str, Any] | None:
+def _latest_open_question(world_model: dict[str, Any], now: datetime, *, min_age_hours: float = GENERAL_FOLLOWUP_MIN_AGE_HOURS) -> tuple[dict[str, Any] | None, bool]:
     questions = list(world_model.get("open_questions", []))
-    return questions[-1] if questions else None
+    if not questions:
+        return None, False
+    latest = questions[-1]
+    observed_at = _parse_dt(latest.get("observed_at")) if isinstance(latest, dict) else None
+    if observed_at is None or observed_at > now - timedelta(hours=min_age_hours):
+        return latest if isinstance(latest, dict) else None, True
+    return latest if isinstance(latest, dict) else None, False
 
 def _top_preference(relation_state: dict[str, Any]) -> str | None:
     preferences = relation_state.get("preferences", {})
@@ -630,27 +638,41 @@ class ProactivityEngine:
                 reason_trace.append("temporal_alarm_scheduled")
                 return ProactivityResponse(False, None, reason_trace)
 
-        open_question = _latest_open_question(world_model)
+        open_question, open_question_too_recent = _latest_open_question(world_model, now)
         if open_question and not _contains_sensitive_term(str(open_question.get("text", ""))):
-            source_key = _topic_key("open_question", open_question.get("text", ""))
-            if _source_already_sent(relation_state, source_key, now):
-                reason_trace.append("open_question_already_followed")
+            if open_question_too_recent:
+                reason_trace.append("open_question_too_recent")
             else:
-                reason_trace.extend(["goal_reduce_uncertainty", "open_question_follow_up"])
-                return ProactivityResponse(
-                    should_send=True,
-                    action={
-                        "type": "external_message",
-                        "payload": {
-                            "text": f"Me quedé pensando en esto: {open_question['text']} ¿Quieres que lo retomemos?",
-                            "source": "world_model.open_questions",
-                            "proactive_source_key": source_key,
+                source_key = _topic_key("open_question", open_question.get("text", ""))
+                if _source_already_sent(relation_state, source_key, now):
+                    reason_trace.append("open_question_already_followed")
+                else:
+                    reason_trace.extend(["goal_reduce_uncertainty", "open_question_follow_up"])
+                    return ProactivityResponse(
+                        should_send=True,
+                        action={
+                            "type": "external_message",
+                            "payload": {
+                                "text": f"Me quedé pensando en esto: {open_question['text']} ¿Quieres que lo retomemos?",
+                                "source": "world_model.open_questions",
+                                "proactive_source_key": source_key,
+                            },
                         },
-                    },
-                    reason_trace=reason_trace,
-                )
+                        reason_trace=reason_trace,
+                    )
+        elif open_question:
+            reason_trace.append("sensitive_open_question_blocked")
 
         candidate = _latest_candidate(self.episode_store.list_for_agent(agent_id), now)
+        if candidate is None:
+            has_recent_salient = any(
+                now - timedelta(hours=GENERAL_FOLLOWUP_MIN_AGE_HOURS) < ep.timestamp <= now
+                and ep.salience >= 0.7
+                and ep.confidence >= 0.55
+                for ep in self.episode_store.list_for_agent(agent_id)
+            )
+            if has_recent_salient:
+                reason_trace.append("salient_memory_too_recent")
         if candidate is not None:
             source_key = f"episode:{candidate.episode_id}"
             if _source_already_sent(relation_state, source_key, now):

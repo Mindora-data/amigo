@@ -29,7 +29,7 @@ def test_allowed_proactivity_sends_from_salient_recent_memory_and_records_send()
         ProactivitySettings(consent="allowed", max_messages_per_day=1, min_hours_between=24),
     )
     runtime.episode_store.append(
-        Episode("e1", "agent-p", now - timedelta(hours=2), "mañana tengo examen", "school", 0.9, 0.9)
+        Episode("e1", "agent-p", now - timedelta(hours=26), "mañana tengo examen", "school", 0.9, 0.9)
     )
 
     out = runtime.evaluate_proactivity("agent-p", now=now)
@@ -40,6 +40,23 @@ def test_allowed_proactivity_sends_from_salient_recent_memory_and_records_send()
     assert out.action["payload"]["source_episode_id"] == "e1"
     assert "salient_memory_follow_up" in out.reason_trace
     assert state.relation_state["proactivity"]["sent_at"] == [now.isoformat()]
+
+
+def test_proactivity_does_not_follow_salient_memory_after_only_minutes() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime.configure_proactivity(
+        "agent-p",
+        ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=0),
+    )
+    runtime.episode_store.append(
+        Episode("e1", "agent-p", now - timedelta(minutes=3), "me preocupa una idea", "life", 0.9, 0.9)
+    )
+
+    out = runtime.evaluate_proactivity("agent-p", now=now)
+
+    assert out.should_send is False
+    assert "salient_memory_too_recent" in out.reason_trace
 
 def test_proactivity_prioritizes_temporal_event_reminder() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
@@ -160,7 +177,7 @@ def test_proactivity_daily_cap_blocks_second_message() -> None:
         ProactivitySettings(consent="allowed", max_messages_per_day=1, min_hours_between=0),
     )
     runtime.episode_store.append(
-        Episode("e1", "agent-p", now - timedelta(hours=2), "mañana tengo examen", "school", 0.9, 0.9)
+        Episode("e1", "agent-p", now - timedelta(hours=26), "mañana tengo examen", "school", 0.9, 0.9)
     )
 
     first = runtime.evaluate_proactivity("agent-p", now=now)
@@ -180,7 +197,7 @@ def test_proactivity_minimum_interval_blocks_until_next_allowed_time() -> None:
         ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=6),
     )
     runtime.episode_store.append(
-        Episode("e1", "agent-p", now - timedelta(hours=2), "mañana tengo examen", "school", 0.9, 0.9)
+        Episode("e1", "agent-p", now - timedelta(hours=26), "mañana tengo examen", "school", 0.9, 0.9)
     )
 
     first = runtime.evaluate_proactivity("agent-p", now=now)
@@ -218,7 +235,7 @@ def test_proactivity_respects_active_hours_window() -> None:
 
 def test_proactivity_respects_overnight_active_hours_window() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
-    now = datetime(2026, 5, 21, 23, tzinfo=timezone.utc)
+    now = datetime(2026, 5, 21, 22, tzinfo=timezone.utc)
     runtime.configure_proactivity(
         "agent-p",
         ProactivitySettings(
@@ -230,7 +247,7 @@ def test_proactivity_respects_overnight_active_hours_window() -> None:
         ),
     )
     runtime.episode_store.append(
-        Episode("e1", "agent-p", now - timedelta(hours=2), "mañana tengo examen", "school", 0.9, 0.9)
+        Episode("e1", "agent-p", now - timedelta(hours=26), "mañana tengo examen", "school", 0.9, 0.9)
     )
 
     out = runtime.evaluate_proactivity("agent-p", now=now)
@@ -244,7 +261,7 @@ def test_proactivity_blocks_sensitive_topics_even_with_consent() -> None:
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
     runtime.configure_proactivity("agent-p", ProactivitySettings(consent="allowed"))
     runtime.episode_store.append(
-        Episode("e1", "agent-p", now - timedelta(hours=1), "mi contraseña es importante", "privacy", 0.9, 0.9)
+        Episode("e1", "agent-p", now - timedelta(hours=26), "mi contraseña es importante", "privacy", 0.9, 0.9)
     )
 
     out = runtime.evaluate_proactivity("agent-p", now=now)
@@ -257,10 +274,11 @@ def test_proactivity_follows_up_open_question_from_world_model() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
     runtime.configure_proactivity("agent-p", ProactivitySettings(consent="allowed"))
-    runtime.tick(
-        "agent-p",
-        {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6, "confidence": 0.9},
-    )
+    state = runtime.load_or_init_state("agent-p")
+    state.world_model["open_questions"] = [
+        {"text": "por qué la música me calma?", "observed_at": (now - timedelta(hours=26)).isoformat()}
+    ]
+    runtime.state_store.put(state)
 
     out = runtime.evaluate_proactivity("agent-p", now=now)
 
@@ -270,6 +288,22 @@ def test_proactivity_follows_up_open_question_from_world_model() -> None:
     assert "open_question_follow_up" in out.reason_trace
 
 
+def test_proactivity_does_not_follow_open_question_after_only_minutes() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime.configure_proactivity("agent-p", ProactivitySettings(consent="allowed"))
+    state = runtime.load_or_init_state("agent-p")
+    state.world_model["open_questions"] = [
+        {"text": "a que hora es el dentista?", "observed_at": (now - timedelta(minutes=3)).isoformat()}
+    ]
+    runtime.state_store.put(state)
+
+    out = runtime.evaluate_proactivity("agent-p", now=now)
+
+    assert out.should_send is False
+    assert "open_question_too_recent" in out.reason_trace
+
+
 def test_proactivity_does_not_repeat_same_open_question_followup() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
@@ -277,10 +311,11 @@ def test_proactivity_does_not_repeat_same_open_question_followup() -> None:
         "agent-p",
         ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=0),
     )
-    runtime.tick(
-        "agent-p",
-        {"intent": "question", "text": "a que hora es el dentista?", "salience": 0.6, "confidence": 0.9},
-    )
+    state = runtime.load_or_init_state("agent-p")
+    state.world_model["open_questions"] = [
+        {"text": "a que hora es el dentista?", "observed_at": (now - timedelta(hours=26)).isoformat()}
+    ]
+    runtime.state_store.put(state)
 
     first = runtime.evaluate_proactivity("agent-p", now=now)
     second = runtime.evaluate_proactivity("agent-p", now=now + timedelta(hours=2))
@@ -298,7 +333,7 @@ def test_proactivity_does_not_repeat_same_salient_episode_followup() -> None:
         ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=0),
     )
     runtime.episode_store.append(
-        Episode("e1", "agent-p", now - timedelta(hours=2), "mañana tengo examen", "school", 0.9, 0.9)
+        Episode("e1", "agent-p", now - timedelta(hours=26), "mañana tengo examen", "school", 0.9, 0.9)
     )
 
     first = runtime.evaluate_proactivity("agent-p", now=now)

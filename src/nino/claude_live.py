@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 from typing import Any
 from urllib import error
-
-from .llm import build_configured_llm, llm_config_status
 
 
 CLAUDE_SETUP_COMMANDS = [
@@ -45,6 +45,73 @@ def _safe_error_evidence(exc: Exception) -> dict[str, Any]:
         if detail:
             evidence["detail"] = detail[:500]
     return evidence
+
+
+def _keychain_api_key(service: str) -> str | None:
+    if not service:
+        return None
+    try:
+        completed = subprocess.run(
+            ["/usr/bin/security", "find-generic-password", "-w", "-s", service],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return completed.stdout.strip() or None
+
+
+def llm_config_status() -> dict[str, Any]:
+    provider = os.environ.get("NINO_LLM_PROVIDER", "").strip().lower()
+    normalized_provider = "claude" if provider == "anthropic" else provider
+    supported_provider = provider in {"claude", "anthropic", "deepseek"}
+    keychain_service = os.environ.get("NINO_KEYCHAIN_SERVICE", "").strip()
+    anthropic_env_api_key_present = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+    keychain_api_key_present = bool(_keychain_api_key(keychain_service)) if keychain_service else False
+    deepseek_api_key_present = bool(
+        os.environ.get("DEEPSEEK_API_KEY", "").strip() or os.environ.get("NINO_DEEPSEEK_API_KEY", "").strip()
+    )
+    if normalized_provider == "deepseek":
+        model = os.environ.get("NINO_DEEPSEEK_MODEL", "deepseek-chat").strip() or "deepseek-chat"
+        base_url = os.environ.get("NINO_DEEPSEEK_BASE_URL", "https://api.deepseek.com/chat/completions").strip()
+        api_key_present = deepseek_api_key_present
+        api_key_source = "env" if api_key_present else None
+    else:
+        model = os.environ.get("NINO_CLAUDE_MODEL", "claude-sonnet-4-5").strip() or "claude-sonnet-4-5"
+        base_url = "https://api.anthropic.com/v1/messages"
+        api_key_present = anthropic_env_api_key_present or keychain_api_key_present
+        api_key_source = "env" if anthropic_env_api_key_present else "keychain" if keychain_api_key_present else None
+    missing: list[str] = []
+    if not provider:
+        missing.append("NINO_LLM_PROVIDER")
+    elif not supported_provider:
+        missing.append("supported_provider")
+    if normalized_provider == "deepseek" and not api_key_present:
+        missing.append("DEEPSEEK_API_KEY")
+    elif supported_provider and not api_key_present:
+        missing.append("ANTHROPIC_API_KEY")
+    return {
+        "enabled": supported_provider and api_key_present,
+        "provider": normalized_provider or None,
+        "supported_provider": supported_provider,
+        "api_key_present": api_key_present,
+        "api_key_source": api_key_source,
+        "keychain_service": keychain_service or None,
+        "model": model,
+        "base_url": base_url,
+        "max_tokens": 320,
+        "timeout_seconds": 20.0,
+        "missing": missing,
+        "config_errors": [],
+    }
+
+
+def build_configured_llm() -> Any:
+    from .llm import build_configured_llm as _build_configured_llm
+
+    return _build_configured_llm()
 
 
 def run_live_claude_probe(*, require_key: bool = False) -> dict[str, Any]:

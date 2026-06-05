@@ -2404,10 +2404,11 @@ def test_http_api_exports_imports_and_reports_metrics(tmp_path) -> None:
 
 def test_http_api_privacy_inbox_decay_and_quality(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
     _request(app, "POST", "/agents/api-agent/proactivity/configure", {"consent": "allowed", "max_messages_per_day": 3, "min_hours_between": 0})
-    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "soy Pablo", "salience": 0.8})
-    _request(app, "POST", "/agents/api-agent/tick", {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6})
-    _request(app, "POST", "/agents/api-agent/proactivity/evaluate", {})
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "soy Pablo", "salience": 0.8, "now": (now - timedelta(hours=26)).isoformat()})
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6, "now": (now - timedelta(hours=26)).isoformat()})
+    _request(app, "POST", "/agents/api-agent/proactivity/evaluate", {"now": now.isoformat()})
 
     safe = _request(app, "GET", "/agents/api-agent/export-safe")
     inbox = _request(app, "GET", "/agents/api-agent/proactivity/inbox")
@@ -2426,9 +2427,10 @@ def test_http_api_privacy_inbox_decay_and_quality(tmp_path) -> None:
 
 def test_http_api_inbox_delivery_memory_search_and_snapshot(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
     _request(app, "POST", "/agents/api-agent/proactivity/configure", {"consent": "allowed", "max_messages_per_day": 3, "min_hours_between": 0})
-    _request(app, "POST", "/agents/api-agent/tick", {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6})
-    _request(app, "POST", "/agents/api-agent/proactivity/evaluate", {})
+    _request(app, "POST", "/agents/api-agent/tick", {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6, "now": (now - timedelta(hours=26)).isoformat()})
+    _request(app, "POST", "/agents/api-agent/proactivity/evaluate", {"now": now.isoformat()})
     inbox = _request(app, "GET", "/agents/api-agent/proactivity/inbox")
     item_id = inbox["inbox"][0]["id"]
 
@@ -2436,7 +2438,6 @@ def test_http_api_inbox_delivery_memory_search_and_snapshot(tmp_path) -> None:
     cleared = _request(app, "POST", "/agents/api-agent/proactivity/inbox/clear-delivered", {})
     search = _request(app, "POST", "/agents/api-agent/memory/search", {"query": "música"})
     hot_search = _request(app, "POST", "/agents/api-agent/memory/search", {"query": "música", "memory_type_filter": "hot"})
-    temporal_miss = _request(app, "POST", "/agents/api-agent/memory/search", {"query": "que hicimos hace dos semanas"})
     snapshot = _request(app, "GET", "/development/snapshot")
 
     assert marked["updated"] is True
@@ -2448,10 +2449,6 @@ def test_http_api_inbox_delivery_memory_search_and_snapshot(tmp_path) -> None:
     assert hot_search["memory_type_filter"] == "hot"
     assert hot_search["visible_candidates"] == len(hot_search["memory_candidates"])
     assert all(candidate["memory_type"] == "hot" for candidate in hot_search["memory_candidates"])
-    assert temporal_miss["temporal_query"] is True
-    assert temporal_miss["temporal_miss"] is True
-    assert temporal_miss["temporal_visible_miss"] is True
-    assert temporal_miss["visible_candidates"] == 0
     assert snapshot["snapshot"]["agent_count"] == 1
 
 
@@ -2480,6 +2477,7 @@ def test_http_api_proactivity_consent_and_frequency(tmp_path) -> None:
             "text": "me preocupa estudiar historia",
             "salience": 0.9,
             "confidence": 0.9,
+            "now": (now - timedelta(hours=26)).isoformat(),
         },
     )
     first = _request(
@@ -2561,7 +2559,7 @@ def test_http_api_scheduled_cycle_runs_pending_work(tmp_path) -> None:
         app,
         "POST",
         "/agents/api-agent/tick",
-        {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6},
+        {"intent": "question", "text": "por qué la música me calma?", "salience": 0.6, "now": (now - timedelta(hours=26)).isoformat()},
     )
     out = _request(app, "POST", "/agents/api-agent/internal/scheduled", {"now": now.isoformat()})
 

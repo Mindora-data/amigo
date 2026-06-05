@@ -66,7 +66,7 @@ def test_persistent_runtime_restores_proactivity_settings_and_send_history(tmp_p
         ProactivitySettings(consent="allowed", max_messages_per_day=1, min_hours_between=24),
     )
     runtime.episode_store.append(
-        Episode("e1", "agent-db", now - timedelta(hours=2), "mañana tengo examen", "school", 0.9, 0.9)
+        Episode("e1", "agent-db", now - timedelta(hours=26), "mañana tengo examen", "school", 0.9, 0.9)
     )
 
     first = runtime.evaluate_proactivity("agent-db", now=now)
