@@ -73,6 +73,7 @@ Commands:
   prod-smoke Run production-mode auth smoke without exposing the server.
   telegram Run Telegram long-polling bot or create link code.
   telegram-launchd Manage Telegram long-polling service with launchd.
+  telegram-doctor Diagnose Telegram bot runtime, config, logs and links.
   telegram-style-import Import Telegram JSON into an offline anonymous style corpus.
   synthetic-companion Run synthetic longitudinal companion regression.
   reports     List local closing evidence reports.
@@ -605,6 +606,120 @@ telegram_launchd() {
   "$ROOT_DIR/scripts/nino-telegram-launchd" "$@"
 }
 
+telegram_doctor() {
+  local telegram_log="${NINO_TELEGRAM_LOG_FILE:-$DATA_DIR/nino-telegram.log}"
+  local telegram_err="${NINO_TELEGRAM_ERR_FILE:-$DATA_DIR/nino-telegram.err.log}"
+  local telegram_label="${NINO_TELEGRAM_LAUNCHD_LABEL:-local.nino.telegram}"
+  echo "== telegram config =="
+  echo "root: $ROOT_DIR"
+  echo "env_file: $ENV_FILE"
+  echo "db: $DB_PATH"
+  echo "base_url: $BASE_URL"
+  echo "launchd_label: $telegram_label"
+  echo "token_env_present: $([[ -n "${NINO_TELEGRAM_BOT_TOKEN:-}" || -n "${TELEGRAM_BOT_TOKEN:-}" ]] && echo yes || echo no)"
+  echo "keychain_service: ${NINO_TELEGRAM_KEYCHAIN_SERVICE:-none}"
+  echo
+  echo "== backend status =="
+  status || true
+  echo
+  echo "== telegram launchd =="
+  telegram_launchd status || true
+  echo
+  echo "== telegram live api =="
+  "$PYTHON_BIN" - <<'PY' || true
+import json
+import os
+import urllib.request
+
+try:
+    from nino.telegram import telegram_token_from_env
+except Exception as exc:
+    print(json.dumps({"ok": False, "error": f"import_failed:{type(exc).__name__}"}))
+    raise SystemExit(0)
+
+try:
+    token = telegram_token_from_env()
+except Exception as exc:
+    print(json.dumps({"ok": False, "error": str(exc)}))
+    raise SystemExit(0)
+
+if os.environ.get("NINO_TELEGRAM_DOCTOR_SKIP_NETWORK", "").strip() in {"1", "true", "yes"}:
+    print(json.dumps({"ok": True, "skipped": True, "reason": "network_check_disabled", "token_present": True}))
+    raise SystemExit(0)
+
+try:
+    req = urllib.request.Request(f"https://api.telegram.org/bot{token}/getMe")
+    with urllib.request.urlopen(req, timeout=5) as res:
+        body = json.loads(res.read().decode("utf-8"))
+    result = body.get("result", {}) if isinstance(body, dict) else {}
+    print(json.dumps({
+        "ok": bool(body.get("ok")) if isinstance(body, dict) else False,
+        "bot_id": result.get("id"),
+        "username": result.get("username"),
+        "can_join_groups": result.get("can_join_groups"),
+        "can_read_all_group_messages": result.get("can_read_all_group_messages"),
+    }, ensure_ascii=False))
+except Exception as exc:
+    print(json.dumps({"ok": False, "error": type(exc).__name__}))
+PY
+  echo
+  echo "== telegram sqlite =="
+  "$PYTHON_BIN" - "$DB_PATH" <<'PY' || true
+import json
+import sqlite3
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    print(json.dumps({"ok": False, "error": "db_missing", "path": str(path)}))
+    raise SystemExit(0)
+
+con = sqlite3.connect(path)
+con.row_factory = sqlite3.Row
+
+def count(table: str) -> int:
+    try:
+        return int(con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+    except sqlite3.Error:
+        return 0
+
+def rows(sql: str, params: tuple = ()) -> list[dict]:
+    try:
+        return [dict(row) for row in con.execute(sql, params).fetchall()]
+    except sqlite3.Error:
+        return []
+
+out = {
+    "ok": True,
+    "links": count("telegram_link"),
+    "pending_links": count("telegram_link_code"),
+    "groups": rows("SELECT chat_id, title, last_seen_at FROM telegram_group ORDER BY last_seen_at DESC LIMIT 5"),
+    "recent_actions": rows(
+        "SELECT action_type, chat_id, target_title, sent_ok, error, created_at FROM telegram_action_log ORDER BY created_at DESC LIMIT 5"
+    ),
+    "recent_social": rows(
+        "SELECT chat_id, decision, reason, outcome, created_at FROM telegram_social_decision ORDER BY created_at DESC LIMIT 5"
+    ),
+}
+print(json.dumps(out, ensure_ascii=False, indent=2))
+PY
+  echo
+  echo "== recent telegram stderr =="
+  if [[ -f "$telegram_err" ]]; then
+    tail -40 "$telegram_err" | sed -E 's/[0-9]{8,}:[A-Za-z0-9_-]{20,}/[telegram-token-redacted]/g'
+  else
+    echo "missing: $telegram_err"
+  fi
+  echo
+  echo "== recent telegram stdout =="
+  if [[ -f "$telegram_log" ]]; then
+    tail -40 "$telegram_log" | sed -E 's/[0-9]{8,}:[A-Za-z0-9_-]{20,}/[telegram-token-redacted]/g'
+  else
+    echo "missing: $telegram_log"
+  fi
+}
+
 eval_local() {
   "$ROOT_DIR/scripts/nino-eval" "$@"
 }
@@ -825,6 +940,7 @@ case "$command" in
   prod-smoke) prod_smoke "$@" ;;
   telegram) telegram_bot "$@" ;;
   telegram-launchd) telegram_launchd "$@" ;;
+  telegram-doctor) telegram_doctor ;;
   telegram-style-import) telegram_style_import "$@" ;;
   synthetic-companion) synthetic_companion "$@" ;;
   reports) reports ;;

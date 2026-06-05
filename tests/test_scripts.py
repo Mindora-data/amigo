@@ -76,6 +76,77 @@ def test_telegram_launchd_uses_configured_python(tmp_path) -> None:
     assert "fake" not in content
 
 
+def test_ninoctl_telegram_doctor_reports_status_without_leaking_token(tmp_path) -> None:
+    db = tmp_path / "nino.db"
+    import sqlite3
+
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE telegram_link (chat_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL)")
+    con.execute("INSERT INTO telegram_link VALUES ('111', 'nino', '2026-06-06T10:00:00+00:00')")
+    con.execute(
+        "CREATE TABLE telegram_group (chat_id TEXT PRIMARY KEY, title TEXT NOT NULL, last_seen_at TEXT NOT NULL)"
+    )
+    con.execute("INSERT INTO telegram_group VALUES ('-100', 'Grupo', '2026-06-06T10:00:00+00:00')")
+    con.execute(
+        """
+        CREATE TABLE telegram_action_log (
+            id INTEGER PRIMARY KEY, action_type TEXT, chat_id TEXT, target_title TEXT,
+            user_chat_id TEXT, text_preview TEXT, sent_ok INTEGER, error TEXT, created_at TEXT
+        )
+        """
+    )
+    con.execute(
+        "INSERT INTO telegram_action_log VALUES (1, 'group_reply', '-100', 'Grupo', '111', 'hola', 1, NULL, '2026-06-06T10:00:00+00:00')"
+    )
+    con.execute(
+        """
+        CREATE TABLE telegram_social_decision (
+            id INTEGER PRIMARY KEY, chat_id TEXT, message_id TEXT, sender_id TEXT,
+            text_preview TEXT, decision TEXT, reason TEXT, created_at TEXT, outcome TEXT, outcome_at TEXT
+        )
+        """
+    )
+    con.execute(
+        "INSERT INTO telegram_social_decision VALUES (1, '-100', '10', '20', 'preview', 'reply', 'general_question', '2026-06-06T10:00:00+00:00', 'positive', NULL)"
+    )
+    con.commit()
+
+    launchctl = tmp_path / "launchctl"
+    launchctl.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo 'state = running'\n"
+        "echo 'pid = 123'\n",
+        encoding="utf-8",
+    )
+    launchctl.chmod(0o755)
+    err = tmp_path / "telegram.err.log"
+    err.write_text("telegram_poll_error with 123456789:SECRETSECRETSECRETSECRETSECRET\n", encoding="utf-8")
+    log = tmp_path / "telegram.log"
+    log.write_text("bot started\n", encoding="utf-8")
+
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "NINO_DB_PATH": str(db),
+        "NINO_PORT": "65530",
+        "NINO_TELEGRAM_BOT_TOKEN": "123456789:SECRETSECRETSECRETSECRETSECRET",
+        "NINO_TELEGRAM_DOCTOR_SKIP_NETWORK": "1",
+        "NINO_TELEGRAM_ERR_FILE": str(err),
+        "NINO_TELEGRAM_LOG_FILE": str(log),
+    }
+
+    result = subprocess.run(["scripts/ninoctl", "telegram-doctor"], env=env, capture_output=True, text=True, timeout=10)
+
+    assert result.returncode == 0
+    assert "== telegram config ==" in result.stdout
+    assert "== telegram live api ==" in result.stdout
+    assert "network_check_disabled" in result.stdout
+    assert '"links": 1' in result.stdout
+    assert "Grupo" in result.stdout
+    assert "SECRETSECRET" not in result.stdout
+    assert "[telegram-token-redacted]" in result.stdout
+
+
 def test_scripts_default_to_macos_system_cert_bundle() -> None:
     ninoctl = Path("scripts/ninoctl").read_text(encoding="utf-8")
     launchd = Path("scripts/nino-launchd").read_text(encoding="utf-8")
