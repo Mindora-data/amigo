@@ -251,6 +251,18 @@ def test_vision_command_reports_active_status(tmp_path) -> None:
     assert "Visión activa" in str(telegram.sent[-1]["text"])
 
 
+def test_vision_command_accepts_bot_username_suffix(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links, vision_client=FakeVision())
+
+    bot.handle_update(_update(111, "/vision@amigo_test_bot"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert backend.ticks == []
+    assert "Visión activa" in str(telegram.sent[-1]["text"])
+
+
 def test_telegram_message_date_is_passed_to_backend_in_local_timezone(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     assert links.link_with_code(111, links.create_code("Ana"))

@@ -670,6 +670,13 @@ class TelegramBotService:
             return "Visión no activa: puedo recibir imágenes, pero no interpretarlas todavía."
         return "Visión activa: puedo comentar imágenes. No las guardo salvo que me lo pidas explícitamente."
 
+    def _is_command(self, text: str, command: str) -> bool:
+        first = text.strip().split(maxsplit=1)[0].casefold() if text.strip() else ""
+        if not first.startswith("/"):
+            return False
+        name = first[1:].split("@", 1)[0]
+        return name == command.casefold().lstrip("/")
+
     def _describe_telegram_image(self, message: dict[str, Any]) -> str:
         image = self._image_file_id_and_mime(message)
         if image is None:
@@ -703,7 +710,7 @@ class TelegramBotService:
         if chat_id is None or (not text and image is None):
             return
         current_time = now or datetime.fromtimestamp(int(message.get("date") or time.time()), tz=timezone.utc).astimezone(self.local_tz)
-        if text.lower() == "/vision":
+        if self._is_command(text, "vision"):
             self.telegram.send_message(chat_id, self._vision_status_text())
             return
         if image is not None:
