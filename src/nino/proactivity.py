@@ -305,6 +305,9 @@ def _parse_dt(value: Any) -> datetime | None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed
 
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
 def _parse_candidate_when(value: Any, now: datetime) -> datetime | None:
     if value in {None, "", "null"}:
         return None
@@ -518,6 +521,84 @@ def _top_global_concept(global_model: dict[str, Any]) -> str | None:
     return ranked[0][0] if ranked else None
 
 
+def adaptive_proactivity_summary(
+    relation_state: dict[str, Any],
+    store: InMemoryProactiveCandidateStore | None,
+    agent_id: str,
+    now: datetime,
+    *,
+    world_model: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    learning = dict(relation_state.get("relationship_learning", {}))
+    counts = {str(key): int(value) for key, value in dict(learning.get("counts", {})).items()}
+    style = dict(learning.get("response_style", {}))
+    initiative = float(style.get("initiative", 0.5) or 0.5)
+    caution = float(style.get("caution", 0.5) or 0.5)
+    score = 0.62 + ((initiative - 0.5) * 0.35) - ((caution - 0.5) * 0.25)
+    reasons: list[str] = ["base_relevance"]
+
+    last_outcome = str(learning.get("last_outcome", "") or "")
+    last_signal_at = _parse_dt(learning.get("last_signal_at"))
+    if last_outcome == "positive":
+        score += 0.16
+        reasons.append("recent_positive_signal")
+    elif last_outcome == "negative":
+        score -= 0.24
+        reasons.append("recent_negative_signal")
+    elif last_outcome == "correction":
+        score -= 0.20
+        reasons.append("recent_correction_signal")
+    elif last_outcome == "stop":
+        score -= 0.55
+        reasons.append("explicit_stop_signal")
+
+    if last_signal_at is not None and now - last_signal_at <= timedelta(hours=12) and last_outcome in {"negative", "correction", "stop"}:
+        score -= 0.18
+        reasons.append("fresh_boundary_signal")
+
+    recent = store.recent_delivered(agent_id, limit=2) if store is not None else []
+    ignored_count = len([item for item in recent if int(item.get("user_reacted") or 0) == 0])
+    if ignored_count >= 2:
+        score -= 0.42
+        reasons.append("recent_proactive_silence")
+    elif ignored_count == 1:
+        score -= 0.12
+        reasons.append("one_ignored_proactive")
+
+    group_maturity = dict(relation_state.get("group_maturity", {}))
+    if str(group_maturity.get("last_social_outcome", "")) == "negative":
+        score -= 0.35
+        reasons.append("group_recent_negative_outcome")
+    social_learning = dict(group_maturity.get("social_learning", {}))
+    signal_counts = dict(social_learning.get("signal_counts", {}))
+    if int(signal_counts.get("boundary", 0) or 0) > int(signal_counts.get("supportive_ack", 0) or 0):
+        score -= 0.16
+        reasons.append("group_boundaries_outweigh_support")
+    if int(signal_counts.get("supportive_ack", 0) or 0) >= 2:
+        score += 0.08
+        reasons.append("group_supportive_acknowledgement")
+
+    score = _clamp01(score)
+    suggested_topics: list[dict[str, str]] = []
+    preference = _top_preference(relation_state)
+    if preference:
+        suggested_topics.append({"kind": "preference", "topic": preference, "why": "preferencia recurrente de la relacion"})
+    open_question, too_recent = _latest_open_question(world_model or {}, now)
+    if open_question is not None and not too_recent:
+        suggested_topics.append({"kind": "open_question", "topic": str(open_question.get("text", ""))[:120], "why": "pregunta abierta pendiente"})
+    return {
+        "score": round(score, 4),
+        "threshold": 0.55,
+        "should_suggest": score >= 0.55,
+        "reasons": reasons[-8:],
+        "counts": counts,
+        "last_outcome": last_outcome,
+        "recent_ignored_proactives": ignored_count,
+        "suggested_topics": suggested_topics[:5],
+        "principle": "optimiza pertinencia y minima intrusion; si duda, calla",
+    }
+
+
 class ProactivityEngine:
     def __init__(
         self,
@@ -581,6 +662,12 @@ class ProactivityEngine:
         if not _inside_active_hours(now, settings):
             reason_trace.append("outside_active_hours")
             return ProactivityResponse(False, None, reason_trace, _next_active_hour(now, settings))
+
+        adaptive = adaptive_proactivity_summary(relation_state, self.candidate_store, agent_id, now, world_model=world_model)
+        if not bool(adaptive.get("should_suggest")):
+            reason_trace.extend(["adaptive_proactivity_blocked", *list(adaptive.get("reasons", []))[-3:]])
+            return ProactivityResponse(False, None, reason_trace)
+        reason_trace.append("adaptive_proactivity_allowed")
 
         self.candidate_store.expire_stale(agent_id, now)
         ensure_checkin_candidate(self.candidate_store, agent_id, relation_state, now, checkin_prior=checkin_prior)

@@ -38,6 +38,7 @@ from .memory_graph import InMemoryGraphStore, graph_candidates, ingest_episodes_
 from .proactivity import (
     InMemoryProactiveCandidateStore,
     ProactivityEngine,
+    adaptive_proactivity_summary,
     configure_proactivity_state,
     default_proactivity_state,
     extract_followups,
@@ -3169,6 +3170,13 @@ class NinoRuntime:
                 "pending_inbox_count": len([item for item in inbox if not item.get("delivered", False)]),
                 "active_start_hour": proactivity.get("active_start_hour"),
                 "active_end_hour": proactivity.get("active_end_hour"),
+                "adaptive": adaptive_proactivity_summary(
+                    relation,
+                    self.proactive_candidate_store,
+                    agent_id,
+                    datetime.now(timezone.utc),
+                    world_model=state.world_model,
+                ),
             },
             "conversation": {
                 "open_question_count": len(open_questions),

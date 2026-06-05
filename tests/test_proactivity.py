@@ -42,6 +42,30 @@ def test_allowed_proactivity_sends_from_salient_recent_memory_and_records_send()
     assert state.relation_state["proactivity"]["sent_at"] == [now.isoformat()]
 
 
+def test_adaptive_proactivity_blocks_after_recent_negative_feedback() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime.configure_proactivity(
+        "agent-p",
+        ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=0),
+    )
+    runtime.tick(
+        "agent-p",
+        {"intent": "chat", "text": "eso no, te equivocas", "now": (now - timedelta(hours=1)).isoformat()},
+    )
+    runtime.episode_store.append(
+        Episode("e1", "agent-p", now - timedelta(hours=26), "mañana tengo examen", "school", 0.9, 0.9)
+    )
+
+    out = runtime.evaluate_proactivity("agent-p", now=now)
+    dashboard = runtime.relationship_dashboard("agent-p")
+
+    assert out.should_send is False
+    assert "adaptive_proactivity_blocked" in out.reason_trace
+    assert dashboard["proactivity"]["adaptive"]["should_suggest"] is False
+    assert "recent_negative_signal" in dashboard["proactivity"]["adaptive"]["reasons"]
+
+
 def test_proactivity_does_not_follow_salient_memory_after_only_minutes() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
@@ -85,6 +109,32 @@ def test_proactivity_prioritizes_temporal_event_reminder() -> None:
     assert "mañana tengo cita" in out.action["payload"]["text"]
     assert "event_reminder" in out.reason_trace
     assert state.relation_state["temporal_events"][0]["status"] == "reminded"
+
+
+def test_adaptive_proactivity_does_not_block_confirmed_temporal_reminder() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime.tick(
+        "agent-p",
+        {
+            "intent": "chat",
+            "text": "mañana tengo cita",
+            "salience": 0.9,
+            "confidence": 0.95,
+            "now": now.isoformat(),
+        },
+    )
+    runtime.tick("agent-p", {"intent": "chat", "text": "sí, recuérdamelo", "now": (now + timedelta(minutes=1)).isoformat()})
+    runtime.tick(
+        "agent-p",
+        {"intent": "chat", "text": "eso no, te equivocas", "now": (now + timedelta(hours=1)).isoformat()},
+    )
+
+    out = runtime.evaluate_proactivity("agent-p", now=datetime(2026, 5, 22, 8, 30, tzinfo=timezone.utc))
+
+    assert out.should_send is True
+    assert "event_reminder" in out.reason_trace
+    assert "adaptive_proactivity_blocked" not in out.reason_trace
 
 
 def test_confirmed_temporal_reminder_does_not_require_general_proactivity_consent() -> None:
