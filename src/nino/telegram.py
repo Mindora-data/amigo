@@ -198,7 +198,7 @@ class TelegramLinkStore:
         user = _slug(user_id)
         code = secrets.token_urlsafe(8).replace("-", "").replace("_", "")[:10].upper()
         created_at = (now or datetime.now(timezone.utc)).isoformat()
-        self.conn.execute("DELETE FROM telegram_link_code WHERE user_id = ? AND used_at IS NULL", (user,))
+        self.conn.execute("DELETE FROM telegram_link_code WHERE user_id = ?", (user,))
         self.conn.execute(
             "INSERT INTO telegram_link_code (code, user_id, created_at, used_at) VALUES (?, ?, ?, NULL)",
             (code, user, created_at),

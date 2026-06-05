@@ -233,6 +233,18 @@ def test_link_code_cli_path_does_not_require_telegram_token(tmp_path, capsys) ->
     assert len(code) >= 8
 
 
+def test_link_code_can_be_regenerated_after_previous_code_was_used(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+
+    first = links.create_code("nino")
+    assert links.link_with_code(111, first) == "nino"
+
+    second = links.create_code("nino")
+
+    assert second != first
+    assert len(second) >= 8
+
+
 def test_group_message_not_directed_to_bot_is_observed_without_reply(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()
