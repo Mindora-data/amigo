@@ -414,12 +414,12 @@ class BackendClient:
         payload = action.get("payload") if isinstance(action, dict) else None
         return str(payload.get("text") or "").strip() if isinstance(payload, dict) else ""
 
-    def observe(self, user_id: str, text: str, now: datetime) -> None:
+    def observe(self, user_id: str, text: str, now: datetime, intent: str = "group_observation") -> None:
         user = _slug(user_id)
         self._json(
             "POST",
             f"/users/{parse.quote(user)}/agents/{AGENT_ID}/observe",
-            {"intent": "group_observation", "text": text, "salience": 0.35, "confidence": 0.7, "now": now.isoformat()},
+            {"intent": intent, "text": text, "salience": 0.35, "confidence": 0.7, "now": now.isoformat()},
             user_id=user,
         )
 
@@ -670,6 +670,9 @@ class TelegramBotService:
             return "Visión no activa: puedo recibir imágenes, pero no interpretarlas todavía."
         return "Visión activa: puedo comentar imágenes. No las guardo salvo que me lo pidas explícitamente."
 
+    def _valid_image_description(self, text: str) -> bool:
+        return bool(text.strip()) and not text.startswith(("Puedo recibir", "La imagen es demasiado grande", "He recibido"))
+
     def _is_command(self, text: str, command: str) -> bool:
         first = text.strip().split(maxsplit=1)[0].casefold() if text.strip() else ""
         if not first.startswith("/"):
@@ -756,6 +759,8 @@ class TelegramBotService:
             reply = self._describe_telegram_image(message)
             if reply:
                 self._send_group_reply(chat_id, self._format_group_reply(message, reply, self._should_mention_sender(chat_id, now)))
+                if self._valid_image_description(reply):
+                    self.backend.observe(self._group_user_id(chat_id), f"Imagen vista en Telegram: {reply}", now, intent="image_observation")
             return
         user_id = self.links.user_for_chat(chat_id)
         if user_id is None:
@@ -767,7 +772,9 @@ class TelegramBotService:
         reply = self._describe_telegram_image(message)
         if reply:
             self.telegram.send_message(chat_id, reply)
-            if caption and self._image_memory_requested(caption) and not reply.startswith(("Puedo recibir", "La imagen es demasiado grande", "He recibido")):
+            if self._valid_image_description(reply):
+                self.backend.observe(user_id, f"Imagen vista en Telegram: {reply}", now, intent="image_observation")
+            if caption and self._image_memory_requested(caption) and self._valid_image_description(reply):
                 memory_text = f"Recuerda esta imagen por su descripcion, no la imagen cruda: {reply}"
                 self.backend.tick(user_id, memory_text, now)
                 self.telegram.send_message(chat_id, "Lo dejo recordado como descripción, no como imagen.")

@@ -64,7 +64,7 @@ class FakeBackend:
         self.session_for(user_id)
         return self.proactive.get(user_id)
 
-    def observe(self, user_id: str, text: str, now: datetime) -> None:
+    def observe(self, user_id: str, text: str, now: datetime, intent: str = "group_observation") -> None:
         self.session_for(user_id)
         self.observations.append({"user_id": user_id, "text": text, "now": now.isoformat()})
 
@@ -143,6 +143,13 @@ def test_linked_private_photo_is_described_without_backend_memory(tmp_path) -> N
     bot.handle_update(_photo_update(111, caption="¿qué ves?"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
 
     assert backend.ticks == []
+    assert backend.observations == [
+        {
+            "user_id": "ana",
+            "text": "Imagen vista en Telegram: Veo una foto con una libreta y un portatil.",
+            "now": "2026-05-28T10:00:00+00:00",
+        }
+    ]
     assert vision.calls == [{"image_bytes": b"fake-image", "mime_type": "image/jpeg", "caption": "¿qué ves?"}]
     assert telegram.sent[-1]["chat_id"] == "111"
     assert "libreta" in str(telegram.sent[-1]["text"])
@@ -167,6 +174,13 @@ def test_linked_private_photo_is_remembered_only_when_requested(tmp_path) -> Non
             "now": "2026-05-28T10:00:00+00:00",
         }
     ]
+    assert backend.observations == [
+        {
+            "user_id": "ana",
+            "text": "Imagen vista en Telegram: Veo una mesa con un cuaderno rojo.",
+            "now": "2026-05-28T10:00:00+00:00",
+        }
+    ]
     assert "cuaderno rojo" in str(telegram.sent[-2]["text"])
     assert telegram.sent[-1]["text"] == "Lo dejo recordado como descripción, no como imagen."
 
@@ -184,6 +198,13 @@ def test_linked_private_photo_without_memory_cue_is_not_saved(tmp_path) -> None:
     bot.handle_update(_photo_update(111, caption="¿qué ves?"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
 
     assert backend.ticks == []
+    assert backend.observations == [
+        {
+            "user_id": "ana",
+            "text": "Imagen vista en Telegram: Veo una mesa con un cuaderno rojo.",
+            "now": "2026-05-28T10:00:00+00:00",
+        }
+    ]
     assert len(telegram.sent) == 1
 
 
@@ -197,6 +218,7 @@ def test_linked_private_photo_without_vision_is_honest(tmp_path) -> None:
     bot.handle_update(_photo_update(111), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
 
     assert backend.ticks == []
+    assert backend.observations == []
     assert "no tengo visión activa" in str(telegram.sent[-1]["text"])
 
 
@@ -212,6 +234,7 @@ def test_linked_private_photo_too_large_is_not_downloaded(tmp_path) -> None:
 
     assert vision.calls == []
     assert backend.ticks == []
+    assert backend.observations == []
     assert "demasiado grande" in str(telegram.sent[-1]["text"])
 
 
@@ -447,6 +470,13 @@ def test_group_photo_directed_to_bot_is_described(tmp_path) -> None:
     bot.handle_update(_photo_update(-100, caption="@amigo_test_bot mira esto", group=True), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
 
     assert vision.calls == [{"image_bytes": b"group-image", "mime_type": "image/jpeg", "caption": "@amigo_test_bot mira esto"}]
+    assert backend.observations == [
+        {
+            "user_id": "telegram-group-100",
+            "text": "Imagen vista en Telegram: Veo una imagen compartida en el grupo.",
+            "now": "2026-05-28T10:00:00+00:00",
+        }
+    ]
     assert "imagen compartida" in str(telegram.sent[-1]["text"])
 
 
