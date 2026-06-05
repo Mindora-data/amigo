@@ -1401,6 +1401,41 @@ def _extract_curiosity_topics(text: str, intent: str) -> list[str]:
             out.append(topic)
     return out[:3]
 
+def _asks_for_personal_opinion(text: str) -> bool:
+    return bool(re.search(r"\b(?:qu[eé]\s+opinas\s+de|qu[eé]\s+piensas\s+de|qu[eé]\s+te\s+parece|que te parece|tu opini[oó]n sobre)\b", text, re.IGNORECASE))
+
+def _is_culture_or_work_topic(text: str, topics: list[str]) -> bool:
+    haystack = _curiosity_key(" ".join([text, *topics]))
+    markers = {
+        "comic", "comics", "manga", "tebeo", "tebeos", "novela", "libro", "obra",
+        "autor", "autora", "guion", "dibujo", "serie", "pelicula", "watchmen",
+        "superman", "batman", "marvel", "dc", "byrne", "brubaker", "moore",
+    }
+    return any(marker in haystack.split() or marker in haystack for marker in markers)
+
+def _has_active_opinion_evidence(topic: str, entries: list[LearningJournalEntry], stances: list[dict[str, Any]]) -> bool:
+    topic_terms = learning_terms(topic)
+    if not topic_terms:
+        return False
+    for entry in entries:
+        haystack = f"{entry.title} {entry.lesson} {' '.join(entry.tags or [])}"
+        if topic_terms & learning_terms(haystack):
+            return True
+    for stance in stances:
+        if not stance.get("active"):
+            continue
+        text = str(stance.get("text", ""))
+        if topic_terms & learning_terms(text):
+            return True
+    return False
+
+def _unsupported_group_opinion_response(topic: str) -> str:
+    clean = _clean_curiosity_topic(topic) or "eso"
+    return (
+        f"No tengo base suficiente sobre {clean} como para opinar con criterio. "
+        "Prefiero no inventarme una opinión. Si me contáis qué os interesa o qué habéis leído, lo voy entendiendo."
+    )
+
 def _update_curiosity_topics(world_model: dict[str, Any], topics: list[str], now: datetime) -> dict[str, Any]:
     if not topics:
         return world_model
@@ -4038,9 +4073,27 @@ class NinoRuntime:
         )
         llm_error: str | None = None
         llm_provider = self._llm_provider()
+        is_group_context = agent_id.startswith("telegram-group-") or intent.startswith("group_")
+        active_learning_entries_for_prompt = self.learning_journal_store.list_for_agent(agent_id, status="active")
+        prompt_stances_for_guard = self.learning_stances(agent_id)["stances"]
+        opinion_topics = _extract_curiosity_topics(text, intent)
+        unsupported_group_opinion = (
+            is_group_context
+            and _asks_for_personal_opinion(text)
+            and _is_culture_or_work_topic(text, opinion_topics)
+            and opinion_topics
+            and not _has_active_opinion_evidence(opinion_topics[0], active_learning_entries_for_prompt, prompt_stances_for_guard)
+        )
+        if unsupported_group_opinion and not force_policy_response:
+            decision = PolicyResponse(
+                chosen_action={"type": "external_message", "payload": {"text": _unsupported_group_opinion_response(opinion_topics[0])}},
+                confidence=0.88,
+                reason_trace=[*decision.reason_trace, "unsupported_group_opinion_guard"],
+            )
+            force_policy_response = True
         if self.llm_client is not None and text.strip() and not force_policy_response:
             try:
-                active_learning_entries = self.learning_journal_store.list_for_agent(agent_id, status="active")
+                active_learning_entries = active_learning_entries_for_prompt
                 selected_learning_entries = _select_prompt_learning_entries(text, active_learning_entries)
                 prompt_relation_state = {
                     **state.relation_state,
@@ -4049,7 +4102,7 @@ class NinoRuntime:
                         for entry in selected_learning_entries
                     ],
                 }
-                prompt_stances = self.learning_stances(agent_id)["stances"]
+                prompt_stances = prompt_stances_for_guard
                 prompt_relation_state["learning_stances"] = prompt_stances
                 prompt_relation_state["maturity_profile"] = _maturity_profile(
                     interaction_count=int(state.relation_state.get("interaction_count", 0)),

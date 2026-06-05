@@ -538,6 +538,34 @@ def test_llm_prompt_blocks_unsupported_personal_opinions() -> None:
     assert "Temas con criterio propio respaldado por evidencia: ninguno" in prompt
 
 
+def test_group_unsupported_comic_opinion_is_blocked_before_llm() -> None:
+    llm = FakeLLM("Watchmen me parece una obra maestra.")
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    out = runtime.tick("telegram-group-100", {"intent": "group_chat", "text": "qué opinas de Watchmen?"})
+
+    text = out["action"]["payload"]["text"]
+    assert "No tengo base suficiente sobre Watchmen" in text
+    assert "Prefiero no inventarme una opinión" in text
+    assert "unsupported_group_opinion_guard" in out["reason_trace"]
+    assert llm.prompts == []
+
+
+def test_group_comic_opinion_with_active_evidence_can_use_llm() -> None:
+    llm = FakeLLM("Con la evidencia que tengo, puedo hablar de Byrne sin inventar.")
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+    runtime.add_learning_journal_entry(
+        "telegram-group-100",
+        {"title": "Watchmen", "lesson": "Watchmen interesa al grupo como comic para analizar con calma", "tags": ["cultura"]},
+    )
+
+    out = runtime.tick("telegram-group-100", {"intent": "group_chat", "text": "qué opinas de Watchmen?"})
+
+    assert out["action"]["payload"]["text"] == "Con la evidencia que tengo, puedo hablar de Byrne sin inventar."
+    assert "unsupported_group_opinion_guard" not in out["reason_trace"]
+    assert llm.prompts
+
+
 def test_llm_prompt_lists_evidence_backed_opinion_themes() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
