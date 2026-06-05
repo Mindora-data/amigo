@@ -1608,6 +1608,36 @@ def _personal_treatment_summary(
     }
 
 
+def _behavior_contract_summary(entries: list[LearningJournalEntry]) -> dict[str, Any]:
+    behavior_entries = [
+        entry
+        for entry in entries
+        if entry.status == "active"
+        and classify_learning_theme(entry.title, entry.lesson, entry.tags) in {"comportamiento", "amistad"}
+    ]
+    learned_rules = [
+        {
+            "entry_id": entry.entry_id,
+            "title": entry.title,
+            "lesson": entry.lesson,
+            "tags": list(entry.tags),
+            "updated_at": entry.updated_at.isoformat(),
+        }
+        for entry in behavior_entries[:8]
+    ]
+    return {
+        "hard_rules": [
+            "no_afirmar_acciones_externas_sin_confirmacion_tecnica",
+            "si_una_accion_falla_decir_que_no_se_pudo_ejecutar",
+            "no_opinar_como_si_hubiera_leido_visto_o_vivido_sin_evidencia_activa",
+            "si_no_hay_evidencia_mostrar_curiosidad_o_limite_no_fingir_criterio",
+        ],
+        "learned_rules": learned_rules,
+        "rule_count": 4 + len(learned_rules),
+        "privacy": "private_behavior_contract_no_raw_conversation",
+    }
+
+
 def _learning_priorities(
     entries: list[LearningJournalEntry],
     curiosity: dict[str, Any],
@@ -3160,6 +3190,7 @@ class NinoRuntime:
             journal_entries=journal_entries,
             style=style,
         )
+        behavior_contract = _behavior_contract_summary(journal_entries)
         growth_compass = _growth_compass(
             maturity_profile=maturity_profile,
             curiosity=curiosity_summary,
@@ -3197,6 +3228,7 @@ class NinoRuntime:
             },
             "response_style": {key: round(float(value), 4) for key, value in style.items()},
             "personal_treatment": personal_treatment,
+            "behavior_contract": behavior_contract,
             "memory": {
                 "episode_count": metrics["episode_count"],
                 "cold_memory_count": metrics["cold_memory_count"],
@@ -4163,6 +4195,7 @@ class NinoRuntime:
                         for entry in selected_learning_entries
                     ],
                 }
+                prompt_relation_state["behavior_contract"] = _behavior_contract_summary(active_learning_entries)
                 prompt_stances = prompt_stances_for_guard
                 prompt_relation_state["learning_stances"] = prompt_stances
                 prompt_relation_state["maturity_profile"] = _maturity_profile(

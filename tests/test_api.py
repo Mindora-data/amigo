@@ -122,6 +122,8 @@ def test_http_api_serves_browser_app(tmp_path) -> None:
     assert b"Telegram social fiable" in dashboard_body
     assert b"Trato personal" in dashboard_body
     assert b"personalTreatment" in dashboard_body
+    assert b"Contrato de comportamiento" in dashboard_body
+    assert b"behaviorContract" in dashboard_body
     assert b"/learning-stances/" in dashboard_body
     assert b"Madurez relacional" in dashboard_body
     assert b"/internal/cycle" in body
@@ -1691,6 +1693,28 @@ def test_relationship_dashboard_exposes_personal_treatment_preferences(tmp_path)
         for item in treatment["address_preferences"]
     )
     assert treatment["privacy"] == "private_user_treatment_no_raw_conversation"
+
+
+def test_relationship_dashboard_exposes_behavior_contract_from_learning(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    _request(
+        app,
+        "POST",
+        "/agents/api-agent/learning-journal",
+        {
+            "title": "Acciones externas",
+            "lesson": "No decir que ha enviado un mensaje al grupo si no hay confirmación técnica.",
+            "tags": ["comportamiento"],
+        },
+    )
+    dashboard = _request(app, "GET", "/agents/api-agent/relationship-dashboard")["dashboard"]
+
+    contract = dashboard["behavior_contract"]
+    assert "no_afirmar_acciones_externas_sin_confirmacion_tecnica" in contract["hard_rules"]
+    assert "no_opinar_como_si_hubiera_leido_visto_o_vivido_sin_evidencia_activa" in contract["hard_rules"]
+    assert any("confirmación técnica" in item["lesson"] for item in contract["learned_rules"])
+    assert contract["privacy"] == "private_behavior_contract_no_raw_conversation"
 
 
 def test_group_maturity_is_honest_and_group_scoped(tmp_path) -> None:

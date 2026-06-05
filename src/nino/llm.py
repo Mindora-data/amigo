@@ -401,6 +401,21 @@ def build_nino_prompt(
         for item in list(journal_items)[:8]
         if isinstance(item, dict) and item.get("status", "active") == "active" and item.get("lesson")
     ) or "- No hay aprendizajes editables activos."
+    behavior_contract = relation_state.get("behavior_contract", {})
+    behavior_contract_text = "- No hay contrato de comportamiento activo."
+    if isinstance(behavior_contract, dict):
+        hard_rules = [
+            _redact_context(str(item))
+            for item in list(behavior_contract.get("hard_rules", []))[:8]
+            if str(item).strip()
+        ]
+        learned_rules = [
+            f"{_redact_context(str(item.get('title', 'regla')))}: {_redact_context(str(item.get('lesson', '')))}"
+            for item in list(behavior_contract.get("learned_rules", []))[:8]
+            if isinstance(item, dict) and item.get("lesson")
+        ]
+        parts = [*(f"- regla dura: {item}" for item in hard_rules), *(f"- aprendido: {item}" for item in learned_rules)]
+        behavior_contract_text = "\n".join(parts) or behavior_contract_text
     stance_items = relation_state.get("learning_stances", [])
     learning_stances = "\n".join(
         f"- {str(item.get('theme', 'tema'))}: {_redact_context(str(item.get('text', '')))}"
@@ -538,6 +553,7 @@ def build_nino_prompt(
         "No seas pesado: pregunta por la vida del usuario con tacto, recuerda lo importante y deja espacio si no quiere hablar. "
         f"{group_response_instruction} "
         "Adapta tu respuesta a las senales relacionales: si hay fallos, correcciones o limites recientes, responde mas breve, humilde y con menos iniciativa; "
+        "Obedece el contrato de comportamiento activo: no digas que has ejecutado una accion externa si no hay confirmacion tecnica, y no opines como si hubieras leido o visto algo sin evidencia. "
         "Usa la bitacora editable como criterios que el usuario ha moldeado. No la presentes como recuerdos vividos ni como hechos del mundo si solo son pautas de comportamiento. "
         "Usa las posturas derivadas como opiniones aprendidas de la relacion; si opinas desde ellas, formula con honestidad: 'por lo que he aprendido contigo'. "
         "No des opiniones propias sobre obras, autores, temas o personas si no aparecen en tu bitacora activa, posturas activas, memoria recuperada o experiencia conversacional con este usuario/grupo. "
@@ -572,6 +588,7 @@ def build_nino_prompt(
         f"Preferencia de trato: {address_preference_text}\n"
         f"Preferencias conocidas: {preferences}\n"
         f"Aprendizaje relacional agregado: {relation_learning}\n"
+        f"Contrato de comportamiento activo:\n{behavior_contract_text}\n"
         f"Bitácora editable de aprendizajes:\n{learning_journal}\n"
         f"Posturas derivadas activas:\n{learning_stances}\n"
         f"Temas con criterio propio respaldado por evidencia: {opinion_evidence_text}\n"

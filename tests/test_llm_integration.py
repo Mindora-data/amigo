@@ -504,6 +504,29 @@ def test_llm_prompt_includes_active_learning_journal_entries() -> None:
     assert "deja espacio" in prompt
 
 
+def test_llm_prompt_includes_active_behavior_contract() -> None:
+    llm = FakeLLM()
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+
+    runtime.add_learning_journal_entry(
+        "agent-llm",
+        {
+            "title": "Acciones externas",
+            "lesson": "No decir que ha escrito en un grupo si no hay confirmación técnica.",
+            "tags": ["comportamiento"],
+        },
+    )
+    runtime.tick("agent-llm", {"intent": "question", "text": "qué debes hacer si te pido avisar al grupo?"})
+
+    system = llm.prompts[-1]["system"]
+    prompt = llm.prompts[-1]["user"]
+    assert "contrato de comportamiento activo" in system
+    assert "no digas que has ejecutado una accion externa" in system
+    assert "Contrato de comportamiento activo:" in prompt
+    assert "no_afirmar_acciones_externas_sin_confirmacion_tecnica" in prompt
+    assert "confirmación técnica" in prompt
+
+
 def test_llm_prompt_includes_derived_learning_stances() -> None:
     llm = FakeLLM()
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
