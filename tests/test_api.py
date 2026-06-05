@@ -2448,6 +2448,39 @@ def test_continuity_correction_is_counted_as_learning_signal(tmp_path) -> None:
     assert dashboard["response_style"]["caution"] > 0.5
 
 
+def test_relationship_friction_creates_reviewable_learning_drafts(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    first = _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "te pierdes y no relacionas el contexto"})
+    second = _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "te equivocas, eso no era"})
+    third = _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "no funciona, has fallado"})
+
+    assert any("Continuidad de hilo" == item["title"] for item in first["learning_journal_updates"])
+    assert any("Recuperación tras fallo" == item["title"] for item in second["learning_journal_updates"])
+    assert all(item["status"] == "draft" for item in [*first["learning_journal_updates"], *second["learning_journal_updates"]])
+    assert third["learning_journal_updates"] == []
+
+    journal = _request(app, "GET", "/agents/api-agent/learning-journal")
+    titles = [item["title"] for item in journal["entries"]]
+    assert titles.count("Continuidad de hilo") == 1
+    assert titles.count("Recuperación tras fallo") == 1
+    rendered = json.dumps(journal)
+    assert "te pierdes" not in rendered
+    assert "has fallado" not in rendered
+
+
+def test_relationship_stop_signal_creates_single_do_not_insist_draft(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    first = _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "no insistas con ese tema"})
+    second = _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "no preguntes más"})
+
+    assert any(item["title"] == "No insistir" for item in first["learning_journal_updates"])
+    assert second["learning_journal_updates"] == []
+    journal = _request(app, "GET", "/agents/api-agent/learning-journal")
+    assert [item["title"] for item in journal["entries"]].count("No insistir") == 1
+
+
 def test_http_api_exports_imports_and_reports_metrics(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
     _request(app, "POST", "/agents/api-agent/tick", {"intent": "chat", "text": "soy Pablo", "salience": 0.8})

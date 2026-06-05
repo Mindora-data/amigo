@@ -1154,6 +1154,72 @@ def _social_learning_journal_entries(
     return out[:3]
 
 
+RELATIONSHIP_LEARNING_SPECS = {
+    "continuity_miss": {
+        "threshold": 1,
+        "title": "Continuidad de hilo",
+        "lesson": "Cuando el usuario desarrolla una idea en varios turnos, relacionar el mensaje actual con el hilo activo antes de responder.",
+    },
+    "repeated_negative": {
+        "threshold": 2,
+        "title": "Recuperación tras fallo",
+        "lesson": "Tras señales de fallo, responder breve, reconocer el límite y pedir solo el dato mínimo necesario.",
+    },
+    "explicit_stop": {
+        "threshold": 1,
+        "title": "No insistir",
+        "lesson": "Si el usuario pide parar o no insistir, dejar de reabrir el tema hasta que haya una señal nueva.",
+    },
+}
+
+
+def _relationship_learning_journal_entries(
+    *,
+    agent_id: str,
+    relation_state: dict[str, Any],
+    source_episode_id: str,
+    now: datetime,
+    existing_lessons: list[str],
+) -> list[LearningJournalEntry]:
+    learning = dict(relation_state.get("relationship_learning", {}))
+    counts = dict(learning.get("counts", {}))
+    drafted = set(str(item) for item in learning.get("drafted_patterns", []) if str(item))
+    existing = {_review_key(item) for item in existing_lessons}
+    pressure = {
+        "continuity_miss": int(counts.get("continuity_miss", 0) or 0),
+        "repeated_negative": int(counts.get("negative", 0) or 0) + int(counts.get("correction", 0) or 0),
+        "explicit_stop": int(counts.get("stop", 0) or 0),
+    }
+    out: list[LearningJournalEntry] = []
+    for key, spec in RELATIONSHIP_LEARNING_SPECS.items():
+        if key in drafted or int(pressure.get(key, 0)) < int(spec["threshold"]):
+            continue
+        lesson = str(spec["lesson"])
+        if _review_key(lesson) in existing:
+            drafted.add(key)
+            continue
+        try:
+            out.append(
+                make_detected_learning_entry(
+                    agent_id=agent_id,
+                    lesson=lesson,
+                    title=str(spec["title"]),
+                    tags=["relationship_feedback", "comportamiento"],
+                    source_episode_id=source_episode_id,
+                    now=now,
+                    status="draft",
+                )
+            )
+            drafted.add(key)
+            existing.add(_review_key(lesson))
+        except ValueError:
+            continue
+    if out:
+        learning["drafted_patterns"] = sorted(drafted)
+        relation_state["relationship_learning"] = learning
+    return out[:3]
+
+
 def _update_relation_from_percept(
     relation_state: dict[str, Any],
     percept_frame: dict[str, Any],
@@ -4297,6 +4363,17 @@ class NinoRuntime:
         state.tick += 1
         state.updated_at = now
         state.relation_state = _update_relation_from_percept(state.relation_state, percept_frame, now)
+        if text.strip():
+            relationship_updates = _relationship_learning_journal_entries(
+                agent_id=agent_id,
+                relation_state=state.relation_state,
+                source_episode_id=episode.episode_id,
+                now=now,
+                existing_lessons=[entry.lesson for entry in self.learning_journal_store.list_for_agent(agent_id, status="all")],
+            )
+            for entry in relationship_updates:
+                self.learning_journal_store.upsert(entry)
+            journal_updates.extend(relationship_updates)
         if text.strip() and agent_id.startswith("telegram-group-"):
             social_updates = _social_learning_journal_entries(
                 agent_id=agent_id,
