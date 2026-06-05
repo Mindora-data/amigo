@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from nino.consolidation import MemoryFact
-from nino.llm import DeepSeekClient, build_configured_llm, llm_config_status
+from nino.llm import ClaudeClient, DeepSeekClient, build_configured_llm, build_configured_vision_llm, llm_config_status
 from nino.runtime import InMemoryStateStore, NinoRuntime
 
 
@@ -442,6 +442,22 @@ def test_llm_config_status_can_use_keychain_without_exposing_key(monkeypatch) ->
     assert status["keychain_service"] == "nino-test"
     assert "keychain-secret" not in str(status)
     assert client is not None
+
+
+def test_vision_llm_can_use_claude_keychain_with_deepseek_as_primary(monkeypatch) -> None:
+    monkeypatch.setenv("NINO_LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("NINO_DEEPSEEK_API_KEY", "deepseek-secret")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("NINO_KEYCHAIN_SERVICE", "nino-test")
+    monkeypatch.setenv("NINO_CLAUDE_MODEL", "claude-vision-test")
+    monkeypatch.setattr("nino.llm._keychain_api_key", lambda service: "claude-secret" if service == "nino-test" else None)
+
+    text_client = build_configured_llm()
+    vision_client = build_configured_vision_llm()
+
+    assert isinstance(text_client, DeepSeekClient)
+    assert isinstance(vision_client, ClaudeClient)
+    assert vision_client.model == "claude-vision-test"
 
 
 def test_llm_prompt_includes_recent_turns_cold_facts_and_redacts_sensitive_context() -> None:

@@ -176,11 +176,12 @@ def build_configured_llm() -> LLMClient | None:
 
 def build_configured_vision_llm() -> VisionLLMClient | None:
     status = llm_config_status()
-    if not status["enabled"] or status["provider"] != "claude":
+    api_key = _anthropic_api_key()
+    if not api_key:
         return None
     return ClaudeClient(
-        api_key=_anthropic_api_key() or "",
-        model=status["model"],
+        api_key=api_key,
+        model=os.environ.get("NINO_CLAUDE_MODEL", "claude-sonnet-4-5").strip() or "claude-sonnet-4-5",
         max_tokens=status["max_tokens"],
         timeout_seconds=status["timeout_seconds"],
     )
