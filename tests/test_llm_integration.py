@@ -63,6 +63,43 @@ def test_llm_prompt_includes_recent_assistant_phrases_to_avoid_repetition() -> N
     assert "Me alegra que todo vaya bien" in prompt
 
 
+def test_llm_prompt_filters_telegram_document_context_for_unrelated_questions() -> None:
+    llm = FakeLLM("Respuesta.")
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+    doc_text = (
+        "Archivo de texto recibido en Telegram (novela.txt; extracto temporal, no memoria permanente):\n"
+        "La novela habla de memoria y confianza.\n\n"
+        "Mensaje del usuario: qué te parece?"
+    )
+
+    runtime.tick("agent-llm", {"intent": "chat", "text": doc_text, "salience": 0.9, "confidence": 0.9})
+    out = runtime.tick("agent-llm", {"intent": "question", "text": "qué opinas del tema de mercados?"})
+
+    prompt = llm.prompts[-1]["user"]
+    assert "Archivo de texto recibido en Telegram" not in prompt
+    assert "La novela habla de memoria" not in prompt
+    rendered_context = str(out["nino_context"]["memory_candidates"])
+    assert "Archivo de texto recibido en Telegram" not in rendered_context
+    assert "La novela habla de memoria" not in rendered_context
+
+
+def test_llm_prompt_keeps_telegram_document_context_when_user_asks_about_book() -> None:
+    llm = FakeLLM("Respuesta.")
+    runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)
+    doc_text = (
+        "Archivo de texto recibido en Telegram (novela.txt; extracto temporal, no memoria permanente):\n"
+        "La novela habla de memoria y confianza.\n\n"
+        "Mensaje del usuario: qué te parece?"
+    )
+
+    runtime.tick("agent-llm", {"intent": "chat", "text": doc_text, "salience": 0.9, "confidence": 0.9})
+    runtime.tick("agent-llm", {"intent": "question", "text": "cuál era el argumento del libro?"})
+
+    prompt = llm.prompts[-1]["user"]
+    assert "Archivo de texto recibido en Telegram" in prompt
+    assert "La novela habla de memoria" in prompt
+
+
 def test_llm_prompt_uses_learned_address_preference_and_defaults_to_neutral_treatment() -> None:
     llm = FakeLLM("Respuesta neutra.")
     runtime = NinoRuntime(InMemoryStateStore(), llm_client=llm)

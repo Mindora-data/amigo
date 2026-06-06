@@ -2095,3 +2095,33 @@ Tests:
 
 - `ya no mezclas temas ?` devuelve respuesta de política sobre comportamiento.
 - La respuesta no ofrece seguir hablando del argumento del libro.
+
+## Sprint 81 - Aislamiento de contexto temporal de archivos
+
+Estado: hecho inicial.
+
+Objetivo: impedir que un archivo subido por Telegram vuelva cada pocos mensajes
+por memoria recuperada o historial, aunque ya no se inyecte como último archivo.
+
+Hechos:
+
+- Los extractos temporales de archivos Telegram se identifican por marcadores
+  cerrados (`Archivo de texto recibido en Telegram`, `extracto temporal`).
+- Si el mensaje actual no referencia archivo/libro/documento, esos extractos se
+  filtran de la memoria recuperada antes de política y LLM.
+- También se filtran de los últimos turnos enviados al prompt, para que el LLM no
+  arrastre el libro desde historial reciente.
+- Si el usuario sí pregunta por el libro, argumento, personajes o documento, el
+  contexto se conserva.
+
+Privacidad:
+
+- No se borra conversación ni se toca la base; solo se controla qué contexto se
+  ofrece para el turno actual.
+- El archivo sigue siendo temporal y no se convierte en hecho frío.
+
+Tests:
+
+- Una pregunta sobre mercados tras leer una novela no recibe el extracto del
+  libro en prompt ni en `nino_context`.
+- Una pregunta explícita sobre el argumento del libro conserva el contexto.

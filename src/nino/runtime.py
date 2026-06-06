@@ -100,6 +100,88 @@ def _nino_context_summary(
     }
 
 
+DOCUMENT_CONTEXT_MARKERS = (
+    "Archivo de texto recibido en Telegram",
+    "Contexto del último archivo de texto recibido por Telegram",
+    "extracto temporal, no memoria permanente",
+)
+
+
+def _is_document_context_text(text: str) -> bool:
+    return any(marker in text for marker in DOCUMENT_CONTEXT_MARKERS)
+
+
+def _text_references_document_context(text: str) -> bool:
+    plain = _without_accents(text).lower()
+    explicit = (
+        "archivo",
+        "documento",
+        "texto",
+        "libro",
+        "novela",
+        "txt",
+        "lo que te mande",
+        "lo que subi",
+        "lo has leido",
+        "resum",
+        "argumento",
+        "personaje",
+        "trama",
+    )
+    return any(marker in plain for marker in explicit)
+
+
+def _filter_document_context_candidates(response: RetrieveResponse, current_text: str) -> RetrieveResponse:
+    if _text_references_document_context(current_text):
+        return response
+    return RetrieveResponse(
+        memory_candidates=[
+            candidate
+            for candidate in response.memory_candidates
+            if not _is_document_context_text(candidate.statement)
+        ],
+        temporal_query=response.temporal_query,
+        temporal_window=response.temporal_window,
+        temporal_miss=response.temporal_miss,
+    )
+
+
+def _filter_document_context_turns(turns: list[dict[str, Any]], current_text: str) -> list[dict[str, Any]]:
+    if _text_references_document_context(current_text):
+        return turns
+    return [turn for turn in turns if not _is_document_context_text(str(turn.get("text", "")))]
+
+
+def _filter_document_context_thread(thread: dict[str, Any] | None, current_text: str) -> dict[str, Any] | None:
+    if not isinstance(thread, dict) or _text_references_document_context(current_text):
+        return thread
+    summary = str(thread.get("summary", ""))
+    recent_messages = " ".join(str(item) for item in list(thread.get("recent_user_messages", []))[-4:])
+    if _is_document_context_text(summary) or _is_document_context_text(recent_messages):
+        return None
+    return thread
+
+
+def _filter_document_context_relation_state(relation_state: dict[str, Any], current_text: str) -> dict[str, Any]:
+    if _text_references_document_context(current_text):
+        return relation_state
+    relation = dict(relation_state)
+    group_maturity = dict(relation.get("group_maturity", {}))
+    if group_maturity:
+        group_maturity["shared_history"] = [
+            item
+            for item in list(group_maturity.get("shared_history", []))
+            if not _is_document_context_text(str(item.get("summary", "")) if isinstance(item, dict) else str(item))
+        ]
+        relation["group_maturity"] = group_maturity
+    relation["maturity_reflections"] = [
+        item
+        for item in list(relation.get("maturity_reflections", []))
+        if not _is_document_context_text(str(item.get("summary", "")) if isinstance(item, dict) else str(item))
+    ]
+    return relation
+
+
 def _should_auto_consolidate(percept_frame: dict[str, Any]) -> bool:
     text = str(percept_frame.get("text", "")).strip()
     if not text:
@@ -4509,7 +4591,7 @@ class NinoRuntime:
         new_temporal_events = _extract_temporal_events(text, now)
         reminder_confirmation = _reminder_confirmation_from_text(text)
         query_intent = text.strip() or intent
-        active_thread = _active_thread_context(state.relation_state)
+        active_thread = _filter_document_context_thread(_active_thread_context(state.relation_state), text)
         if active_thread and _is_thread_continuation(text, active_thread):
             query_intent = f"{active_thread.get('summary', '')} {query_intent}".strip()
         if intent not in GENERIC_INTENTS and text.strip():
@@ -4535,6 +4617,8 @@ class NinoRuntime:
                     now=now,
                 ),
             )
+        retrieved = _filter_document_context_candidates(retrieved, text)
+        llm_retrieved = _filter_document_context_candidates(llm_retrieved, text)
 
         policy_req = PolicyRequest(
             percept_frame={
@@ -4599,12 +4683,13 @@ class NinoRuntime:
                 active_learning_entries = active_learning_entries_for_prompt
                 selected_learning_entries = _select_prompt_learning_entries(text, active_learning_entries)
                 prompt_relation_state = {
-                    **state.relation_state,
+                    **_filter_document_context_relation_state(state.relation_state, text),
                     "learning_journal": [
                         asdict(entry)
                         for entry in selected_learning_entries
                     ],
                 }
+                prompt_relation_state["active_conversation_thread"] = active_thread or {}
                 prompt_relation_state["behavior_contract"] = _behavior_contract_summary(active_learning_entries)
                 prompt_stances = prompt_stances_for_guard
                 prompt_relation_state["learning_stances"] = prompt_stances
@@ -4629,6 +4714,7 @@ class NinoRuntime:
                     priorities=priorities_for_growth,
                     contradictions=contradictions_for_growth,
                 )
+                recent_turns = _filter_document_context_turns(self.conversation(agent_id)[-8:], text)
                 prompt = build_nino_prompt(
                     agent_id=agent_id,
                     text=text,
@@ -4641,7 +4727,7 @@ class NinoRuntime:
                     temporal_query=llm_retrieved.temporal_query,
                     temporal_miss=llm_retrieved.temporal_miss,
                     temporal_window=llm_retrieved.temporal_window,
-                    recent_turns=self.conversation(agent_id)[-8:],
+                    recent_turns=recent_turns,
                     cold_facts=self.cold_store.list_for_agent(agent_id),
                     current_time=now.isoformat(),
                 )
