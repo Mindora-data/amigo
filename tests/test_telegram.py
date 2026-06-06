@@ -312,6 +312,8 @@ def test_linked_private_text_document_is_read_and_sent_to_backend(tmp_path) -> N
     assert "Archivo de texto recibido en Telegram (libro.txt" in str(backend.ticks[0]["text"])
     assert "El protagonista aprende a escuchar." in str(backend.ticks[0]["text"])
     assert "Mensaje del usuario: léelo y dime qué te parece" in str(backend.ticks[0]["text"])
+    assert "responde con desarrollo suficiente" in str(backend.ticks[0]["text"])
+    assert '"excerpt"' not in str(backend.ticks[0]["text"])
     assert "respuesta para ana" in str(telegram.sent[-1]["text"])
 
 
@@ -331,7 +333,26 @@ def test_private_text_document_context_is_available_on_followup_question(tmp_pat
     assert "Contexto del último archivo de texto recibido por Telegram" in str(backend.ticks[-1]["text"])
     assert "Este libro habla de memoria" in str(backend.ticks[-1]["text"])
     assert "Mensaje del usuario: resúmeme el libro" in str(backend.ticks[-1]["text"])
+    assert "responde con desarrollo suficiente" in str(backend.ticks[-1]["text"])
     assert "primera lectura de libro.txt" in str(telegram.sent[0]["text"])
+
+
+def test_private_text_document_context_is_used_for_opinion_questions(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    telegram.files["doc"] = {"file_path": "documents/novela.txt"}
+    telegram.downloads["documents/novela.txt"] = b"La novela explora memoria, culpa y confianza."
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_document_update(111, filename="novela.txt"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+    bot.handle_update(_update(111, "qué te parece?"), now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc))
+
+    assert len(backend.ticks) == 1
+    assert "Contexto del último archivo de texto recibido por Telegram" in str(backend.ticks[-1]["text"])
+    assert "La novela explora memoria" in str(backend.ticks[-1]["text"])
+    assert "No te quedes en una frase corta" in str(backend.ticks[-1]["text"])
 
 
 def test_private_text_document_without_caption_does_not_trigger_backend_reminder(tmp_path) -> None:
