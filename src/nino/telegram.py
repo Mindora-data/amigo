@@ -24,6 +24,8 @@ GROUP_AMBIENT_COOLDOWN_FAST_SECONDS = 180
 GROUP_AMBIENT_COOLDOWN_SLOW_SECONDS = 900
 GROUP_MENTION_AFTER_SECONDS = 120
 DEFAULT_TELEGRAM_IMAGE_MAX_BYTES = 8 * 1024 * 1024
+DEFAULT_TELEGRAM_TEXT_FILE_MAX_BYTES = 5 * 1024 * 1024
+DEFAULT_TELEGRAM_TEXT_CONTEXT_CHARS = 18_000
 IMAGE_MEMORY_CUES = (
     "recuerda",
     "acuérdate",
@@ -185,6 +187,24 @@ def _telegram_image_max_bytes() -> int:
     except ValueError:
         return DEFAULT_TELEGRAM_IMAGE_MAX_BYTES
     return value if value > 0 else DEFAULT_TELEGRAM_IMAGE_MAX_BYTES
+
+
+def _telegram_text_file_max_bytes() -> int:
+    raw = os.environ.get("NINO_TELEGRAM_TEXT_FILE_MAX_BYTES", str(DEFAULT_TELEGRAM_TEXT_FILE_MAX_BYTES)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_TELEGRAM_TEXT_FILE_MAX_BYTES
+    return value if value > 0 else DEFAULT_TELEGRAM_TEXT_FILE_MAX_BYTES
+
+
+def _telegram_text_context_chars() -> int:
+    raw = os.environ.get("NINO_TELEGRAM_TEXT_CONTEXT_CHARS", str(DEFAULT_TELEGRAM_TEXT_CONTEXT_CHARS)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_TELEGRAM_TEXT_CONTEXT_CHARS
+    return max(1_000, value)
 
 
 class TelegramLinkStore:
@@ -598,6 +618,8 @@ class TelegramBotService:
         sleeper: Any = time.sleep,
         vision_client: VisionLLMClient | None = None,
         image_max_bytes: int | None = None,
+        text_file_max_bytes: int | None = None,
+        text_context_chars: int | None = None,
     ) -> None:
         self.telegram = telegram
         self.backend = backend
@@ -609,12 +631,15 @@ class TelegramBotService:
         self.sleeper = sleeper
         self.vision_client = vision_client
         self.image_max_bytes = image_max_bytes if image_max_bytes is not None else _telegram_image_max_bytes()
+        self.text_file_max_bytes = text_file_max_bytes if text_file_max_bytes is not None else _telegram_text_file_max_bytes()
+        self.text_context_chars = text_context_chars if text_context_chars is not None else _telegram_text_context_chars()
         self.offset: int | None = None
         self._group_last_ambient_reply: dict[str, datetime] = {}
         self._group_last_message_at: dict[str, datetime] = {}
         self._group_messages_since_ambient_reply: dict[str, int] = {}
         self._group_social_scores: dict[str, int] = {}
         self._last_image_descriptions: dict[str, str] = {}
+        self._last_text_documents: dict[str, dict[str, str]] = {}
 
     def _bot_username(self) -> str | None:
         if self.bot_username is None:
@@ -803,6 +828,80 @@ class TelegramBotService:
         _, _, size = image
         return size is not None and size > self.image_max_bytes
 
+    def _text_document_info(self, message: dict[str, Any]) -> tuple[str, str, int | None] | None:
+        document = message.get("document") if isinstance(message.get("document"), dict) else {}
+        if not document.get("file_id"):
+            return None
+        mime_type = str(document.get("mime_type") or "").casefold()
+        filename = str(document.get("file_name") or "archivo.txt").strip() or "archivo.txt"
+        lowered_name = filename.casefold()
+        if mime_type in {"text/plain", "text/markdown"} or lowered_name.endswith((".txt", ".md", ".markdown")):
+            size = int(document["file_size"]) if document.get("file_size") is not None else None
+            return str(document["file_id"]), filename, size
+        return None
+
+    def _decode_text_document(self, raw: bytes) -> str:
+        for encoding in ("utf-8-sig", "utf-8", "latin-1"):
+            try:
+                text = raw.decode(encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            text = raw.decode("utf-8", errors="replace")
+        return text.replace("\x00", "").strip()
+
+    def _text_document_excerpt(self, text: str) -> str:
+        clean = "\n".join(line.rstrip() for line in text.splitlines()).strip()
+        if len(clean) <= self.text_context_chars:
+            return clean
+        head_chars = int(self.text_context_chars * 0.75)
+        tail_chars = self.text_context_chars - head_chars
+        return (
+            clean[:head_chars].rstrip()
+            + "\n\n[... texto recortado para contexto de Telegram ...]\n\n"
+            + clean[-tail_chars:].lstrip()
+        )
+
+    def _text_references_recent_document(self, text: str) -> bool:
+        lowered = text.casefold()
+        return any(
+            marker in lowered
+            for marker in (
+                "archivo",
+                "documento",
+                "texto",
+                "libro",
+                "txt",
+                "lo que te mandé",
+                "lo que te mande",
+                "lo que subí",
+                "lo que subi",
+                "lo has leído",
+                "lo has leido",
+                "resúmelo",
+                "resumelo",
+                "resume",
+                "de qué va",
+                "de que va",
+            )
+        )
+
+    def _remember_last_text_document(self, scope: int | str, *, filename: str, excerpt: str) -> None:
+        if excerpt.strip():
+            self._last_text_documents[str(scope)] = {"filename": filename, "excerpt": excerpt.strip()}
+
+    def _with_recent_text_document_context(self, scope: int | str, text: str) -> str:
+        item = self._last_text_documents.get(str(scope))
+        if not item or not self._text_references_recent_document(text):
+            return text
+        return (
+            "Contexto del último archivo de texto recibido por Telegram "
+            f"({item['filename']}; extracto temporal, no memoria permanente):\n"
+            f"{item['excerpt']}\n\n"
+            f"Mensaje del usuario: {text}"
+        )
+
     def _image_memory_requested(self, caption: str) -> bool:
         lowered = caption.casefold()
         return any(cue in lowered for cue in IMAGE_MEMORY_CUES)
@@ -849,6 +948,9 @@ class TelegramBotService:
             f"(descripción temporal, no imagen guardada): {description}\n\n"
             f"Mensaje del usuario: {text}"
         )
+
+    def _with_recent_telegram_context(self, scope: int | str, text: str) -> str:
+        return self._with_recent_text_document_context(scope, self._with_recent_image_context(scope, text))
 
     def _private_group_post_text(self, text: str) -> str | None:
         normalized = " ".join(text.strip().split())
@@ -1011,6 +1113,34 @@ class TelegramBotService:
             return "He recibido la imagen, pero no he conseguido sacar una descripción útil."
         return description.strip()
 
+    def _read_telegram_text_document(self, message: dict[str, Any]) -> tuple[str, str, bool] | None:
+        info = self._text_document_info(message)
+        if info is None:
+            return None
+        file_id, filename, size = info
+        if size is not None and size > self.text_file_max_bytes:
+            return filename, (
+                "El archivo de texto es demasiado grande para leerlo entero desde Telegram con seguridad. "
+                "Envíame una versión más corta o un fragmento concreto."
+            ), False
+        try:
+            file_info = self.telegram.get_file(file_id)
+            file_path = str(file_info.get("file_path") or "").strip()
+            if not file_path:
+                return filename, "He recibido el archivo, pero Telegram no me ha dado la ruta para descargarlo.", False
+            raw = self.telegram.download_file(file_path)
+        except Exception:
+            return filename, "He recibido el archivo, pero no he podido descargarlo ahora mismo.", False
+        if len(raw) > self.text_file_max_bytes:
+            return filename, (
+                "El archivo de texto es demasiado grande para leerlo entero desde Telegram con seguridad. "
+                "Envíame una versión más corta o un fragmento concreto."
+            ), False
+        text = self._decode_text_document(raw)
+        if not text:
+            return filename, "He recibido el archivo, pero no he encontrado texto legible dentro.", False
+        return filename, self._text_document_excerpt(text), True
+
     def handle_update(self, update: dict[str, Any], now: datetime | None = None) -> None:
         self.offset = int(update.get("update_id", 0)) + 1
         message = update.get("message") if isinstance(update.get("message"), dict) else {}
@@ -1018,7 +1148,8 @@ class TelegramBotService:
         chat_id = chat.get("id")
         text = str(message.get("text") or "").strip()
         image = self._image_file_id_and_mime(message)
-        if chat_id is None or (not text and image is None):
+        text_document = self._text_document_info(message)
+        if chat_id is None or (not text and image is None and text_document is None):
             return
         current_time = now or datetime.fromtimestamp(int(message.get("date") or time.time()), tz=timezone.utc).astimezone(self.local_tz)
         if self._is_command(text, "vision"):
@@ -1026,6 +1157,9 @@ class TelegramBotService:
             return
         if image is not None:
             self._handle_image_message(message, chat, chat_id, text, current_time)
+            return
+        if text_document is not None:
+            self._handle_text_document_message(message, chat, chat_id, text, current_time)
             return
         if self._is_group_chat(chat):
             self._handle_group_message(message, chat_id, text, current_time)
@@ -1059,7 +1193,58 @@ class TelegramBotService:
             return
         if self._record_private_social_correction(chat_id, text, current_time):
             return
-        reply = self.backend.tick(user_id, self._with_recent_image_context(chat_id, text), current_time)
+        reply = self.backend.tick(user_id, self._with_recent_telegram_context(chat_id, text), current_time)
+        if reply:
+            self.telegram.send_message(chat_id, reply)
+
+    def _handle_text_document_message(self, message: dict[str, Any], chat: dict[str, Any], chat_id: int | str, text: str, now: datetime) -> None:
+        caption = str(message.get("caption") or text or "").strip()
+        if self._is_group_chat(chat):
+            directed = self._is_directed_at_bot(message, caption)
+            self._record_group_message(chat_id, now, str(chat.get("title") or ""))
+            if not directed:
+                self.links.record_social_decision(
+                    chat_id=chat_id,
+                    message_id=message.get("message_id"),
+                    sender_id=self._sender_id(message),
+                    text="[archivo de texto]",
+                    decision="observe",
+                    reason="group_document_not_directed",
+                    now=now,
+                )
+                return
+            filename, content, ok = self._read_telegram_text_document(message) or ("archivo", "No he podido leer ese archivo.", False)
+            if not ok:
+                self._send_group_reply(chat_id, self._format_group_reply(message, content, self._should_mention_sender(chat_id, now)))
+                return
+            self._remember_last_text_document(chat_id, filename=filename, excerpt=content)
+            prompt = (
+                f"Archivo de texto recibido en Telegram ({filename}; extracto temporal, no memoria permanente):\n"
+                f"{content}\n\n"
+                f"Mensaje del grupo: {caption or 'Comenta brevemente qué contiene este archivo.'}"
+            )
+            reply = self.backend.tick(self._group_user_id(chat_id), prompt, now)
+            if reply:
+                self._send_group_reply(chat_id, self._format_group_reply(message, reply, self._should_mention_sender(chat_id, now)))
+            return
+        user_id = self.links.user_for_chat(chat_id)
+        if user_id is None:
+            self.telegram.send_message(
+                chat_id,
+                "Soy amigo, un asistente con memoria, no una persona. Para proteger tu privacidad necesito vincular este chat antes de leer archivos. En tu Mac genera un código y envíame: /link CODIGO",
+            )
+            return
+        filename, content, ok = self._read_telegram_text_document(message) or ("archivo", "No he podido leer ese archivo.", False)
+        if not ok:
+            self.telegram.send_message(chat_id, content)
+            return
+        self._remember_last_text_document(chat_id, filename=filename, excerpt=content)
+        prompt = (
+            f"Archivo de texto recibido en Telegram ({filename}; extracto temporal, no memoria permanente):\n"
+            f"{content}\n\n"
+            f"Mensaje del usuario: {caption or 'He subido este archivo. Léelo y dime de forma breve que puedo preguntarte por él.'}"
+        )
+        reply = self.backend.tick(user_id, prompt, now)
         if reply:
             self.telegram.send_message(chat_id, reply)
 
@@ -1146,7 +1331,7 @@ class TelegramBotService:
             )
             self.backend.observe(target_user_id, context_text, now)
             return
-        reply = self.backend.tick(target_user_id, self._with_recent_image_context(chat_id, context_text), now)
+        reply = self.backend.tick(target_user_id, self._with_recent_telegram_context(chat_id, context_text), now)
         if reply:
             text_to_send = self._format_group_reply(message, reply, reply_should_mention)
             self._send_group_reply(chat_id, text_to_send)
@@ -1216,6 +1401,8 @@ def build_service(db_path: Path, base_url: str) -> TelegramBotService:
         group_reply_delay_seconds=delay,
         vision_client=build_configured_vision_llm(),
         image_max_bytes=_telegram_image_max_bytes(),
+        text_file_max_bytes=_telegram_text_file_max_bytes(),
+        text_context_chars=_telegram_text_context_chars(),
     )
 
 

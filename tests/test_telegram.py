@@ -127,6 +127,29 @@ def _photo_update(chat_id: int, *, caption: str = "", update_id: int = 1, group:
     return {"update_id": update_id, "message": message}
 
 
+def _document_update(
+    chat_id: int,
+    *,
+    caption: str = "",
+    filename: str = "libro.txt",
+    mime_type: str = "text/plain",
+    file_size: int = 20,
+    file_id: str = "doc",
+    update_id: int = 1,
+    group: bool = False,
+) -> dict[str, object]:
+    message: dict[str, object] = {
+        "chat": {"id": chat_id, **({"type": "supergroup", "title": "Grupo"} if group else {})},
+        "document": {"file_id": file_id, "file_name": filename, "mime_type": mime_type, "file_size": file_size},
+        "date": 1_779_977_600,
+    }
+    if caption:
+        message["caption"] = caption
+    if group:
+        message["from"] = {"id": 10, "is_bot": False, "first_name": "Pablo", "username": "pablo"}
+    return {"update_id": update_id, "message": message}
+
+
 def test_linked_chat_resolves_user_and_replies(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     code = links.create_code("Ana")
@@ -268,6 +291,75 @@ def test_linked_private_photo_without_vision_is_honest(tmp_path) -> None:
     assert backend.ticks == []
     assert backend.observations == []
     assert "no tengo visión activa" in str(telegram.sent[-1]["text"])
+
+
+def test_linked_private_text_document_is_read_and_sent_to_backend(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    telegram.files["doc"] = {"file_path": "documents/libro.txt"}
+    telegram.downloads["documents/libro.txt"] = "Capítulo 1\nEl protagonista aprende a escuchar.".encode("utf-8")
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(
+        _document_update(111, caption="léelo y dime qué te parece", filename="libro.txt"),
+        now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc),
+    )
+
+    assert len(backend.ticks) == 1
+    assert backend.ticks[0]["user_id"] == "ana"
+    assert "Archivo de texto recibido en Telegram (libro.txt" in str(backend.ticks[0]["text"])
+    assert "El protagonista aprende a escuchar." in str(backend.ticks[0]["text"])
+    assert "Mensaje del usuario: léelo y dime qué te parece" in str(backend.ticks[0]["text"])
+    assert "respuesta para ana" in str(telegram.sent[-1]["text"])
+
+
+def test_private_text_document_context_is_available_on_followup_question(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    telegram.files["doc"] = {"file_path": "documents/libro.txt"}
+    telegram.downloads["documents/libro.txt"] = b"Este libro habla de memoria, amistad y limites."
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_document_update(111, filename="libro.txt"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+    bot.handle_update(_update(111, "resúmeme el libro"), now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc))
+
+    assert len(backend.ticks) == 2
+    assert "Contexto del último archivo de texto recibido por Telegram" in str(backend.ticks[-1]["text"])
+    assert "Este libro habla de memoria" in str(backend.ticks[-1]["text"])
+    assert "Mensaje del usuario: resúmeme el libro" in str(backend.ticks[-1]["text"])
+
+
+def test_unlinked_private_text_document_requires_link_before_download(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    telegram.files["doc"] = {"file_path": "documents/libro.txt"}
+    telegram.downloads["documents/libro.txt"] = b"contenido privado"
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_document_update(222), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert backend.ticks == []
+    assert telegram.sent[-1]["chat_id"] == "222"
+    assert "vincular este chat antes de leer archivos" in str(telegram.sent[-1]["text"])
+
+
+def test_private_text_document_too_large_is_not_downloaded(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links, text_file_max_bytes=10)
+
+    bot.handle_update(_document_update(111, file_size=20), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert backend.ticks == []
+    assert telegram.downloads == {}
+    assert "demasiado grande" in str(telegram.sent[-1]["text"])
 
 
 def test_linked_private_photo_too_large_is_not_downloaded(tmp_path) -> None:
