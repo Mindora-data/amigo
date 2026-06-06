@@ -980,6 +980,57 @@ def test_group_reply_is_marked_ignored_after_silence_and_activity(tmp_path) -> N
     assert any(item["text"] == "social_feedback:ignored:general_question" for item in backend.observations)
 
 
+def test_group_learned_silence_blocks_repeated_ambient_reason(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    now = datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc)
+    for idx in range(3):
+        decision_id = links.record_social_decision(
+            chat_id=-100,
+            message_id=idx,
+            sender_id=10 + idx,
+            text="alguien sabe algo",
+            decision="reply",
+            reason="general_question",
+            now=now,
+        )
+        links.mark_social_outcome(decision_id, "ignored", now)
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=20, update_id=10))
+
+    assert backend.ticks == []
+    assert backend.observations[-1]["text"] == "alguien sabe cual es la capital de españa"
+    assert telegram.sent == []
+    row = links.conn.execute("SELECT reason FROM telegram_social_decision ORDER BY id DESC LIMIT 1").fetchone()
+    assert row["reason"] == "learned_silence_general_question"
+
+
+def test_group_learned_silence_does_not_block_direct_mention(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    now = datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc)
+    for idx in range(3):
+        decision_id = links.record_social_decision(
+            chat_id=-100,
+            message_id=idx,
+            sender_id=10 + idx,
+            text="alguien sabe algo",
+            decision="reply",
+            reason="general_question",
+            now=now,
+        )
+        links.mark_social_outcome(decision_id, "ignored", now)
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "@amigo_test_bot sabes cual es la capital de españa", user_id=20, update_id=10))
+
+    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
+    assert telegram.sent[-1]["chat_id"] == "-100"
+
+
 def test_group_reply_to_human_is_observed_without_entering_thread(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()

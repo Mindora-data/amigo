@@ -1957,3 +1957,34 @@ Tests:
 - Un mensaje lateral no cuenta como reacción.
 - Tras actividad suficiente sin respuesta, la intervención queda `ignored`.
 - Tres `ignored` generan borrador revisable y guía de menor iniciativa.
+
+## Sprint 76 - Iniciativa social gobernada por aprendizaje
+
+Estado: hecho inicial.
+
+Objetivo: que el aprendizaje social no solo quede en bitácora, sino que gobierne
+la decisión previa de intervenir en grupos.
+
+Hechos:
+
+- Antes de responder ambientalmente en un grupo, Telegram consulta los resultados
+  persistidos por motivo de intervención.
+- Si un motivo tuvo rechazo claro, ese patrón queda bloqueado para entradas
+  ambientales futuras.
+- Si un motivo fue ignorado tres veces y no tiene aciertos positivos, amigo
+  observa y calla en vez de volver a entrar.
+- Las menciones directas, comandos o respuestas directas al bot no se bloquean:
+  si alguien le habla, puede contestar.
+- El motivo observado queda registrado como `learned_silence_<motivo>` para
+  auditar por qué no habló.
+
+Privacidad:
+
+- La regla usa solo contadores cerrados de `telegram_social_decision`.
+- No lee ni guarda texto bruto adicional del grupo.
+- No busca maximizar participación; prioriza pertinencia y baja intrusión.
+
+Tests:
+
+- Tres `ignored` en `general_question` bloquean una nueva pregunta general.
+- El mismo historial no bloquea una mención directa al bot.

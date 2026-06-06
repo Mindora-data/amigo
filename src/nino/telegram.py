@@ -503,6 +503,18 @@ class TelegramLinkStore:
         self.conn.commit()
         return ignored
 
+    def social_outcome_stats(self, chat_id: int | str, reason: str) -> dict[str, int]:
+        rows = self.conn.execute(
+            """
+            SELECT outcome, COUNT(*) AS count
+            FROM telegram_social_decision
+            WHERE chat_id = ? AND reason = ? AND decision = 'reply' AND outcome IS NOT NULL
+            GROUP BY outcome
+            """,
+            (str(chat_id), reason),
+        ).fetchall()
+        return {str(row["outcome"]): int(row["count"]) for row in rows}
+
 
 class TelegramAPI(Protocol):
     def get_updates(self, offset: int | None, timeout: int) -> list[dict[str, Any]]:
@@ -800,13 +812,25 @@ class TelegramBotService:
         last = self._group_last_ambient_reply.get(str(chat_id))
         if last is not None and (now - last).total_seconds() < self._ambient_cooldown_seconds(chat_id):
             return False, "cooldown"
+        if "?" in text or "¿" in text or any(cue in normalized for cue in ("alguien sabe", "alguin sabe", "cual es", "quien sabe", "sabeis")):
+            reason = "general_question"
+        elif any(_slug(cue).replace("-", " ") in normalized for cue in ("hola", "buenas", "buenos dias", "buenas tardes", "buenas noches")):
+            reason = "greeting"
+        else:
+            reason = "social_signal"
+        if self._ambient_reason_suppressed_by_learning(chat_id, reason):
+            return False, f"learned_silence_{reason}"
         self._group_last_ambient_reply[str(chat_id)] = now
         self._group_messages_since_ambient_reply[str(chat_id)] = 0
-        if "?" in text or "¿" in text or any(cue in normalized for cue in ("alguien sabe", "alguin sabe", "cual es", "quien sabe", "sabeis")):
-            return True, "general_question"
-        if any(_slug(cue).replace("-", " ") in normalized for cue in ("hola", "buenas", "buenos dias", "buenas tardes", "buenas noches")):
-            return True, "greeting"
-        return True, "social_signal"
+        return True, reason
+
+    def _ambient_reason_suppressed_by_learning(self, chat_id: int | str, reason: str) -> bool:
+        stats = self.links.social_outcome_stats(chat_id, reason)
+        if int(stats.get("negative", 0)) >= 1:
+            return True
+        if int(stats.get("ignored", 0)) >= 3 and int(stats.get("positive", 0)) == 0:
+            return True
+        return False
 
     def _should_reply_ambiently_in_group(self, chat_id: int | str, text: str, now: datetime) -> bool:
         should, _ = self._ambient_group_reason(chat_id, text, now)
