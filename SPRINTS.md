@@ -2016,3 +2016,29 @@ Tests:
 
 - Una interacción de hace tres minutos bloquea un seguimiento antiguo.
 - Los recordatorios confirmados siguen saliendo por la vía temporal.
+
+## Sprint 78 - Antirrepetición de formulaciones
+
+Estado: hecho inicial.
+
+Objetivo: que amigo no parezca una plantilla repitiendo las mismas frases,
+muletillas o preguntas de cierre.
+
+Hechos:
+
+- El prompt del LLM incluye las últimas formulaciones propias recientes.
+- La instrucción de sistema exige no calcarlas ni parafrasearlas de forma
+  mecánica.
+- Se mantiene la regla de no terminar siempre con pregunta y de dejar espacio
+  cuando el usuario responde con cierres breves.
+
+Privacidad:
+
+- No se crea memoria nueva ni aprendizaje global; se reutilizan turnos recientes
+  ya existentes en el contexto privado de la conversación.
+- La sección sirve solo para estilo local, no para compartir contenido.
+
+Tests:
+
+- El prompt incluye la sección `Últimas formulaciones propias a no calcar`.
+- La frase previa del asistente aparece como referencia de estilo a evitar.

@@ -345,6 +345,16 @@ def build_nino_prompt(
         for turn in (recent_turns or [])[-8:]
         if turn.get("text")
     ) or "- No recent turns."
+    recent_assistant_phrases = [
+        _redact_context(str(turn.get("text", "")))
+        for turn in (recent_turns or [])[-8:]
+        if turn.get("role") == "assistant" and str(turn.get("text", "")).strip()
+    ][-3:]
+    anti_repetition_text = (
+        "\n".join(f"- {phrase}" for phrase in recent_assistant_phrases)
+        if recent_assistant_phrases
+        else "- No hay formulaciones recientes."
+    )
     facts = "\n".join(
         f"- {getattr(fact, 'key', 'fact')}: {_redact_context(str(getattr(fact, 'value', '')))} "
         f"(confidence {float(getattr(fact, 'confidence', 0.0)):.2f})"
@@ -548,6 +558,7 @@ def build_nino_prompt(
         "En grupos puedes sonar como uno mas, pero sin fingir ser humano ni revelar datos privados de chats individuales. "
         "Mantén respuestas breves, normalmente entre 1 y 4 frases. "
         "Evita muletillas repetidas y cierres calcados. No respondas siempre con la misma frase de ánimo, la misma pregunta final o la misma estructura; "
+        "Antes de responder, mira tus últimas formulaciones propias y no las calques ni las parafrasees mecánicamente. "
         "si el usuario repite un cierre breve, puedes callar o contestar mínimo. "
         "Trato por defecto: neutro, cercano y profesional. No uses apelativos de confianza como 'colega', 'tío', 'tronco', 'crack' ni similares "
         "salvo que el usuario haya pedido explícitamente ese trato en su preferencia de trato. Si hay una preferencia de trato, obedécela por encima del tono genérico. "
@@ -603,6 +614,7 @@ def build_nino_prompt(
         f"Reflexiones de madurez:\n{maturity_reflection_text}\n\n"
         f"Brújula de crecimiento:\n{growth_compass_text}\n\n"
         f"Últimos turnos:\n{turns}\n\n"
+        f"Últimas formulaciones propias a no calcar:\n{anti_repetition_text}\n\n"
         f"Hilo activo de conversación:\n{active_thread_text}\n\n"
         f"Madurez grupal honesta:\n{group_maturity_text}\n\n"
         f"Memoria recuperada:\n{memories}\n\n"
