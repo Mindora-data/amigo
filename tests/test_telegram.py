@@ -951,6 +951,35 @@ def test_group_reaction_marks_social_outcome_and_observes_feedback(tmp_path) -> 
     assert any(item["text"] == "social_feedback:positive:general_question" for item in backend.observations)
 
 
+def test_group_unrelated_message_does_not_count_as_reaction(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=10, update_id=1))
+    bot.handle_update(_group_update(-100, "voy a por cafe", user_id=11, update_id=2))
+
+    row = links.conn.execute("SELECT outcome FROM telegram_social_decision WHERE decision = 'reply'").fetchone()
+    assert row["outcome"] is None
+    assert not any(str(item["text"]).startswith("social_feedback:reacted") for item in backend.observations)
+
+
+def test_group_reply_is_marked_ignored_after_silence_and_activity(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=10, update_id=1))
+    for idx in range(2, 5):
+        bot.handle_update(_group_update(-100, f"mensaje lateral {idx}", user_id=10 + idx, update_id=idx))
+
+    row = links.conn.execute("SELECT outcome FROM telegram_social_decision WHERE decision = 'reply'").fetchone()
+    assert row["outcome"] == "ignored"
+    assert any(item["text"] == "social_feedback:ignored:general_question" for item in backend.observations)
+
+
 def test_group_reply_to_human_is_observed_without_entering_thread(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()

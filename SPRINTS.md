@@ -1926,3 +1926,34 @@ Tests:
   `social_feedback:positive:general_question`.
 - El dashboard expone `social_supervision` por motivo sin texto crudo.
 - Una señal negativa crea un borrador revisable `supervisado`.
+
+## Sprint 75 - Silencio social como señal
+
+Estado: hecho inicial.
+
+Objetivo: que amigo aprenda también cuando una intervención en grupo no recibe
+respuesta. El silencio no es castigo, pero sí señal para bajar iniciativa.
+
+Hechos:
+
+- Un mensaje cualquiera posterior a una respuesta de amigo ya no cuenta como
+  reacción por defecto.
+- Solo cuentan como reacción las señales claras (`gracias`, `exacto`, `calla`,
+  `pesado`, etc.) o una respuesta directa al bot.
+- Si una respuesta queda sin reacción y pasan varios mensajes del grupo, se marca
+  como `ignored`.
+- El runtime recibe `social_feedback:ignored:<reason>` y lo agrega en
+  `social_supervision`.
+- Tres ignoradas del mismo patrón generan un borrador revisable para observar más
+  antes de repetir esa intervención.
+
+Privacidad:
+
+- Se guarda solo `ignored` por motivo cerrado, no texto bruto.
+- No se interpreta como emoción humana ni se insiste para obtener respuesta.
+
+Tests:
+
+- Un mensaje lateral no cuenta como reacción.
+- Tras actividad suficiente sin respuesta, la intervención queda `ignored`.
+- Tres `ignored` generan borrador revisable y guía de menor iniciativa.

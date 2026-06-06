@@ -1110,7 +1110,7 @@ def _apply_group_social_feedback(
     parts = text.split(":")
     outcome = parts[1].strip() if len(parts) >= 2 else ""
     reason = parts[2].strip() if len(parts) >= 3 else "unknown"
-    if outcome not in {"positive", "negative", "reacted"}:
+    if outcome not in {"positive", "negative", "reacted", "ignored"}:
         outcome = "reacted"
     if not reason:
         reason = "unknown"
@@ -1134,6 +1134,8 @@ def _apply_group_social_feedback(
     maturity["social_supervision"] = supervised
     if outcome == "negative":
         maturity["participation_guidance"] = "baja iniciativa; interviene solo si te mencionan o si la pregunta general es clara"
+    elif outcome == "ignored":
+        maturity["participation_guidance"] = "reduce entradas ambientales repetidas; si no hay respuesta, observa mas antes de volver"
     elif outcome in {"positive", "reacted"}:
         maturity["participation_guidance"] = "puede participar con brevedad cuando aporte valor claro"
     relation["group_maturity"] = maturity
@@ -1206,7 +1208,8 @@ def _update_group_maturity(
             "shared_history": shared_history[-12:],
             "last_observed_at": now.isoformat(),
             "participation_guidance": (
-                "participa solo cuando aporte algo breve; no inventes vida humana; "
+                str(maturity.get("participation_guidance") or "").strip()
+                or "participa solo cuando aporte algo breve; no inventes vida humana; "
                 "usa como fondo la historia compartida del grupo y lo que has aprendido aqui"
             ),
         }
@@ -1295,6 +1298,7 @@ def _social_learning_journal_entries(
             continue
     for reason, row in supervised_by_reason.items():
         negative = int(row.get("negative", 0))
+        ignored = int(row.get("ignored", 0))
         positive = int(row.get("positive", 0))
         total = int(row.get("total", 0))
         if negative >= 1:
@@ -1302,6 +1306,12 @@ def _social_learning_journal_entries(
             lesson = (
                 f"En grupos, las intervenciones de tipo {reason} recibieron rechazo. "
                 "Bajar iniciativa en ese patrón y volver a participar solo con señal clara."
+            )
+        elif ignored >= 3:
+            key = f"supervised_ignored_{reason}"
+            lesson = (
+                f"En grupos, las intervenciones de tipo {reason} se ignoraron varias veces. "
+                "Observar mas tiempo antes de repetir ese patron y no perseguir respuesta."
             )
         elif positive >= 3 and total >= 3:
             key = f"supervised_positive_{reason}"

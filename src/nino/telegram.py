@@ -478,6 +478,31 @@ class TelegramLinkStore:
         )
         self.conn.commit()
 
+    def mark_ignored_social_replies(self, chat_id: int | str, now: datetime, *, min_later_messages: int = 3) -> list[dict[str, str]]:
+        rows = self.conn.execute(
+            """
+            SELECT * FROM telegram_social_decision
+            WHERE chat_id = ? AND decision = 'reply' AND outcome IS NULL
+            ORDER BY id
+            """,
+            (str(chat_id),),
+        ).fetchall()
+        ignored: list[dict[str, str]] = []
+        for row in rows:
+            later = self.conn.execute(
+                "SELECT COUNT(*) AS count FROM telegram_social_decision WHERE chat_id = ? AND id > ?",
+                (str(chat_id), int(row["id"])),
+            ).fetchone()
+            if int(later["count"] if later else 0) < min_later_messages:
+                continue
+            self.conn.execute(
+                "UPDATE telegram_social_decision SET outcome = ?, outcome_at = ? WHERE id = ? AND outcome IS NULL",
+                ("ignored", now.isoformat(), int(row["id"])),
+            )
+            ignored.append({"id": str(row["id"]), "reason": str(row["reason"] or "unknown")})
+        self.conn.commit()
+        return ignored
+
 
 class TelegramAPI(Protocol):
     def get_updates(self, offset: int | None, timeout: int) -> list[dict[str, Any]]:
@@ -804,8 +829,10 @@ class TelegramBotService:
             outcome = "negative"
         elif any(cue in lowered for cue in GROUP_POSITIVE_REACTION_CUES):
             outcome = "positive"
-        else:
+        elif self._is_directed_at_bot(message, text):
             outcome = "reacted"
+        else:
+            return None
         self.links.mark_social_outcome(int(pending["id"]), outcome, now)
         key = str(chat_id)
         if outcome == "negative":
@@ -814,6 +841,11 @@ class TelegramBotService:
             self._group_social_scores[key] = self._group_social_scores.get(key, 0) + 1
         reason = str(pending.get("reason") or "unknown").strip() or "unknown"
         return f"{outcome}:{reason}"
+
+    def _observe_ignored_group_replies(self, chat_id: int | str, target_user_id: str, now: datetime) -> None:
+        for item in self.links.mark_ignored_social_replies(chat_id, now):
+            reason = str(item.get("reason") or "unknown")
+            self.backend.observe(target_user_id, f"social_feedback:ignored:{reason}", now)
 
     def _image_file_id_mime_and_size(self, message: dict[str, Any]) -> tuple[str, str, int | None] | None:
         photos = message.get("photo")
@@ -1387,6 +1419,7 @@ class TelegramBotService:
                 now=now,
             )
             self.backend.observe(target_user_id, context_text, now)
+            self._observe_ignored_group_replies(chat_id, target_user_id, now)
             return
         should_reply, reason = (True, "directed") if directed else self._ambient_group_reason(chat_id, clean_text, now)
         if not should_reply:
@@ -1400,6 +1433,7 @@ class TelegramBotService:
                 now=now,
             )
             self.backend.observe(target_user_id, context_text, now)
+            self._observe_ignored_group_replies(chat_id, target_user_id, now)
             return
         reply = self.backend.tick(target_user_id, self._with_recent_telegram_context(chat_id, context_text), now)
         if reply:

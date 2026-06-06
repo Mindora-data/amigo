@@ -1791,6 +1791,29 @@ def test_group_supervised_social_feedback_creates_reviewable_draft(tmp_path) -> 
     assert "alguien sabe" not in rendered
 
 
+def test_group_ignored_social_feedback_is_tracked_without_raw_text(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    for idx in range(3):
+        out = _request(
+            app,
+            "POST",
+            "/agents/telegram-group-100/observe",
+            {"intent": "group_observation", "text": "social_feedback:ignored:greeting", "now": f"2026-05-29T13:0{idx}:00+02:00"},
+        )
+
+    supervised = [item for item in out["learning_journal_updates"] if "supervisado" in item["tags"]]
+    assert len(supervised) == 1
+    assert "se ignoraron varias veces" in supervised[0]["lesson"]
+
+    dashboard = _request(app, "GET", "/agents/telegram-group-100/relationship-dashboard")["dashboard"]
+    supervision = dashboard["group_maturity"]["social_supervision"]
+    assert supervision["by_reason"]["greeting"]["ignored"] == 3
+    assert dashboard["group_maturity"]["social_outcomes"]["ignored"] == 3
+    assert "reduce entradas ambientales" in _request(app, "GET", "/agents/telegram-group-100/state")["relation_state"]["group_maturity"]["participation_guidance"]
+    assert "hola" not in json.dumps(supervision)
+
+
 def test_group_social_learning_creates_reviewable_drafts_not_active_memory(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 
