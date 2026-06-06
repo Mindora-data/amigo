@@ -631,6 +631,8 @@ def _profile_response_text(relation_state: dict[str, Any]) -> str:
     )
 
 def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
+    if _is_external_context_payload(text):
+        return []
     plain = _without_accents(text)
     reminder_request = _is_reminder_request(text)
     event_words = (
@@ -685,6 +687,16 @@ def _extract_temporal_events(text: str, now: datetime) -> list[dict[str, Any]]:
             **recurrence,
         }
     ]
+
+
+def _is_external_context_payload(text: str) -> bool:
+    plain = _without_accents(text).lstrip()
+    return plain.startswith(
+        (
+            "archivo de texto recibido en telegram",
+            "contexto del ultimo archivo de texto recibido por telegram",
+        )
+    )
 
 def _clean_preference_value(value: str) -> str:
     words = _normalize_text(value).split()

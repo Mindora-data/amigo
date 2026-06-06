@@ -327,10 +327,29 @@ def test_private_text_document_context_is_available_on_followup_question(tmp_pat
     bot.handle_update(_document_update(111, filename="libro.txt"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
     bot.handle_update(_update(111, "resúmeme el libro"), now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc))
 
-    assert len(backend.ticks) == 2
+    assert len(backend.ticks) == 1
     assert "Contexto del último archivo de texto recibido por Telegram" in str(backend.ticks[-1]["text"])
     assert "Este libro habla de memoria" in str(backend.ticks[-1]["text"])
     assert "Mensaje del usuario: resúmeme el libro" in str(backend.ticks[-1]["text"])
+    assert "primera lectura de libro.txt" in str(telegram.sent[0]["text"])
+
+
+def test_private_text_document_without_caption_does_not_trigger_backend_reminder(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    telegram.files["doc"] = {"file_path": "documents/novela.txt"}
+    telegram.downloads["documents/novela.txt"] = (
+        "Publicamos en este libro dos novelas. En la primera, alguien dice: mañana tengo cita a las 11."
+    ).encode("utf-8")
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_document_update(111, filename="novela.txt"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert backend.ticks == []
+    assert "primera lectura de novela.txt" in str(telegram.sent[-1]["text"])
+    assert "toque" not in str(telegram.sent[-1]["text"]).casefold()
 
 
 def test_unlinked_private_text_document_requires_link_before_download(tmp_path) -> None:

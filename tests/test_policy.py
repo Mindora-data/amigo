@@ -54,6 +54,21 @@ def test_policy_answers_temporal_memory_miss_without_llm() -> None:
     assert out["nino_context"]["temporal_miss"] is True
 
 
+def test_policy_does_not_create_reminders_from_telegram_text_file_content() -> None:
+    store = InMemoryStateStore()
+    runtime = NinoRuntime(store)
+    text = (
+        "Archivo de texto recibido en Telegram (novela.txt; extracto temporal, no memoria permanente):\n"
+        "Publicamos en este libro dos novelas. En la primera, alguien dice: mañana tengo cita a las 11.\n\n"
+        "Mensaje del usuario: léelo"
+    )
+
+    out = runtime.tick("agent-policy", {"intent": "chat", "text": text})
+
+    assert "reminder_offer" not in out["reason_trace"]
+    assert store.get("agent-policy").relation_state.get("temporal_events", []) == []
+
+
 def test_policy_does_not_use_unrelated_recent_memory() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     runtime.tick("agent-policy", {"intent": "question", "text": "quien eres?", "salience": 0.9})
