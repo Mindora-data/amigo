@@ -40,6 +40,12 @@ CHECKIN_BASE_THRESHOLD_DAYS = 7
 GENERAL_FOLLOWUP_MIN_AGE_HOURS = 24
 
 
+def _variant(options: tuple[str, ...], *, seed: str) -> str:
+    if not options:
+        return ""
+    return options[sum(ord(ch) for ch in seed) % len(options)]
+
+
 class InMemoryProactiveCandidateStore:
     def __init__(self) -> None:
         self._items: list[dict[str, Any]] = []
@@ -845,12 +851,21 @@ class ProactivityEngine:
                     reason_trace.append("open_question_already_followed")
                 else:
                     reason_trace.extend(["goal_reduce_uncertainty", "open_question_follow_up"])
+                    text = str(open_question["text"])
+                    followup_text = _variant(
+                        (
+                            f"Me quedé con esta duda abierta: {text}. ¿La retomamos?",
+                            f"Quedó pendiente esto: {text}. Si te viene bien, lo vemos.",
+                            f"Sobre lo de {text}: puedo retomarlo contigo si sigue teniendo sentido.",
+                        ),
+                        seed=f"{source_key}|{now.date().isoformat()}",
+                    )
                     return ProactivityResponse(
                         should_send=True,
                         action={
                             "type": "external_message",
                             "payload": {
-                                "text": f"Me quedé pensando en esto: {open_question['text']} ¿Quieres que lo retomemos?",
+                                "text": followup_text,
                                 "source": "world_model.open_questions",
                                 "proactive_source_key": source_key,
                             },
@@ -879,12 +894,20 @@ class ProactivityEngine:
                 return ProactivityResponse(False, None, reason_trace)
             else:
                 reason_trace.append("salient_memory_follow_up")
+                followup_text = _variant(
+                    (
+                        "Me vino a la cabeza algo que compartiste. Si quieres, lo retomamos.",
+                        "Hay algo de lo que hablamos que quizá merezca volver a mirar. Sin prisa.",
+                        "Recordé un tema pendiente de nuestra conversación. Lo dejamos ahí si no te apetece ahora.",
+                    ),
+                    seed=f"{source_key}|{now.date().isoformat()}",
+                )
                 return ProactivityResponse(
                     should_send=True,
                     action={
                         "type": "external_message",
                         "payload": {
-                            "text": "Estaba pensando en algo que compartiste. ¿Quieres retomarlo?",
+                            "text": followup_text,
                             "source_episode_id": candidate.episode_id,
                             "proactive_source_key": source_key,
                         },

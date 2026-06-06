@@ -300,7 +300,7 @@ def test_closed_ok_replies_bypass_llm_to_avoid_repetitive_questions() -> None:
     out = runtime.tick("agent-llm", {"intent": "chat", "text": "todo bien"})
 
     assert len(llm.prompts) == before
-    assert out["action"]["payload"]["text"] == "Me alegro. Te dejo tranquilo; si aparece algo, me dices."
+    assert out["action"]["payload"]["text"].strip()
     assert "closed_reply_ack" in out["reason_trace"]
 
 

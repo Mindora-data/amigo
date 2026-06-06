@@ -8,7 +8,7 @@ def test_policy_acknowledges_preference_signal() -> None:
 
     out = runtime.tick("agent-policy", {"intent": "chat", "text": "me gusta piano"})
 
-    assert "guardo que piano" in out["action"]["payload"]["text"]
+    assert "piano" in out["action"]["payload"]["text"]
     assert "preference_signal" in out["reason_trace"]
 
 
@@ -80,7 +80,7 @@ def test_policy_prioritizes_current_greeting_over_old_greeting_memory() -> None:
 
     out = runtime.tick("agent-policy", {"intent": "chat", "text": "hola", "salience": 0.7})
 
-    assert out["action"]["payload"]["text"] == "Estoy aquí. ¿Qué tal vas?"
+    assert out["action"]["type"] == "external_message"
     assert "greeting" in out["reason_trace"]
 
 
@@ -90,7 +90,7 @@ def test_policy_prioritizes_new_preference_over_old_related_memory() -> None:
 
     out = runtime.tick("agent-policy", {"intent": "chat", "text": "me gusta el piano", "salience": 0.9})
 
-    assert "guardo que piano" in out["action"]["payload"]["text"]
+    assert "piano" in out["action"]["payload"]["text"]
     assert "memory_continuity" not in out["reason_trace"]
 
 
@@ -101,11 +101,23 @@ def test_policy_stops_reasking_after_repeated_closed_ok_replies() -> None:
     first = runtime.tick("agent-policy", {"intent": "chat", "text": "todo bien", "salience": 0.4})
     second = runtime.tick("agent-policy", {"intent": "chat", "text": "Bien", "salience": 0.4})
 
-    assert first["action"]["payload"]["text"] == "Me alegro. Te dejo tranquilo; si aparece algo, me dices."
+    assert first["action"]["type"] == "external_message"
+    assert first["action"]["payload"]["text"].strip()
     assert "closed_reply_ack" in first["reason_trace"]
     assert second["action"]["type"] == "no_response"
     assert second["action"]["payload"]["text"] == ""
     assert "closed_reply_silence" in second["reason_trace"]
+
+
+def test_policy_varies_soft_acknowledgements_across_turns() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+
+    first = runtime.tick("agent-policy", {"intent": "chat", "text": "me gusta piano", "salience": 0.9})
+    second = runtime.tick("agent-policy", {"intent": "chat", "text": "me gusta guitarra", "salience": 0.9})
+
+    assert first["action"]["payload"]["text"] != second["action"]["payload"]["text"]
+    assert "piano" in first["action"]["payload"]["text"]
+    assert "guitarra" in second["action"]["payload"]["text"]
 
 
 def test_policy_ignores_repeated_same_memory_on_followup() -> None:

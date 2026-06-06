@@ -413,6 +413,15 @@ def _direct_reminder_confirmation_text(due_at: datetime | None, event_text: str)
         return f"Vale, te aviso a las {time_text}."
     return f"Vale, te aviso a las {time_text} para que {event_text}."
 
+
+def _style_variant(request: PolicyRequest, options: tuple[str, ...], *, salt: str = "") -> str:
+    if not options:
+        return ""
+    interaction_count = int(request.self_model.get("interaction_count", 0))
+    text = str(request.percept_frame.get("text", ""))
+    seed = sum(ord(ch) for ch in f"{salt}|{interaction_count}|{text}")
+    return options[seed % len(options)]
+
 def _next_weekday(now: datetime, weekday: int) -> datetime:
     days = (weekday - now.weekday()) % 7
     if days == 0:
@@ -3864,10 +3873,28 @@ class NinoRuntime:
 
         if intent in {"greeting", "saludo"} or lowered in {"hola", "buenas", "hey"}:
             name = relation.get("user_name")
-            greeting = f"Estoy aquí, {name}." if name else "Estoy aquí."
+            greeting = _style_variant(
+                request,
+                (
+                    f"Estoy aquí, {name}." if name else "Estoy aquí.",
+                    f"Hola, {name}. Te leo." if name else "Hola. Te leo.",
+                    f"Buenas, {name}." if name else "Buenas.",
+                ),
+                salt="greeting",
+            )
             action = {
                 "type": "external_message",
-                "payload": {"text": f"{greeting} ¿Qué tal vas?"},
+                "payload": {
+                    "text": _style_variant(
+                        request,
+                        (
+                            f"{greeting} ¿Qué tal vas?",
+                            f"{greeting} Cuéntame.",
+                            f"{greeting} ¿Qué tienes entre manos?",
+                        ),
+                        salt="greeting_tail",
+                    )
+                },
             }
             return PolicyResponse(
                 chosen_action=action,
@@ -3883,10 +3910,19 @@ class NinoRuntime:
                     confidence=0.78,
                     reason_trace=["context_policy", "closed_reply_silence"],
                 )
+            ack = _style_variant(
+                request,
+                (
+                    "Me alegro. Te dejo tranquilo; si aparece algo, me dices.",
+                    "Bien. No te tiro más del hilo; si necesitas algo, estoy.",
+                    "Perfecto. Lo dejamos ahí por ahora.",
+                ),
+                salt="closed_reply_ack",
+            )
             return PolicyResponse(
                 chosen_action={
                     "type": "external_message",
-                    "payload": {"text": "Me alegro. Te dejo tranquilo; si aparece algo, me dices."},
+                    "payload": {"text": ack},
                 },
                 confidence=0.64,
                 reason_trace=["context_policy", "closed_reply_ack"],
@@ -3895,9 +3931,18 @@ class NinoRuntime:
         preference = PREFERENCE_RE.search(text)
         if preference:
             value = _clean_preference_value(preference.group("value"))
+            text_out = _style_variant(
+                request,
+                (
+                    f"Vale, guardo que {value} tiene peso para ti.",
+                    f"Me lo apunto: {value} es algo que te importa.",
+                    f"Queda registrado: {value} cuenta para ti.",
+                ),
+                salt="preference_signal",
+            )
             action = {
                 "type": "external_message",
-                "payload": {"text": f"Vale, guardo que {value} tiene peso para ti."},
+                "payload": {"text": text_out},
             }
             return PolicyResponse(
                 chosen_action=action,
@@ -4071,9 +4116,18 @@ class NinoRuntime:
             and PREFERENCE_RE.search(text) is None
         ):
             summary = str(active_thread.get("summary", "")).replace("\n", " ")[:180]
+            text_out = _style_variant(
+                request,
+                (
+                    f"Lo conecto con lo que veníamos hilando: {summary}. Te sigo.",
+                    f"Entiendo esto como continuación de: {summary}. Sigo por ahí.",
+                    f"Vale, lo enlazo con el hilo abierto: {summary}. Continúa.",
+                ),
+                salt="active_thread_continuity",
+            )
             action = {
                 "type": "external_message",
-                "payload": {"text": f"Lo conecto con la idea que veníamos construyendo: {summary}. Sigue, te sigo el hilo."},
+                "payload": {"text": text_out},
             }
             return PolicyResponse(
                 chosen_action=action,
@@ -4104,9 +4158,18 @@ class NinoRuntime:
             )
 
         if "?" in text:
+            text_out = _style_variant(
+                request,
+                (
+                    "No lo sé todavía con seguridad. Si me das algo más de contexto, lo trabajamos.",
+                    "No tengo base suficiente para responderte bien todavía.",
+                    "Aún no lo tengo claro; prefiero no inventar. Dame una pista más y lo vemos.",
+                ),
+                salt="question_detected",
+            )
             action = {
                 "type": "external_message",
-                "payload": {"text": "No lo sé todavía con seguridad, pero puedo ir aprendiendo contigo si me das más contexto."},
+                "payload": {"text": text_out},
             }
             return PolicyResponse(
                 chosen_action=action,
@@ -4124,11 +4187,18 @@ class NinoRuntime:
             None,
         )
         if remembered is not None:
+            text_out = _style_variant(
+                request,
+                (
+                    f"Esto me conecta con algo que recuerdo: {remembered.statement}. Lo añado a esta conversación.",
+                    f"Me viene a la cabeza esto que ya estaba guardado: {remembered.statement}.",
+                    f"Lo relaciono con este recuerdo: {remembered.statement}.",
+                ),
+                salt="memory_continuity",
+            )
             action = {
                 "type": "external_message",
-                "payload": {
-                    "text": f"Esto me conecta con algo que recuerdo: {remembered.statement}. Lo añado a esta conversación."
-                },
+                "payload": {"text": text_out},
             }
             return PolicyResponse(
                 chosen_action=action,
@@ -4137,9 +4207,18 @@ class NinoRuntime:
             )
 
         if salience >= 0.8:
+            text_out = _style_variant(
+                request,
+                (
+                    "Lo marco como importante. Quiero poder volver a esto más adelante.",
+                    "Esto parece importante; lo dejo con peso para no perderlo.",
+                    "Tomo nota de que esto importa, no lo trato como un comentario cualquiera.",
+                ),
+                salt="salient_episode",
+            )
             action = {
                 "type": "external_message",
-                "payload": {"text": "Lo marco como importante. Quiero poder volver a esto más adelante."},
+                "payload": {"text": text_out},
             }
             return PolicyResponse(
                 chosen_action=action,
@@ -4149,7 +4228,17 @@ class NinoRuntime:
 
         action = {
             "type": "external_message",
-            "payload": {"text": "Entiendo. Lo registro y seguimos construyendo continuidad."},
+            "payload": {
+                "text": _style_variant(
+                    request,
+                    (
+                        "Entiendo. Lo tengo en cuenta.",
+                        "Vale, lo recojo.",
+                        "Te sigo. Lo dejo situado en el contexto.",
+                    ),
+                    salt="default",
+                )
+            },
         }
         return PolicyResponse(chosen_action=action, confidence=0.6, reason_trace=["context_policy", "default"])
 
