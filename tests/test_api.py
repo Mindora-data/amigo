@@ -1683,6 +1683,24 @@ def test_relationship_dashboard_learns_from_hits_mistakes_and_limits(tmp_path) -
     assert state["relation_state"]["relationship_learning"]["last_outcome"] == "stop"
 
 
+def test_behavior_meta_question_does_not_drift_to_book_context(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    out = _request(
+        app,
+        "POST",
+        "/agents/api-agent/tick",
+        {"intent": "chat", "text": "ya no mezclas temas ?", "salience": 0.7},
+    )
+
+    text = out["action"]["payload"]["text"]
+    assert "responder a ese tema" in text
+    assert "libro" in text
+    assert "argumento" not in text
+    assert "behavior_meta_question" in out["reason_trace"]
+    assert out["nino_context"]["response_source"] == "policy"
+
+
 def test_relationship_dashboard_exposes_personal_treatment_preferences(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

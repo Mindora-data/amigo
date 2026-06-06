@@ -919,6 +919,27 @@ def _detect_relationship_feedback(text: str) -> dict[str, str] | None:
     return None
 
 
+def _is_behavior_meta_question(text: str) -> bool:
+    plain = _without_accents(text).lower()
+    if "?" not in text and not plain.startswith(("ya ", "ahora ")):
+        return False
+    behavior_terms = (
+        "mezclas temas",
+        "mezclar temas",
+        "te vas por las ramas",
+        "irse por las ramas",
+        "vas por las ramas",
+        "repites",
+        "repetir",
+        "corriges",
+        "has corregido",
+        "lo has corregido",
+        "ya no",
+        "sigues",
+    )
+    return any(term in plain for term in behavior_terms)
+
+
 def _relationship_learning_from_feedback(
     current: dict[str, Any],
     feedback: dict[str, str],
@@ -3962,6 +3983,18 @@ class NinoRuntime:
                 },
                 confidence=0.72,
                 reason_trace=["context_policy", "onboarding"],
+            )
+
+        if _is_behavior_meta_question(text):
+            return PolicyResponse(
+                chosen_action={
+                    "type": "external_message",
+                    "payload": {
+                        "text": "Sí: cuando me preguntes por un tema concreto, debo responder a ese tema y no arrastrar libros, imágenes u otros contextos salvo que los menciones claramente."
+                    },
+                },
+                confidence=0.82,
+                reason_trace=["context_policy", "behavior_meta_question"],
             )
 
         if extract_address_preference(text) is not None:

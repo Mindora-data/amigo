@@ -2069,3 +2069,29 @@ Tests:
 
 - Una pregunta explícita sobre el libro sigue recibiendo contexto.
 - Una pregunta sobre otro tema tras subir una novela no recibe contexto del libro.
+
+## Sprint 80 - Preguntas sobre conducta no derivan a contenido
+
+Estado: hecho inicial.
+
+Objetivo: que cuando el usuario pregunta si amigo ha corregido una conducta
+(`ya no mezclas temas?`, `sigues yéndote por las ramas?`), responda sobre esa
+conducta y no vuelva al tema anterior.
+
+Hechos:
+
+- Se detectan preguntas meta sobre comportamiento: mezclar temas, irse por las
+  ramas, repetir, corregir o seguir haciendo algo.
+- Estas preguntas se responden por política local, sin depender del LLM.
+- La respuesta reconoce la regla aplicada: responder al tema concreto y no
+  arrastrar libros, imágenes u otros contextos salvo mención clara.
+
+Privacidad:
+
+- No se guarda contenido adicional ni se consulta memoria privada extra.
+- La respuesta se basa en una regla de comportamiento, no en el texto del libro.
+
+Tests:
+
+- `ya no mezclas temas ?` devuelve respuesta de política sobre comportamiento.
+- La respuesta no ofrece seguir hablando del argumento del libro.
