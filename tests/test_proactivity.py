@@ -109,6 +109,29 @@ def test_proactivity_does_not_follow_salient_memory_after_only_minutes() -> None
     assert out.should_send is False
     assert "salient_memory_too_recent" in out.reason_trace
 
+
+def test_proactivity_waits_after_recent_human_interaction() -> None:
+    runtime = NinoRuntime(InMemoryStateStore())
+    now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)
+    runtime.configure_proactivity(
+        "agent-p",
+        ProactivitySettings(consent="allowed", max_messages_per_day=3, min_hours_between=0),
+    )
+    runtime.tick(
+        "agent-p",
+        {"intent": "chat", "text": "hola", "now": (now - timedelta(minutes=3)).isoformat()},
+    )
+    runtime.episode_store.append(
+        Episode("e1", "agent-p", now - timedelta(hours=26), "mañana tengo examen", "school", 0.9, 0.9)
+    )
+
+    out = runtime.evaluate_proactivity("agent-p", now=now)
+
+    assert out.should_send is False
+    assert "recent_human_interaction_quiet_window" in out.reason_trace
+    assert out.next_allowed_at == now - timedelta(minutes=3) + timedelta(hours=2)
+
+
 def test_proactivity_prioritizes_temporal_event_reminder() -> None:
     runtime = NinoRuntime(InMemoryStateStore())
     now = datetime(2026, 5, 21, 10, tzinfo=timezone.utc)

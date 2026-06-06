@@ -38,6 +38,7 @@ FOLLOWUP_ACTIVE_HOURS_START = 9
 FOLLOWUP_ACTIVE_HOURS_END = 22
 CHECKIN_BASE_THRESHOLD_DAYS = 7
 GENERAL_FOLLOWUP_MIN_AGE_HOURS = 24
+RECENT_INTERACTION_QUIET_HOURS = 2
 
 
 def _variant(options: tuple[str, ...], *, seed: str) -> str:
@@ -323,6 +324,15 @@ def _parse_dt(value: Any) -> datetime | None:
 
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
+
+def _recent_interaction_quiet_until(relation_state: dict[str, Any], now: datetime) -> datetime | None:
+    last = _parse_dt(relation_state.get("last_interaction_at"))
+    if last is None:
+        return None
+    if last > now:
+        return None
+    quiet_until = last + timedelta(hours=RECENT_INTERACTION_QUIET_HOURS)
+    return quiet_until if now < quiet_until else None
 
 def _parse_candidate_when(value: Any, now: datetime) -> datetime | None:
     if value in {None, "", "null"}:
@@ -762,11 +772,26 @@ class ProactivityEngine:
             reason_trace.append("outside_active_hours")
             return ProactivityResponse(False, None, reason_trace, _next_active_hour(now, settings))
 
+        for event in relation_state.get("temporal_events", []):
+            if not isinstance(event, dict) or event.get("reminder_status") != "confirmed":
+                continue
+            if event.get("status") != "pending":
+                continue
+            due_at = _parse_dt(event.get("next_due_at") or event.get("due_at"))
+            if due_at is not None and now < due_at:
+                reason_trace.append("temporal_alarm_scheduled")
+                return ProactivityResponse(False, None, reason_trace)
+
         adaptive = adaptive_proactivity_summary(relation_state, self.candidate_store, agent_id, now, world_model=world_model)
         if not bool(adaptive.get("should_suggest")):
             reason_trace.extend(["adaptive_proactivity_blocked", *list(adaptive.get("reasons", []))[-3:]])
             return ProactivityResponse(False, None, reason_trace)
         reason_trace.append("adaptive_proactivity_allowed")
+
+        quiet_until = _recent_interaction_quiet_until(relation_state, now)
+        if quiet_until is not None:
+            reason_trace.append("recent_human_interaction_quiet_window")
+            return ProactivityResponse(False, None, reason_trace, quiet_until)
 
         self.candidate_store.expire_stale(agent_id, now)
         ensure_checkin_candidate(self.candidate_store, agent_id, relation_state, now, checkin_prior=checkin_prior)

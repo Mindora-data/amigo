@@ -1988,3 +1988,31 @@ Tests:
 
 - Tres `ignored` en `general_question` bloquean una nueva pregunta general.
 - El mismo historial no bloquea una mención directa al bot.
+
+## Sprint 77 - Ventana de silencio tras actividad humana
+
+Estado: hecho inicial.
+
+Objetivo: evitar que amigo parezca perseguir la conversación pocos minutos
+después de que el usuario haya hablado.
+
+Hechos:
+
+- La proactividad suave respeta una ventana mínima de silencio tras la última
+  interacción humana.
+- Durante esa ventana no se envían seguimientos, check-ins ni retomadas de tema,
+  aunque haya candidatos antiguos disponibles.
+- Los recordatorios temporales confirmados siguen teniendo prioridad y no quedan
+  bloqueados por esta ventana.
+- La evaluación devuelve `recent_human_interaction_quiet_window` y el próximo
+  momento elegible para auditar por qué calló.
+
+Privacidad:
+
+- La regla usa solo `last_interaction_at`, no contenido del mensaje.
+- No interpreta el silencio como rechazo emocional; simplemente reduce intrusión.
+
+Tests:
+
+- Una interacción de hace tres minutos bloquea un seguimiento antiguo.
+- Los recordatorios confirmados siguen saliendo por la vía temporal.
