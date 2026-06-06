@@ -1756,13 +1756,39 @@ def test_group_social_feedback_updates_group_maturity(tmp_path) -> None:
         app,
         "POST",
         "/users/grupo/agents/nino/observe",
-        {"intent": "group_observation", "text": "social_feedback:negative", "now": "2026-05-29T13:00:00+02:00"},
+        {"intent": "group_observation", "text": "social_feedback:negative:general_question", "now": "2026-05-29T13:00:00+02:00"},
     )
     dashboard = _request(app, "GET", "/users/grupo/agents/nino/relationship-dashboard")["dashboard"]
 
     assert dashboard["group_maturity"]["social_outcomes"]["negative"] == 1
     assert dashboard["group_maturity"]["last_social_outcome"] == "negative"
+    assert dashboard["group_maturity"]["last_social_reason"] == "general_question"
+    supervision = dashboard["group_maturity"]["social_supervision"]
+    assert supervision["by_reason"]["general_question"]["negative"] == 1
+    assert supervision["policy"] == "closed_vocab_outcome_by_intervention_reason_no_raw_text"
     assert dashboard["group_maturity"]["social_learning"]["signal_counts"]["boundary"] == 1
+
+
+def test_group_supervised_social_feedback_creates_reviewable_draft(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+
+    out = _request(
+        app,
+        "POST",
+        "/agents/telegram-group-100/observe",
+        {"intent": "group_observation", "text": "social_feedback:negative:general_question", "now": "2026-05-29T13:00:00+02:00"},
+    )
+
+    supervised = [item for item in out["learning_journal_updates"] if "supervisado" in item["tags"]]
+    assert len(supervised) == 1
+    assert supervised[0]["status"] == "draft"
+    assert "general_question" in supervised[0]["lesson"]
+
+    dashboard = _request(app, "GET", "/agents/telegram-group-100/relationship-dashboard")["dashboard"]
+    rendered = json.dumps(dashboard["group_maturity"]["social_supervision"])
+    assert "general_question" in rendered
+    assert "closed_vocab" in rendered
+    assert "alguien sabe" not in rendered
 
 
 def test_group_social_learning_creates_reviewable_drafts_not_active_memory(tmp_path) -> None:

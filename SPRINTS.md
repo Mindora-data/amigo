@@ -1893,3 +1893,36 @@ Tests:
 - Una pregunta `que te parece` sobre un texto de Telegram crea un borrador de
   lectura/cultura.
 - Una subida sin reflexion no crea borrador.
+
+## Sprint 74 - Aprendizaje social supervisado
+
+Estado: hecho inicial.
+
+Objetivo: que amigo aprenda comportamiento social en grupos no solo por observar
+mensajes, sino por medir si sus intervenciones funcionaron, molestaron o fueron
+ignoradas.
+
+Hechos:
+
+- Cada respuesta de amigo en grupo ya queda en `telegram_social_decision` con el
+  motivo de entrada (`general_question`, `greeting`, `directed`, etc.).
+- Cuando otra persona reacciona, Telegram envia al runtime una señal cerrada:
+  `social_feedback:<outcome>:<reason>`.
+- El dashboard de grupo agrega resultados por motivo en `social_supervision`,
+  sin guardar texto bruto de la conversacion.
+- Un rechazo claro genera un borrador revisable en bitacora para bajar iniciativa
+  en ese patron.
+- Tres aciertos del mismo tipo pueden generar un borrador revisable para reforzar
+  ese patron con brevedad.
+
+Privacidad:
+
+- Solo se guardan contadores cerrados por tipo de intervención y resultado.
+- No se copia contenido del grupo a memoria privada ni modelo global.
+
+Tests:
+
+- Una reacción positiva a una respuesta por pregunta general registra
+  `social_feedback:positive:general_question`.
+- El dashboard expone `social_supervision` por motivo sin texto crudo.
+- Una señal negativa crea un borrador revisable `supervisado`.

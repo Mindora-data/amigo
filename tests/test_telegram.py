@@ -948,7 +948,7 @@ def test_group_reaction_marks_social_outcome_and_observes_feedback(tmp_path) -> 
 
     row = links.conn.execute("SELECT outcome FROM telegram_social_decision WHERE decision = 'reply'").fetchone()
     assert row["outcome"] == "positive"
-    assert any(item["text"] == "social_feedback:positive" for item in backend.observations)
+    assert any(item["text"] == "social_feedback:positive:general_question" for item in backend.observations)
 
 
 def test_group_reply_to_human_is_observed_without_entering_thread(tmp_path) -> None:

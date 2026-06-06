@@ -812,7 +812,8 @@ class TelegramBotService:
             self._group_social_scores[key] = self._group_social_scores.get(key, 0) - 2
         elif outcome == "positive":
             self._group_social_scores[key] = self._group_social_scores.get(key, 0) + 1
-        return outcome
+        reason = str(pending.get("reason") or "unknown").strip() or "unknown"
+        return f"{outcome}:{reason}"
 
     def _image_file_id_mime_and_size(self, message: dict[str, Any]) -> tuple[str, str, int | None] | None:
         photos = message.get("photo")

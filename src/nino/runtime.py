@@ -1107,14 +1107,31 @@ def _apply_group_social_feedback(
 ) -> dict[str, Any]:
     if not intent.startswith("group_") or not text.startswith("social_feedback:"):
         return relation_state
-    outcome = text.split(":", 1)[1].strip()
+    parts = text.split(":")
+    outcome = parts[1].strip() if len(parts) >= 2 else ""
+    reason = parts[2].strip() if len(parts) >= 3 else "unknown"
+    if outcome not in {"positive", "negative", "reacted"}:
+        outcome = "reacted"
+    if not reason:
+        reason = "unknown"
     relation = dict(relation_state)
     maturity = dict(relation.get("group_maturity", {}))
     outcomes = dict(maturity.get("social_outcomes", {}))
     outcomes[outcome] = int(outcomes.get(outcome, 0)) + 1
     maturity["social_outcomes"] = outcomes
     maturity["last_social_outcome"] = outcome
+    maturity["last_social_reason"] = reason
     maturity["last_social_outcome_at"] = now.isoformat()
+    supervised = dict(maturity.get("social_supervision", {}))
+    by_reason = dict(supervised.get("by_reason", {}))
+    reason_row = dict(by_reason.get(reason, {}))
+    reason_row[outcome] = int(reason_row.get(outcome, 0)) + 1
+    reason_row["total"] = int(reason_row.get("total", 0)) + 1
+    by_reason[reason] = reason_row
+    supervised["by_reason"] = by_reason
+    supervised["last"] = {"outcome": outcome, "reason": reason, "at": now.isoformat()}
+    supervised["policy"] = "closed_vocab_outcome_by_intervention_reason_no_raw_text"
+    maturity["social_supervision"] = supervised
     if outcome == "negative":
         maturity["participation_guidance"] = "baja iniciativa; interviene solo si te mencionan o si la pregunta general es clara"
     elif outcome in {"positive", "reacted"}:
@@ -1221,7 +1238,9 @@ def _to_group_maturity_dashboard(relation_state: dict[str, Any]) -> dict[str, An
         "shared_history_count": len([item for item in maturity.get("shared_history", []) if isinstance(item, dict)]),
         "social_outcomes": dict(maturity.get("social_outcomes", {})),
         "social_learning": dict(maturity.get("social_learning", {})),
+        "social_supervision": dict(maturity.get("social_supervision", {})),
         "last_social_outcome": maturity.get("last_social_outcome"),
+        "last_social_reason": maturity.get("last_social_reason"),
         "last_observed_at": maturity.get("last_observed_at"),
         "privacy": "group_scope_only_no_private_chats_no_human_life",
     }
@@ -1242,6 +1261,12 @@ def _social_learning_journal_entries(
         return []
     social = dict(maturity.get("social_learning", {}))
     counts = dict(social.get("signal_counts", {}))
+    supervision = dict(maturity.get("social_supervision", {}))
+    supervised_by_reason = {
+        str(key): dict(value)
+        for key, value in dict(supervision.get("by_reason", {})).items()
+        if isinstance(value, dict)
+    }
     drafted = set(str(item) for item in social.get("drafted_patterns", []) if str(item))
     existing = {_review_key(item) for item in existing_lessons}
     out: list[LearningJournalEntry] = []
@@ -1259,6 +1284,43 @@ def _social_learning_journal_entries(
                     lesson=lesson,
                     title=str(spec["title"]),
                     tags=["social", "comportamiento", "amistad"],
+                    source_episode_id=source_episode_id,
+                    now=now,
+                    status="draft",
+                )
+            )
+            drafted.add(key)
+            existing.add(_review_key(lesson))
+        except ValueError:
+            continue
+    for reason, row in supervised_by_reason.items():
+        negative = int(row.get("negative", 0))
+        positive = int(row.get("positive", 0))
+        total = int(row.get("total", 0))
+        if negative >= 1:
+            key = f"supervised_negative_{reason}"
+            lesson = (
+                f"En grupos, las intervenciones de tipo {reason} recibieron rechazo. "
+                "Bajar iniciativa en ese patrón y volver a participar solo con señal clara."
+            )
+        elif positive >= 3 and total >= 3:
+            key = f"supervised_positive_{reason}"
+            lesson = (
+                f"En grupos, las intervenciones de tipo {reason} suelen recibir buena respuesta. "
+                "Puede usarlas con brevedad cuando aporte valor claro."
+            )
+        else:
+            continue
+        if key in drafted or _review_key(lesson) in existing:
+            drafted.add(key)
+            continue
+        try:
+            out.append(
+                make_detected_learning_entry(
+                    agent_id=agent_id,
+                    lesson=lesson,
+                    title=f"Supervisado: {reason}",
+                    tags=["social", "supervisado", "comportamiento"],
                     source_episode_id=source_episode_id,
                     now=now,
                     status="draft",
