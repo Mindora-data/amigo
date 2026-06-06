@@ -937,7 +937,7 @@ class TelegramBotService:
 
     def _text_references_recent_document(self, text: str) -> bool:
         lowered = text.casefold()
-        return any(
+        explicit_document_reference = any(
             marker in lowered
             for marker in (
                 "archivo",
@@ -945,12 +945,27 @@ class TelegramBotService:
                 "texto",
                 "libro",
                 "txt",
+                "novela",
                 "lo que te mandé",
                 "lo que te mande",
                 "lo que subí",
                 "lo que subi",
                 "lo has leído",
                 "lo has leido",
+                "resúmelo",
+                "resumelo",
+                "resume",
+                "de qué va",
+                "de que va",
+            )
+        )
+        if explicit_document_reference:
+            return True
+        words = [part for part in _slug(text).split("-") if part]
+        is_short_elliptic_request = len(words) <= 5
+        return is_short_elliptic_request and any(
+            marker in lowered
+            for marker in (
                 "qué te parece",
                 "que te parece",
                 "opina",
@@ -963,15 +978,7 @@ class TelegramBotService:
                 "personajes",
                 "trama",
                 "estructura",
-                "tema",
-                "temas",
                 "estilo",
-                "novela",
-                "resúmelo",
-                "resumelo",
-                "resume",
-                "de qué va",
-                "de que va",
             )
         )
 

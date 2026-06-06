@@ -355,6 +355,23 @@ def test_private_text_document_context_is_used_for_opinion_questions(tmp_path) -
     assert "No te quedes en una frase corta" in str(backend.ticks[-1]["text"])
 
 
+def test_private_text_document_context_does_not_hijack_unrelated_topic(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    telegram.files["doc"] = {"file_path": "documents/novela.txt"}
+    telegram.downloads["documents/novela.txt"] = b"La novela explora memoria, culpa y confianza."
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_document_update(111, filename="novela.txt"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+    bot.handle_update(_update(111, "qué opinas del tema de mercados?"), now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc))
+
+    assert len(backend.ticks) == 1
+    assert backend.ticks[-1]["text"] == "qué opinas del tema de mercados?"
+    assert "Contexto del último archivo de texto recibido por Telegram" not in str(backend.ticks[-1]["text"])
+
+
 def test_private_text_document_without_caption_does_not_trigger_backend_reminder(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     assert links.link_with_code(111, links.create_code("Ana"))

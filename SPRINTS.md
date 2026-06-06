@@ -2042,3 +2042,30 @@ Tests:
 
 - El prompt incluye la sección `Últimas formulaciones propias a no calcar`.
 - La frase previa del asistente aparece como referencia de estilo a evitar.
+
+## Sprint 79 - Contexto documental no secuestra la conversación
+
+Estado: hecho inicial.
+
+Objetivo: evitar que un libro o archivo leído por Telegram contamine respuestas
+posteriores que tratan de otro tema.
+
+Hechos:
+
+- El último archivo de texto solo se inyecta si el usuario lo referencia de forma
+  explícita (`libro`, `archivo`, `novela`, `resume`, etc.).
+- Las preguntas elípticas cortas justo después del archivo (`qué te parece?`,
+  `opina`, `personajes`) siguen usando el texto.
+- Preguntas con tema propio (`qué opinas del tema de mercados`) ya no arrastran
+  el libro por palabras genéricas como `tema`.
+
+Privacidad:
+
+- No se guarda memoria nueva; solo se corrige cuándo se reutiliza el extracto
+  temporal de Telegram.
+- El archivo sigue siendo contexto temporal, no hecho frío ni aprendizaje activo.
+
+Tests:
+
+- Una pregunta explícita sobre el libro sigue recibiendo contexto.
+- Una pregunta sobre otro tema tras subir una novela no recibe contexto del libro.
