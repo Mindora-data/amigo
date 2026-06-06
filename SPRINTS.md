@@ -1864,3 +1864,32 @@ Tests:
 - Tras enviar una foto privada y preguntar `la reconoces`, el backend recibe el
   contexto de la ultima imagen.
 - Un mensaje posterior que no referencia la imagen no recibe ese contexto.
+
+## Sprint 73 - Aprendizajes revisables desde lecturas Telegram
+
+Estado: hecho inicial.
+
+Objetivo: que amigo pueda aprender de libros/textos compartidos por Telegram sin
+convertir el archivo entero en memoria ni fingir que ha leido mas de lo que tiene.
+
+Hechos:
+
+- Cuando un texto compartido por Telegram se usa para una pregunta de opinion,
+  analisis, resumen, personajes, trama o estilo, el runtime crea una entrada
+  `draft` en la bitacora.
+- El borrador queda etiquetado como `lectura` y `cultura`, aislado por usuario y
+  revisable desde el dashboard antes de hacerse activo.
+- La leccion solo contiene pistas culturales derivadas del texto disponible y
+  recuerda que debe aclarar limites si solo hubo extracto.
+- Subir un archivo o decir simplemente `leelo` no crea aprendizaje por si solo.
+
+Privacidad:
+
+- No se guarda el libro entero como hecho frio ni memoria global.
+- No se activa ningun aprendizaje sin revision del usuario.
+
+Tests:
+
+- Una pregunta `que te parece` sobre un texto de Telegram crea un borrador de
+  lectura/cultura.
+- Una subida sin reflexion no crea borrador.

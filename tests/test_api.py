@@ -2149,6 +2149,46 @@ def test_learning_journal_detects_draft_candidates_from_conversation(tmp_path) -
     assert approved["count"] == 1
 
 
+def test_telegram_book_reflection_creates_reviewable_culture_draft(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    text = (
+        "Contexto del último archivo de texto recibido por Telegram "
+        "(novela.txt; extracto temporal, no memoria permanente):\n"
+        "La novela explora memoria, culpa y confianza. La protagonista duda entre recordar y perdonar.\n\n"
+        "Mensaje del usuario: qué te parece?"
+    )
+
+    tick = _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": text})
+
+    drafts = [item for item in tick["learning_journal_updates"] if "lectura" in item["tags"]]
+    assert len(drafts) == 1
+    draft = drafts[0]
+    assert draft["status"] == "draft"
+    assert draft["source"] == "detected"
+    assert "cultura" in draft["tags"]
+    assert "lectura" in draft["tags"]
+    assert "novela.txt" in draft["title"]
+    assert "culpa" in draft["lesson"] or "confianza" in draft["lesson"]
+
+    journal = _request(app, "GET", "/users/mindora/agents/nino/learning-journal?status=draft")
+    assert any("lectura" in item["tags"] and "novela.txt" in item["title"] for item in journal["entries"])
+
+
+def test_telegram_book_upload_without_reflection_does_not_create_learning_draft(tmp_path) -> None:
+    app = create_app(tmp_path / "nino.db")
+    text = (
+        "Archivo de texto recibido en Telegram (novela.txt; extracto temporal, no memoria permanente):\n"
+        "La novela explora memoria, culpa y confianza.\n\n"
+        "Mensaje del usuario: léelo"
+    )
+
+    tick = _request(app, "POST", "/users/mindora/agents/nino/tick", {"intent": "chat", "text": text})
+
+    assert tick["learning_journal_updates"] == []
+    journal = _request(app, "GET", "/users/mindora/agents/nino/learning-journal")
+    assert journal["count"] == 0
+
+
 def test_group_personal_preference_does_not_become_friend_learning(tmp_path) -> None:
     app = create_app(tmp_path / "nino.db")
 

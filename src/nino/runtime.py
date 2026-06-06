@@ -698,6 +698,106 @@ def _is_external_context_payload(text: str) -> bool:
         )
     )
 
+
+def _extract_text_document_filename(text: str) -> str:
+    match = re.search(r"(?:Telegram|telegram)\s+\((?P<filename>[^;)\n]+)", text)
+    if match:
+        return match.group("filename").strip()[:80]
+    return "texto compartido"
+
+
+def _text_document_user_message(text: str) -> str:
+    match = re.search(r"Mensaje del usuario:\s*(?P<message>.+)$", text, re.IGNORECASE | re.DOTALL)
+    return match.group("message").strip() if match else ""
+
+
+def _looks_like_reading_reflection_request(text: str) -> bool:
+    message = _without_accents(_text_document_user_message(text) or text)
+    return any(
+        marker in message
+        for marker in (
+            "que te parece",
+            "opina",
+            "opinion",
+            "analiza",
+            "analisis",
+            "personaje",
+            "personajes",
+            "trama",
+            "estilo",
+            "tema",
+            "temas",
+            "resum",
+            "de que va",
+        )
+    )
+
+
+def _document_learning_terms(text: str) -> list[str]:
+    body = re.sub(r"Mensaje del usuario:.+$", "", text, flags=re.IGNORECASE | re.DOTALL)
+    body = re.sub(r"\[.*?texto recortado.*?\]", " ", body, flags=re.IGNORECASE | re.DOTALL)
+    words = [
+        word
+        for word in _tokens_for_model(body)
+        if len(word) >= 5
+        and word
+        not in {
+            "archivo",
+            "texto",
+            "telegram",
+            "temporal",
+            "memoria",
+            "permanente",
+            "usuario",
+            "pregunta",
+            "responde",
+            "disponible",
+            "contenido",
+            "recordatorios",
+            "alarmas",
+            "partir",
+        }
+    ]
+    counts: dict[str, int] = {}
+    for word in words:
+        counts[word] = counts.get(word, 0) + 1
+    return [word for word, _count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:8]]
+
+
+def _reading_learning_journal_entries(
+    *,
+    text: str,
+    agent_id: str,
+    source_episode_id: str,
+    now: datetime,
+    existing_lessons: list[str],
+) -> list[LearningJournalEntry]:
+    if not _is_external_context_payload(text) or not _looks_like_reading_reflection_request(text):
+        return []
+    filename = _extract_text_document_filename(text)
+    terms = _document_learning_terms(text)
+    if not terms:
+        return []
+    joined = ", ".join(terms[:6])
+    lesson = (
+        f"Lectura revisable de {filename}: el texto disponible apunta a temas como {joined}. "
+        "Usarlo como pista cultural para conversar sobre esta lectura, aclarando limites si solo hubo extracto."
+    )
+    norm_existing = {_without_accents(item).lower() for item in existing_lessons}
+    if _without_accents(lesson).lower() in norm_existing:
+        return []
+    return [
+        make_detected_learning_entry(
+            agent_id=agent_id,
+            lesson=lesson,
+            title=f"Lectura: {filename}",
+            tags=["lectura", "cultura"],
+            source_episode_id=source_episode_id,
+            now=now,
+            status="draft",
+        )
+    ]
+
 def _clean_preference_value(value: str) -> str:
     words = _normalize_text(value).split()
     while words and words[0] in {"el", "la", "los", "las", "un", "una"}:
@@ -4477,6 +4577,14 @@ class NinoRuntime:
                     now=now,
                     existing_lessons=existing_lessons,
                     is_group_context=agent_id.startswith("telegram-group-") or intent.startswith("group_"),
+                )
+            if not journal_updates:
+                journal_updates = _reading_learning_journal_entries(
+                    text=text,
+                    agent_id=agent_id,
+                    source_episode_id=episode.episode_id,
+                    now=now,
+                    existing_lessons=existing_lessons,
                 )
             for entry in journal_updates:
                 self.learning_journal_store.upsert(entry)
