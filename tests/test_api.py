@@ -293,7 +293,18 @@ def test_http_api_serves_minimal_user_app(tmp_path) -> None:
     assert b"message-time" in body
     assert b"resizeComposer" in body
     assert b"showTyping" in body
-    assert b"event.key === \"Enter\" && !event.shiftKey" in body
+    assert b"shouldSubmitOnEnter" in body
+    assert b'event.key === "Enter" || event.key === "NumpadEnter"' in body
+    assert b"!event.shiftKey && !event.isComposing" in body
+    assert b"submitComposer" in body
+    assert b"quickPanel" in body
+    assert b"quickTopic" in body
+    assert b'data-quick-action="resume"' in body
+    assert b'data-quick-action="ask"' in body
+    assert b'data-quick-action="reading"' in body
+    assert b'data-quick-action="learning"' in body
+    assert "No arrastres libros, imágenes o archivos".encode("utf-8") in body
+    assert "no finjas haberlo leído".encode("utf-8") in body
     assert "Privado y local".encode("utf-8") in body
     assert b"/session/login" in body
     assert b"/session/status" in body

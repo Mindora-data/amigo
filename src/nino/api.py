@@ -1504,14 +1504,37 @@ USER_HTML = """<!doctype html>
       gap: 8px;
       align-items: stretch;
     }
+    .quickPanel {
+      display: grid;
+      gap: 8px;
+      padding: 9px;
+      border: 1px solid #dfe7e1;
+      border-radius: 10px;
+      background: #fbfcfa;
+    }
+    .quickHeader { display: flex; align-items: baseline; gap: 8px; color: #182126; }
+    .quickHeader span { color: #68766f; font-size: 12px; }
+    .quickGrid {
+      display: grid;
+      grid-template-columns: minmax(160px, 1fr) repeat(4, auto);
+      gap: 6px;
+      align-items: center;
+    }
+    .quickGrid input { min-height: 34px; padding: 8px 9px; }
+    .quickGrid button { min-height: 34px; padding: 6px 9px; font-size: 13px; }
     .voiceActive { border-color: #9b4a1b; color: #9b4a1b; background: #fff8f2; }
     .status { min-height: 20px; font-size: 12px; color: #68766f; }
+    @media (max-width: 720px) {
+      .quickGrid { grid-template-columns: 1fr 1fr; }
+      .quickGrid input { grid-column: 1 / -1; }
+    }
     @media (max-width: 560px) {
       main { padding: 12px; }
       .composer { grid-template-columns: 44px minmax(0, 1fr) 70px; }
       .message { max-width: 92%; }
       button { padding-left: 10px; padding-right: 10px; }
       .password-row { grid-template-columns: 1fr; }
+      .quickGrid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -1535,6 +1558,16 @@ USER_HTML = """<!doctype html>
     </form>
     <section id="chatView" class="chat" aria-live="polite">
       <div id="messages" class="messages"></div>
+      <div id="quickPanel" class="quickPanel" hidden>
+        <div class="quickHeader"><strong>Atajos</strong><span>Úsalos cuando quieras orientar la conversación</span></div>
+        <div class="quickGrid">
+          <input id="quickTopic" placeholder="Tema opcional: libro, plan, imagen...">
+          <button class="secondary" type="button" data-quick-action="resume">Retomar</button>
+          <button class="secondary" type="button" data-quick-action="ask">Pregúntame</button>
+          <button class="secondary" type="button" data-quick-action="reading">Lectura</button>
+          <button class="secondary" type="button" data-quick-action="learning">Aprendizajes</button>
+        </div>
+      </div>
       <form id="composer" class="composer">
         <button id="voiceButton" class="secondary" type="button" title="Voz" aria-label="Voz">Voz</button>
         <textarea id="text" rows="1" placeholder="Mensaje" aria-label="Mensaje"></textarea>
@@ -1607,6 +1640,13 @@ USER_HTML = """<!doctype html>
     function setPresence(text) {
       $("presence").textContent = text || "listo";
     }
+    function submitComposer(form) {
+      if (form.requestSubmit) form.requestSubmit();
+      else form.dispatchEvent(new Event("submit", {cancelable: true, bubbles: true}));
+    }
+    function shouldSubmitOnEnter(event) {
+      return (event.key === "Enter" || event.key === "NumpadEnter") && !event.shiftKey && !event.isComposing;
+    }
     function messageTime(value) {
       const date = value ? new Date(value) : new Date();
       if (Number.isNaN(date.getTime())) return "";
@@ -1645,6 +1685,22 @@ USER_HTML = """<!doctype html>
       box.style.height = `${Math.min(box.scrollHeight, 150)}px`;
       $("sendButton").disabled = !box.value.trim();
     }
+    function setQuickPanelVisible(visible) {
+      $("quickPanel").hidden = !visible;
+    }
+    function fillQuickPrompt(action) {
+      const topic = $("quickTopic").value.trim();
+      const suffix = topic ? ` sobre ${topic}` : "";
+      const prompts = {
+        resume: `Retomemos${suffix || " algo que tenga sentido por nuestra conversación reciente"}. Si no tienes contexto suficiente, dilo y pregúntame una cosa concreta. No arrastres libros, imágenes o archivos salvo que yo los mencione aquí.`,
+        ask: `Hazme una pregunta buena${suffix} para entenderme mejor sin ser pesado. Una sola pregunta, natural y concreta.`,
+        reading: `Hablemos de la lectura o archivo${suffix}. Usa solo lo que hayas recibido o lo que yo te cuente; si no lo has leído entero, dilo claramente y no finjas haberlo leído.`,
+        learning: `Qué aprendizaje o idea revisable sacarías${suffix || " de lo que hemos hablado"}? Sepáralo de mis recuerdos personales y plantea una lección editable, no una verdad absoluta.`
+      };
+      $("text").value = prompts[action] || prompts.resume;
+      resizeComposer();
+      $("text").focus();
+    }
     function speak(text) {
       if (!voiceReply || !("speechSynthesis" in window) || !text) return;
       window.speechSynthesis.cancel();
@@ -1674,6 +1730,7 @@ USER_HTML = """<!doctype html>
       $("loginView").hidden = true;
       $("chatView").style.display = "grid";
       $("logoutButton").hidden = false;
+      setQuickPanelVisible(true);
       await loadConversation();
       await startProactiveConversation();
       await startOnboardingIfNeeded();
@@ -1864,6 +1921,7 @@ USER_HTML = """<!doctype html>
       stopInboxPolling();
       voiceReply = false;
       $("chatView").style.display = "none";
+      setQuickPanelVisible(false);
       $("loginView").hidden = false;
       $("logoutButton").hidden = true;
       $("messages").replaceChildren();
@@ -1884,11 +1942,12 @@ USER_HTML = """<!doctype html>
       if (listening) recognition.stop();
       else recognition.start();
     };
+    document.querySelectorAll("[data-quick-action]").forEach((button) => { button.onclick = () => fillQuickPrompt(button.dataset.quickAction); });
     $("text").addEventListener("input", resizeComposer);
     $("text").addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && !event.shiftKey) {
+      if (shouldSubmitOnEnter(event)) {
         event.preventDefault();
-        $("composer").requestSubmit();
+        submitComposer($("composer"));
       }
     });
     resizeComposer();

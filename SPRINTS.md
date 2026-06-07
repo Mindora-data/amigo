@@ -2125,3 +2125,35 @@ Tests:
 - Una pregunta sobre mercados tras leer una novela no recibe el extracto del
   libro en prompt ni en `nino_context`.
 - Una pregunta explícita sobre el argumento del libro conserva el contexto.
+
+## Sprint 82 - Atajos personales inspirados en Odysseus
+
+Estado: hecho inicial.
+
+Objetivo: mejorar la UX de `/user` sin convertir amigo en un workspace
+generalista. El chat sigue siendo el centro, pero deja de ser una caja vacía:
+ofrece atajos para orientar la conversación sin forzar temas ni arrastrar
+archivos.
+
+Hechos:
+
+- `/user` incorpora un bloque compacto de atajos visible solo con sesión activa.
+- Campo opcional de tema para orientar el atajo: libro, plan, imagen, idea, etc.
+- Acciones rápidas: retomar, pregúntame, lectura y aprendizajes.
+- Los prompts generados recuerdan límites clave: no arrastrar libros, imágenes o
+  archivos salvo mención explícita; no fingir lectura completa; no convertir una
+  lección en recuerdo personal.
+- El composer usa envío robusto: Enter/NumpadEnter envía, Shift+Enter inserta
+  salto de línea y composición de teclado no dispara envío.
+
+Privacidad:
+
+- No añade memoria nueva ni backend nuevo.
+- Los atajos solo rellenan el campo de texto; el usuario decide si envía.
+- La capa respeta la separación entre recuerdos personales, archivos temporales
+  y aprendizajes revisables.
+
+Tests:
+
+- `/user` expone los atajos personales y sus límites honestos.
+- El envío por Enter queda protegido por helper robusto.
