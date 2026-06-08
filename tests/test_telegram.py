@@ -796,6 +796,48 @@ def test_private_request_to_post_in_group_without_known_group_does_not_claim_suc
     assert actions[0]["error"] == "no_known_group"
 
 
+def test_private_vague_group_action_without_known_group_does_not_reach_llm_or_claim_success(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_update(111, "participa en el canal", update_id=2), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert len(telegram.sent) == 1
+    assert telegram.sent[-1]["chat_id"] == "111"
+    assert "No tengo ningún grupo registrado" in str(telegram.sent[-1]["text"])
+    assert "voy a decir que lo he hecho" in str(telegram.sent[-1]["text"]).casefold()
+    assert backend.ticks == []
+    actions = links.action_logs()
+    assert actions[0]["action_type"] == "private_group_action_request"
+    assert actions[0]["sent_ok"] is False
+    assert actions[0]["error"] == "no_known_group"
+
+
+def test_private_vague_group_action_with_known_group_asks_for_explicit_text(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "mensaje normal", update_id=1), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+    bot.handle_update(_update(111, "participa en el canal", update_id=2), now=datetime(2026, 5, 28, 10, 1, tzinfo=timezone.utc))
+
+    assert telegram.sent[-1]["chat_id"] == "111"
+    assert "no voy a decir que he participado" in str(telegram.sent[-1]["text"])
+    assert "di en el grupo que" in str(telegram.sent[-1]["text"])
+    assert {"chat_id": "-100", "text": "participa en el canal"} not in telegram.sent
+    assert backend.ticks == []
+    actions = links.action_logs()
+    assert actions[0]["action_type"] == "private_group_action_request"
+    assert actions[0]["chat_id"] == "-100"
+    assert actions[0]["sent_ok"] is False
+    assert actions[0]["error"] == "missing_explicit_text"
+
+
 def test_private_request_to_post_in_group_reports_send_failure(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     assert links.link_with_code(111, links.create_code("Ana"))

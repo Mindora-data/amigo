@@ -126,6 +126,14 @@ PRIVATE_GROUP_POST_CUES = (
     "disculpate",
     "discúlpate",
 )
+PRIVATE_GROUP_ACTION_CUES = PRIVATE_GROUP_POST_CUES + (
+    "participa",
+    "intervén",
+    "interven",
+    "contesta",
+    "responde",
+    "habla",
+)
 
 
 def _connect(path: str | Path) -> sqlite3.Connection:
@@ -1088,6 +1096,60 @@ class TelegramBotService:
             return None
         return candidate[:1200]
 
+    def _is_private_group_action_request(self, text: str) -> bool:
+        normalized = " ".join(text.strip().split()).casefold()
+        if not any(cue in normalized for cue in PRIVATE_GROUP_ACTION_CUES):
+            return False
+        return any(
+            cue in normalized
+            for cue in (
+                "grupo",
+                "canal",
+                "chat",
+                "puntuacomics",
+                "puntua comics",
+                "allí",
+                "alli",
+                "ahí",
+                "ahi",
+            )
+        )
+
+    def _handle_private_group_action_request(self, private_chat_id: int | str, text: str, now: datetime) -> bool:
+        if not self._is_private_group_action_request(text):
+            return False
+        group = self.links.latest_group()
+        if group is None:
+            self.links.record_action(
+                action_type="private_group_action_request",
+                chat_id=None,
+                user_chat_id=private_chat_id,
+                text=text,
+                sent_ok=False,
+                error="no_known_group",
+                now=now,
+            )
+            self.telegram.send_message(
+                private_chat_id,
+                "No tengo ningún grupo registrado todavía, así que no puedo participar allí ni voy a decir que lo he hecho. Escríbeme o mencióname una vez dentro del grupo y después podré ayudarte allí.",
+            )
+            return True
+        self.links.record_action(
+            action_type="private_group_action_request",
+            chat_id=group["chat_id"],
+            target_title=group["title"],
+            user_chat_id=private_chat_id,
+            text=text,
+            sent_ok=False,
+            error="missing_explicit_text",
+            now=now,
+        )
+        self.telegram.send_message(
+            private_chat_id,
+            f"Estoy en {group['title']}, pero no voy a decir que he participado si no he enviado nada. Si quieres que publique algo concreto, dime: di en el grupo que ...",
+        )
+        return True
+
     def _is_private_social_correction(self, text: str) -> bool:
         lower = text.casefold()
         correction = any(
@@ -1306,6 +1368,8 @@ class TelegramBotService:
         if group_post_text is not None:
             self._record_private_social_correction(chat_id, text, current_time, notify=False)
             self._send_private_group_post(chat_id, group_post_text, current_time)
+            return
+        if self._handle_private_group_action_request(chat_id, text, current_time):
             return
         if self._record_private_social_correction(chat_id, text, current_time):
             return
