@@ -92,7 +92,8 @@ if [[ -n "$KEYCHAIN_SERVICE" ]]; then
     echo "macOS security command not found; cannot use --keychain-service." >&2
     exit 1
   fi
-  security add-generic-password -U -a "$USER" -s "$KEYCHAIN_SERVICE" -w "$KEY" >/dev/null
+  KEYCHAIN_ACCOUNT="${USER:-$(id -un 2>/dev/null || echo nino)}"
+  security add-generic-password -U -a "$KEYCHAIN_ACCOUNT" -s "$KEYCHAIN_SERVICE" -w "$KEY" >/dev/null
 fi
 
 mkdir -p "$(dirname "$ENV_FILE")"
