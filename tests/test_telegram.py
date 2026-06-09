@@ -1039,7 +1039,7 @@ def test_group_reply_is_marked_ignored_after_silence_and_activity(tmp_path) -> N
     assert any(item["text"] == "social_feedback:ignored:general_question" for item in backend.observations)
 
 
-def test_group_learned_silence_blocks_repeated_ambient_reason(tmp_path) -> None:
+def test_group_ignored_replies_do_not_create_permanent_silence(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     now = datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc)
     for idx in range(3):
@@ -1059,8 +1059,50 @@ def test_group_learned_silence_blocks_repeated_ambient_reason(tmp_path) -> None:
 
     bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=20, update_id=10))
 
+    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
+    assert telegram.sent[-1]["chat_id"] == "-100"
+    row = links.conn.execute("SELECT reason FROM telegram_social_decision ORDER BY id DESC LIMIT 1").fetchone()
+    assert row["reason"] == "general_question"
+
+
+def test_group_low_initiative_participation_after_several_observed_messages(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    for idx in range(1, 6):
+        bot.handle_update(_group_update(-100, f"mensaje lateral con contexto {idx}", update_id=idx))
+    bot.handle_update(_group_update(-100, "a mi me gustó bastante esa idea", update_id=6))
+
+    assert len(backend.ticks) == 1
+    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
+    assert "a mi me gustó bastante esa idea" in str(backend.ticks[-1]["text"])
+    assert telegram.sent[-1]["chat_id"] == "-100"
+    row = links.conn.execute("SELECT reason FROM telegram_social_decision ORDER BY id DESC LIMIT 1").fetchone()
+    assert row["reason"] == "ambient_participation"
+
+
+def test_group_negative_feedback_still_blocks_same_ambient_reason(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    now = datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc)
+    decision_id = links.record_social_decision(
+        chat_id=-100,
+        message_id=1,
+        sender_id=10,
+        text="alguien sabe algo",
+        decision="reply",
+        reason="general_question",
+        now=now,
+    )
+    links.mark_social_outcome(decision_id, "negative", now)
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=20, update_id=10))
+
     assert backend.ticks == []
-    assert backend.observations[-1]["text"] == "alguien sabe cual es la capital de españa"
     assert telegram.sent == []
     row = links.conn.execute("SELECT reason FROM telegram_social_decision ORDER BY id DESC LIMIT 1").fetchone()
     assert row["reason"] == "learned_silence_general_question"

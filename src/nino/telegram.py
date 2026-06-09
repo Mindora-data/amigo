@@ -22,6 +22,7 @@ AGENT_ID = "nino"
 GROUP_AMBIENT_COOLDOWN_SECONDS = 600
 GROUP_AMBIENT_COOLDOWN_FAST_SECONDS = 180
 GROUP_AMBIENT_COOLDOWN_SLOW_SECONDS = 900
+GROUP_AMBIENT_OBSERVED_BEFORE_PARTICIPATION = 6
 GROUP_MENTION_AFTER_SECONDS = 120
 DEFAULT_TELEGRAM_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 DEFAULT_TELEGRAM_TEXT_FILE_MAX_BYTES = 5 * 1024 * 1024
@@ -523,6 +524,26 @@ class TelegramLinkStore:
         ).fetchall()
         return {str(row["outcome"]): int(row["count"]) for row in rows}
 
+    def observed_messages_since_latest_reply(self, chat_id: int | str) -> int:
+        latest_reply = self.conn.execute(
+            """
+            SELECT MAX(id) AS latest_id
+            FROM telegram_social_decision
+            WHERE chat_id = ? AND decision = 'reply'
+            """,
+            (str(chat_id),),
+        ).fetchone()
+        latest_id = int(latest_reply["latest_id"] or 0) if latest_reply else 0
+        row = self.conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM telegram_social_decision
+            WHERE chat_id = ? AND id > ? AND decision = 'observe'
+            """,
+            (str(chat_id), latest_id),
+        ).fetchone()
+        return int(row["count"] if row else 0)
+
 
 class TelegramAPI(Protocol):
     def get_updates(self, offset: int | None, timeout: int) -> list[dict[str, Any]]:
@@ -815,7 +836,8 @@ class TelegramBotService:
         if any(cue in lowered for cue in GROUP_SENSITIVE_CUES):
             return False, "sensitive"
         cues = (*GROUP_AMBIENT_CUES, *GROUP_PARTICIPATION_CUES)
-        if not any(cue in lowered or _slug(cue).replace("-", " ") in normalized for cue in cues):
+        has_social_cue = any(cue in lowered or _slug(cue).replace("-", " ") in normalized for cue in cues)
+        if not has_social_cue and not self._should_make_low_initiative_group_participation(chat_id, text):
             return False, "no_social_opening"
         last = self._group_last_ambient_reply.get(str(chat_id))
         if last is not None and (now - last).total_seconds() < self._ambient_cooldown_seconds(chat_id):
@@ -824,6 +846,8 @@ class TelegramBotService:
             reason = "general_question"
         elif any(_slug(cue).replace("-", " ") in normalized for cue in ("hola", "buenas", "buenos dias", "buenas tardes", "buenas noches")):
             reason = "greeting"
+        elif not has_social_cue:
+            reason = "ambient_participation"
         else:
             reason = "social_signal"
         if self._ambient_reason_suppressed_by_learning(chat_id, reason):
@@ -832,11 +856,25 @@ class TelegramBotService:
         self._group_messages_since_ambient_reply[str(chat_id)] = 0
         return True, reason
 
+    def _should_make_low_initiative_group_participation(self, chat_id: int | str, text: str) -> bool:
+        normalized = _slug(text).replace("-", " ")
+        words = [part for part in normalized.split() if part]
+        if len(words) < 4:
+            return False
+        if len(text.strip()) < 18:
+            return False
+        observed = max(
+            self._group_messages_since_ambient_reply.get(str(chat_id), 0),
+            self.links.observed_messages_since_latest_reply(chat_id),
+        )
+        if observed < GROUP_AMBIENT_OBSERVED_BEFORE_PARTICIPATION:
+            return False
+        stats = self.links.social_outcome_stats(chat_id, "ambient_participation")
+        return int(stats.get("negative", 0)) == 0
+
     def _ambient_reason_suppressed_by_learning(self, chat_id: int | str, reason: str) -> bool:
         stats = self.links.social_outcome_stats(chat_id, reason)
         if int(stats.get("negative", 0)) >= 1:
-            return True
-        if int(stats.get("ignored", 0)) >= 3 and int(stats.get("positive", 0)) == 0:
             return True
         return False
 
