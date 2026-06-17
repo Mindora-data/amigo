@@ -22,8 +22,28 @@ AGENT_ID = "nino"
 GROUP_AMBIENT_COOLDOWN_SECONDS = 600
 GROUP_AMBIENT_COOLDOWN_FAST_SECONDS = 180
 GROUP_AMBIENT_COOLDOWN_SLOW_SECONDS = 900
-GROUP_AMBIENT_OBSERVED_BEFORE_PARTICIPATION = 6
 GROUP_MENTION_AFTER_SECONDS = 120
+KNOWN_WORK_SUMMARY_MAX_CHARS = 4000
+KNOWN_WORK_MIN_TITLE_CHARS = 4
+GENERIC_WORK_TITLES = frozenset(
+    {
+        "texto",
+        "documento",
+        "archivo",
+        "libro",
+        "libros",
+        "comic",
+        "comics",
+        "novela",
+        "pelicula",
+        "peliculas",
+        "doc",
+        "file",
+        "untitled",
+        "sin titulo",
+        "nuevo documento",
+    }
+)
 DEFAULT_TELEGRAM_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 DEFAULT_TELEGRAM_TEXT_FILE_MAX_BYTES = 5 * 1024 * 1024
 DEFAULT_TELEGRAM_TEXT_CONTEXT_CHARS = 60_000
@@ -35,57 +55,6 @@ IMAGE_MEMORY_CUES = (
     "memoriza",
     "no olvides",
     "ten presente",
-)
-GROUP_AMBIENT_CUES = (
-    "?",
-    "¿",
-    "alguin sabe",
-    "que opinais",
-    "qué opináis",
-    "que opinas",
-    "qué opinas",
-    "alguna idea",
-    "alguien sabe",
-    "sabeis",
-    "sabéis",
-    "quien sabe",
-    "quién sabe",
-    "cual es",
-    "cuál es",
-    "donde esta",
-    "dónde está",
-    "como se",
-    "cómo se",
-    "como lo veis",
-    "cómo lo veis",
-    "como estais",
-    "cómo estáis",
-    "como vais",
-    "cómo vais",
-    "que tal estais",
-    "qué tal estáis",
-    "que tal vais",
-    "qué tal vais",
-    "consejo",
-)
-GROUP_PARTICIPATION_CUES = (
-    "hola",
-    "buenas",
-    "buenos dias",
-    "buenos días",
-    "buenas tardes",
-    "buenas noches",
-    "estoy triste",
-    "estoy mal",
-    "me siento",
-    "me preocupa",
-    "tengo miedo",
-    "me agobia",
-    "necesito hablar",
-    "no se que hacer",
-    "no sé qué hacer",
-    "tengo una idea",
-    "os cuento",
 )
 GROUP_SENSITIVE_CUES = (
     "contraseña",
@@ -298,6 +267,20 @@ class TelegramLinkStore:
         )
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_telegram_action_log_time ON telegram_action_log(created_at)"
+        )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS telegram_known_work (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                normalized_title TEXT NOT NULL UNIQUE,
+                medium TEXT,
+                summary TEXT,
+                source TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
         )
         self.conn.commit()
 
@@ -543,6 +526,91 @@ class TelegramLinkStore:
             (str(chat_id), latest_id),
         ).fetchone()
         return int(row["count"] if row else 0)
+
+    def record_known_work(
+        self,
+        title: str,
+        *,
+        medium: str,
+        summary: str,
+        source: str,
+        now: datetime,
+    ) -> bool:
+        """Registra una obra que amigo ha leído/visto realmente (le llegó por Telegram).
+
+        Devuelve True si quedó registrada. Rechaza títulos genéricos o demasiado
+        cortos para que amigo no afirme conocer algo que en realidad no recibió.
+        """
+        clean_title = " ".join(str(title or "").split()).strip()
+        normalized = _slug(clean_title).replace("-", " ").strip()
+        if len(normalized) < KNOWN_WORK_MIN_TITLE_CHARS or normalized in GENERIC_WORK_TITLES:
+            return False
+        timestamp = now.isoformat()
+        self.conn.execute(
+            """
+            INSERT INTO telegram_known_work (
+                title, normalized_title, medium, summary, source, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(normalized_title) DO UPDATE SET
+                title = excluded.title,
+                medium = excluded.medium,
+                summary = excluded.summary,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            (
+                clean_title,
+                normalized,
+                medium,
+                str(summary or "")[:KNOWN_WORK_SUMMARY_MAX_CHARS],
+                source,
+                timestamp,
+                timestamp,
+            ),
+        )
+        self.conn.commit()
+        return True
+
+    def known_work_for_text(self, text: str) -> dict[str, str] | None:
+        """Devuelve la obra conocida cuyo título aparezca en el mensaje, si la hay."""
+        haystack = f" {_slug(text).replace('-', ' ')} "
+        rows = self.conn.execute(
+            """
+            SELECT title, normalized_title, medium, summary
+            FROM telegram_known_work
+            ORDER BY LENGTH(normalized_title) DESC
+            """
+        ).fetchall()
+        for row in rows:
+            normalized_title = str(row["normalized_title"])
+            if len(normalized_title) < KNOWN_WORK_MIN_TITLE_CHARS:
+                continue
+            if f" {normalized_title} " in haystack:
+                return {
+                    "title": str(row["title"]),
+                    "medium": str(row["medium"] or ""),
+                    "summary": str(row["summary"] or ""),
+                }
+        return None
+
+    def known_works(self) -> list[dict[str, str]]:
+        rows = self.conn.execute(
+            """
+            SELECT title, medium, source, updated_at
+            FROM telegram_known_work
+            ORDER BY updated_at DESC
+            """
+        ).fetchall()
+        return [
+            {
+                "title": str(row["title"]),
+                "medium": str(row["medium"] or ""),
+                "source": str(row["source"] or ""),
+                "updated_at": str(row["updated_at"]),
+            }
+            for row in rows
+        ]
 
 
 class TelegramAPI(Protocol):
@@ -831,56 +899,32 @@ class TelegramBotService:
         return GROUP_AMBIENT_COOLDOWN_SECONDS
 
     def _ambient_group_reason(self, chat_id: int | str, text: str, now: datetime) -> tuple[bool, str]:
+        """Decide si amigo participa en un grupo sin que le nombren.
+
+        Solo interviene cuando se habla de una obra que ha leído/visto de verdad
+        (registrada en `telegram_known_work`). En cualquier otro caso observa y
+        aprende, sin contestar, para no resultar pesado.
+        """
         lowered = text.lower()
-        normalized = _slug(text).replace("-", " ")
         if any(cue in lowered for cue in GROUP_SENSITIVE_CUES):
             return False, "sensitive"
-        cues = (*GROUP_AMBIENT_CUES, *GROUP_PARTICIPATION_CUES)
-        has_social_cue = any(cue in lowered or _slug(cue).replace("-", " ") in normalized for cue in cues)
-        if not has_social_cue and not self._should_make_low_initiative_group_participation(chat_id, text):
-            return False, "no_social_opening"
+        if self.links.known_work_for_text(text) is None:
+            return False, "observe_and_learn"
         last = self._group_last_ambient_reply.get(str(chat_id))
         if last is not None and (now - last).total_seconds() < self._ambient_cooldown_seconds(chat_id):
             return False, "cooldown"
-        if "?" in text or "¿" in text or any(cue in normalized for cue in ("alguien sabe", "alguin sabe", "cual es", "quien sabe", "sabeis")):
-            reason = "general_question"
-        elif any(_slug(cue).replace("-", " ") in normalized for cue in ("hola", "buenas", "buenos dias", "buenas tardes", "buenas noches")):
-            reason = "greeting"
-        elif not has_social_cue:
-            reason = "ambient_participation"
-        else:
-            reason = "social_signal"
+        reason = "known_work"
         if self._ambient_reason_suppressed_by_learning(chat_id, reason):
             return False, f"learned_silence_{reason}"
         self._group_last_ambient_reply[str(chat_id)] = now
         self._group_messages_since_ambient_reply[str(chat_id)] = 0
         return True, reason
 
-    def _should_make_low_initiative_group_participation(self, chat_id: int | str, text: str) -> bool:
-        normalized = _slug(text).replace("-", " ")
-        words = [part for part in normalized.split() if part]
-        if len(words) < 4:
-            return False
-        if len(text.strip()) < 18:
-            return False
-        observed = max(
-            self._group_messages_since_ambient_reply.get(str(chat_id), 0),
-            self.links.observed_messages_since_latest_reply(chat_id),
-        )
-        if observed < GROUP_AMBIENT_OBSERVED_BEFORE_PARTICIPATION:
-            return False
-        stats = self.links.social_outcome_stats(chat_id, "ambient_participation")
-        return int(stats.get("negative", 0)) == 0
-
     def _ambient_reason_suppressed_by_learning(self, chat_id: int | str, reason: str) -> bool:
         stats = self.links.social_outcome_stats(chat_id, reason)
         if int(stats.get("negative", 0)) >= 1:
             return True
         return False
-
-    def _should_reply_ambiently_in_group(self, chat_id: int | str, text: str, now: datetime) -> bool:
-        should, _ = self._ambient_group_reason(chat_id, text, now)
-        return should
 
     def _sender_id(self, message: dict[str, Any]) -> str | None:
         sender = message.get("from") if isinstance(message.get("from"), dict) else {}
@@ -1097,6 +1141,45 @@ class TelegramBotService:
 
     def _with_recent_telegram_context(self, scope: int | str, text: str) -> str:
         return self._with_recent_text_document_context(scope, self._with_recent_image_context(scope, text))
+
+    @staticmethod
+    def _work_title_from_filename(filename: str) -> str:
+        name = str(filename or "").strip()
+        if "." in name:
+            name = name.rsplit(".", 1)[0]
+        name = name.replace("_", " ").replace("-", " ")
+        return " ".join(name.split()).strip()
+
+    @staticmethod
+    def _infer_work_medium(filename: str) -> str:
+        lowered = str(filename or "").lower()
+        if any(cue in lowered for cue in ("comic", "cómic", "cbz", "cbr", "manga", "viñeta", "vineta")):
+            return "cómic"
+        if any(cue in lowered for cue in ("pelicula", "película", "guion", "guión", "movie", "film")):
+            return "película"
+        return "texto"
+
+    def _register_known_work_from_document(self, filename: str, excerpt: str, now: datetime) -> None:
+        title = self._work_title_from_filename(filename)
+        if not title or not excerpt.strip():
+            return
+        self.links.record_known_work(
+            title,
+            medium=self._infer_work_medium(filename),
+            summary=excerpt,
+            source="telegram_document",
+            now=now,
+        )
+
+    def _with_known_work_context(self, text: str, work: dict[str, str]) -> str:
+        medium = work.get("medium") or "obra"
+        return (
+            "Contexto de una obra que sí conoces porque te llegó antes por Telegram "
+            f"({work['title']}; {medium}). Apóyate solo en lo que aquí aparece; si algo no está, "
+            "reconoce que no lo recuerdas y no lo inventes:\n"
+            f"{work.get('summary') or ''}\n\n"
+            f"{text}"
+        )
 
     def _private_group_post_text(self, text: str) -> str | None:
         normalized = " ".join(text.strip().split())
@@ -1402,6 +1485,20 @@ class TelegramBotService:
                 lines = [f"- {group['title']} ({group['chat_id']})" for group in groups[:10]]
                 self.telegram.send_message(chat_id, "Grupos donde te puedo ayudar si ya estoy dentro:\n" + "\n".join(lines))
             return
+        if self._is_command(text, "lecturas"):
+            works = self.links.known_works()
+            if not works:
+                self.telegram.send_message(
+                    chat_id,
+                    "Todavía no he leído ni visto ninguna obra. Pásame un texto por aquí y la registraré como leída.",
+                )
+            else:
+                lines = [f"- {work['title']} ({work['medium'] or 'obra'})" for work in works[:15]]
+                self.telegram.send_message(
+                    chat_id,
+                    "Obras que he leído o visto y de las que puedo hablar en grupos:\n" + "\n".join(lines),
+                )
+            return
         group_post_text = self._private_group_post_text(text)
         if group_post_text is not None:
             self._record_private_social_correction(chat_id, text, current_time, notify=False)
@@ -1421,13 +1518,22 @@ class TelegramBotService:
             directed = self._is_directed_at_bot(message, caption)
             self._record_group_message(chat_id, now, str(chat.get("title") or ""))
             if not directed:
+                # Lee la obra compartida en silencio para aprenderla, sin contestar.
+                filename, content, ok = self._read_telegram_text_document(message) or ("archivo", "", False)
+                reason = "group_document_not_directed"
+                if ok:
+                    excerpt, truncated = self._unpack_text_document_content(content)
+                    self._remember_last_text_document(chat_id, filename=filename, excerpt=excerpt, truncated=truncated)
+                    self._register_known_work_from_document(filename, excerpt, now)
+                    self.backend.observe(self._group_user_id(chat_id), f"Lectura recibida en el grupo: {filename}", now)
+                    reason = "group_document_read"
                 self.links.record_social_decision(
                     chat_id=chat_id,
                     message_id=message.get("message_id"),
                     sender_id=self._sender_id(message),
                     text="[archivo de texto]",
                     decision="observe",
-                    reason="group_document_not_directed",
+                    reason=reason,
                     now=now,
                 )
                 return
@@ -1437,6 +1543,7 @@ class TelegramBotService:
                 return
             excerpt, truncated = self._unpack_text_document_content(content)
             self._remember_last_text_document(chat_id, filename=filename, excerpt=excerpt, truncated=truncated)
+            self._register_known_work_from_document(filename, excerpt, now)
             if not caption:
                 self._send_group_reply(
                     chat_id,
@@ -1468,6 +1575,7 @@ class TelegramBotService:
             return
         excerpt, truncated = self._unpack_text_document_content(content)
         self._remember_last_text_document(chat_id, filename=filename, excerpt=excerpt, truncated=truncated)
+        self._register_known_work_from_document(filename, excerpt, now)
         if not caption:
             self.telegram.send_message(chat_id, self._text_document_ack(filename))
             return
@@ -1568,7 +1676,11 @@ class TelegramBotService:
             self.backend.observe(target_user_id, context_text, now)
             self._observe_ignored_group_replies(chat_id, target_user_id, now)
             return
-        reply = self.backend.tick(target_user_id, self._with_recent_telegram_context(chat_id, context_text), now)
+        grounded_text = self._with_recent_telegram_context(chat_id, context_text)
+        known_work = self.links.known_work_for_text(clean_text)
+        if known_work is not None:
+            grounded_text = self._with_known_work_context(grounded_text, known_work)
+        reply = self.backend.tick(target_user_id, grounded_text, now)
         if reply:
             text_to_send = self._format_group_reply(message, reply, reply_should_mention)
             self._send_group_reply(chat_id, text_to_send)

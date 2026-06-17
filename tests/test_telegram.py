@@ -114,6 +114,16 @@ def _group_update(chat_id: int, text: str, user_id: int = 10, update_id: int = 1
     }
 
 
+def _register_watchmen(links: TelegramLinkStore, *, now: datetime | None = None) -> None:
+    links.record_known_work(
+        "Watchmen",
+        medium="cómic",
+        summary="Watchmen trata de vigilantes enmascarados y dilemas morales.",
+        source="test",
+        now=now or datetime(2026, 5, 28, 12, 0, tzinfo=timezone.utc),
+    )
+
+
 def _photo_update(chat_id: int, *, caption: str = "", update_id: int = 1, group: bool = False, big_size: int = 20) -> dict[str, object]:
     message: dict[str, object] = {
         "chat": {"id": chat_id, **({"type": "supergroup", "title": "Grupo"} if group else {})},
@@ -894,24 +904,27 @@ def test_private_groups_command_lists_group_from_recent_history(tmp_path) -> Non
     assert "grupo -1001391487472" in str(telegram.sent[-1]["text"])
 
 
-def test_group_ambient_question_can_reply_without_private_memory(tmp_path) -> None:
+def test_group_known_work_reply_uses_group_context_and_public_author(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     assert links.link_with_code("user:10", links.create_code("AnaPrivada"))
+    _register_watchmen(links)
     telegram = FakeTelegram()
     backend = FakeBackend()
     backend.public_contexts["anaprivada"] = "se llama Ana; vive en Madrid; le gusta comics"
     bot = TelegramBotService(telegram, backend, links)
 
-    bot.handle_update(_group_update(-100, "¿qué opináis de esta idea?", user_id=10))
+    bot.handle_update(_group_update(-100, "¿qué os parece Watchmen?", user_id=10))
 
     assert backend.observations == []
     assert backend.ticks[-1]["user_id"] == "telegram-group-100"
-    assert "Contexto público del autor: se llama Ana; vive en Madrid; le gusta comics" in str(backend.ticks[-1]["text"])
-    assert "Mensaje del grupo: ¿qué opináis de esta idea?" in str(backend.ticks[-1]["text"])
+    tick_text = str(backend.ticks[-1]["text"])
+    assert "Contexto público del autor: se llama Ana; vive en Madrid; le gusta comics" in tick_text
+    assert "Watchmen" in tick_text
+    assert "no lo inventes" in tick_text
     assert "anaprivada" not in str(telegram.sent[-1]["text"]).lower()
 
 
-def test_group_social_question_can_get_ambient_reply(tmp_path) -> None:
+def test_group_chitchat_without_known_work_is_observed_without_reply(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()
     backend = FakeBackend()
@@ -919,13 +932,15 @@ def test_group_social_question_can_get_ambient_reply(tmp_path) -> None:
 
     bot.handle_update(_group_update(-100, "como estais", user_id=10))
 
-    assert backend.observations == []
-    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
-    assert backend.ticks[-1]["text"] == "como estais"
-    assert telegram.sent[-1]["chat_id"] == "-100"
+    assert backend.ticks == []
+    assert telegram.sent == []
+    assert backend.observations[-1]["text"] == "como estais"
+    row = links.conn.execute("SELECT decision, reason FROM telegram_social_decision ORDER BY id DESC LIMIT 1").fetchone()
+    assert row["decision"] == "observe"
+    assert row["reason"] == "observe_and_learn"
 
 
-def test_group_general_knowledge_question_can_get_ambient_reply_without_mention(tmp_path) -> None:
+def test_group_general_question_without_known_work_is_observed(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()
     backend = FakeBackend()
@@ -933,13 +948,12 @@ def test_group_general_knowledge_question_can_get_ambient_reply_without_mention(
 
     bot.handle_update(_group_update(-100, "alguin sabe cual es la capital de españa", user_id=10))
 
-    assert backend.observations == []
-    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
-    assert backend.ticks[-1]["text"] == "alguin sabe cual es la capital de españa"
-    assert telegram.sent[-1]["chat_id"] == "-100"
+    assert backend.ticks == []
+    assert telegram.sent == []
+    assert backend.observations[-1]["text"] == "alguin sabe cual es la capital de españa"
 
 
-def test_group_greeting_can_get_ambient_reply(tmp_path) -> None:
+def test_group_greeting_is_observed_without_reply(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()
     backend = FakeBackend()
@@ -947,39 +961,40 @@ def test_group_greeting_can_get_ambient_reply(tmp_path) -> None:
 
     bot.handle_update(_group_update(-100, "hola", user_id=10))
 
-    assert backend.observations == []
-    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
-    assert backend.ticks[-1]["text"] == "hola"
-    assert telegram.sent[-1]["chat_id"] == "-100"
+    assert backend.ticks == []
+    assert telegram.sent == []
 
 
-def test_group_ambient_replies_are_rate_limited(tmp_path) -> None:
+def test_group_known_work_replies_are_rate_limited(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
+    _register_watchmen(links)
     telegram = FakeTelegram()
     backend = FakeBackend()
     bot = TelegramBotService(telegram, backend, links)
 
-    bot.handle_update(_group_update(-100, "¿qué opináis de esto?", update_id=1))
-    bot.handle_update(_group_update(-100, "¿alguna idea más?", update_id=2))
+    bot.handle_update(_group_update(-100, "¿qué os parece Watchmen?", update_id=1))
+    bot.handle_update(_group_update(-100, "Watchmen es una obra maestra, ¿no?", update_id=2))
 
     assert len(backend.ticks) == 1
-    assert backend.observations[-1]["text"] == "¿alguna idea más?"
     assert len(telegram.sent) == 1
+    row = links.conn.execute("SELECT reason FROM telegram_social_decision ORDER BY id DESC LIMIT 1").fetchone()
+    assert row["reason"] == "cooldown"
 
 
 def test_group_social_decision_records_reply_and_reason(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
+    _register_watchmen(links)
     telegram = FakeTelegram()
     backend = FakeBackend()
     bot = TelegramBotService(telegram, backend, links)
 
-    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=10))
+    bot.handle_update(_group_update(-100, "me ha gustado mucho Watchmen", user_id=10))
 
     pending = links.pending_social_decision(-100)
     assert pending is not None
     assert pending["decision"] == "reply"
-    assert pending["reason"] == "general_question"
-    assert pending["text_preview"] == "alguien sabe cual es la capital de españa"
+    assert pending["reason"] == "known_work"
+    assert pending["text_preview"] == "me ha gustado mucho Watchmen"
 
 
 def test_group_social_decision_records_observe_reason(tmp_path) -> None:
@@ -993,30 +1008,32 @@ def test_group_social_decision_records_observe_reason(tmp_path) -> None:
     rows = links.conn.execute("SELECT * FROM telegram_social_decision").fetchall()
     assert len(rows) == 1
     assert rows[0]["decision"] == "observe"
-    assert rows[0]["reason"] == "no_social_opening"
+    assert rows[0]["reason"] == "observe_and_learn"
 
 
 def test_group_reaction_marks_social_outcome_and_observes_feedback(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
+    _register_watchmen(links)
     telegram = FakeTelegram()
     backend = FakeBackend()
     bot = TelegramBotService(telegram, backend, links)
 
-    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=10, update_id=1))
+    bot.handle_update(_group_update(-100, "¿habéis leído Watchmen?", user_id=10, update_id=1))
     bot.handle_update(_group_update(-100, "gracias, exacto", user_id=11, update_id=2))
 
     row = links.conn.execute("SELECT outcome FROM telegram_social_decision WHERE decision = 'reply'").fetchone()
     assert row["outcome"] == "positive"
-    assert any(item["text"] == "social_feedback:positive:general_question" for item in backend.observations)
+    assert any(item["text"] == "social_feedback:positive:known_work" for item in backend.observations)
 
 
 def test_group_unrelated_message_does_not_count_as_reaction(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
+    _register_watchmen(links)
     telegram = FakeTelegram()
     backend = FakeBackend()
     bot = TelegramBotService(telegram, backend, links)
 
-    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=10, update_id=1))
+    bot.handle_update(_group_update(-100, "¿habéis leído Watchmen?", user_id=10, update_id=1))
     bot.handle_update(_group_update(-100, "voy a por cafe", user_id=11, update_id=2))
 
     row = links.conn.execute("SELECT outcome FROM telegram_social_decision WHERE decision = 'reply'").fetchone()
@@ -1026,30 +1043,32 @@ def test_group_unrelated_message_does_not_count_as_reaction(tmp_path) -> None:
 
 def test_group_reply_is_marked_ignored_after_silence_and_activity(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
+    _register_watchmen(links)
     telegram = FakeTelegram()
     backend = FakeBackend()
     bot = TelegramBotService(telegram, backend, links)
 
-    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=10, update_id=1))
+    bot.handle_update(_group_update(-100, "¿habéis leído Watchmen?", user_id=10, update_id=1))
     for idx in range(2, 5):
         bot.handle_update(_group_update(-100, f"mensaje lateral {idx}", user_id=10 + idx, update_id=idx))
 
     row = links.conn.execute("SELECT outcome FROM telegram_social_decision WHERE decision = 'reply'").fetchone()
     assert row["outcome"] == "ignored"
-    assert any(item["text"] == "social_feedback:ignored:general_question" for item in backend.observations)
+    assert any(item["text"] == "social_feedback:ignored:known_work" for item in backend.observations)
 
 
 def test_group_ignored_replies_do_not_create_permanent_silence(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
+    _register_watchmen(links)
     now = datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc)
     for idx in range(3):
         decision_id = links.record_social_decision(
             chat_id=-100,
             message_id=idx,
             sender_id=10 + idx,
-            text="alguien sabe algo",
+            text="hablando de Watchmen",
             decision="reply",
-            reason="general_question",
+            reason="known_work",
             now=now,
         )
         links.mark_social_outcome(decision_id, "ignored", now)
@@ -1057,42 +1076,43 @@ def test_group_ignored_replies_do_not_create_permanent_silence(tmp_path) -> None
     backend = FakeBackend()
     bot = TelegramBotService(telegram, backend, links)
 
-    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=20, update_id=10))
+    bot.handle_update(_group_update(-100, "¿qué os parece Watchmen?", user_id=20, update_id=10))
 
     assert backend.ticks[-1]["user_id"] == "telegram-group-100"
     assert telegram.sent[-1]["chat_id"] == "-100"
     row = links.conn.execute("SELECT reason FROM telegram_social_decision ORDER BY id DESC LIMIT 1").fetchone()
-    assert row["reason"] == "general_question"
+    assert row["reason"] == "known_work"
 
 
-def test_group_low_initiative_participation_after_several_observed_messages(tmp_path) -> None:
+def test_group_non_directed_unknown_message_never_participates(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()
     backend = FakeBackend()
     bot = TelegramBotService(telegram, backend, links)
 
-    for idx in range(1, 6):
+    for idx in range(1, 9):
         bot.handle_update(_group_update(-100, f"mensaje lateral con contexto {idx}", update_id=idx))
-    bot.handle_update(_group_update(-100, "a mi me gustó bastante esa idea", update_id=6))
 
-    assert len(backend.ticks) == 1
-    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
-    assert "a mi me gustó bastante esa idea" in str(backend.ticks[-1]["text"])
-    assert telegram.sent[-1]["chat_id"] == "-100"
-    row = links.conn.execute("SELECT reason FROM telegram_social_decision ORDER BY id DESC LIMIT 1").fetchone()
-    assert row["reason"] == "ambient_participation"
+    assert backend.ticks == []
+    assert telegram.sent == []
+    reasons = {
+        str(row["reason"])
+        for row in links.conn.execute("SELECT reason FROM telegram_social_decision").fetchall()
+    }
+    assert reasons == {"observe_and_learn"}
 
 
-def test_group_negative_feedback_still_blocks_same_ambient_reason(tmp_path) -> None:
+def test_group_negative_feedback_still_blocks_known_work_reason(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
+    _register_watchmen(links)
     now = datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc)
     decision_id = links.record_social_decision(
         chat_id=-100,
         message_id=1,
         sender_id=10,
-        text="alguien sabe algo",
+        text="hablando de Watchmen",
         decision="reply",
-        reason="general_question",
+        reason="known_work",
         now=now,
     )
     links.mark_social_outcome(decision_id, "negative", now)
@@ -1100,12 +1120,12 @@ def test_group_negative_feedback_still_blocks_same_ambient_reason(tmp_path) -> N
     backend = FakeBackend()
     bot = TelegramBotService(telegram, backend, links)
 
-    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", user_id=20, update_id=10))
+    bot.handle_update(_group_update(-100, "¿qué os parece Watchmen?", user_id=20, update_id=10))
 
     assert backend.ticks == []
     assert telegram.sent == []
     row = links.conn.execute("SELECT reason FROM telegram_social_decision ORDER BY id DESC LIMIT 1").fetchone()
-    assert row["reason"] == "learned_silence_general_question"
+    assert row["reason"] == "learned_silence_known_work"
 
 
 def test_group_learned_silence_does_not_block_direct_mention(tmp_path) -> None:
@@ -1155,14 +1175,15 @@ def test_group_reply_to_human_is_observed_without_entering_thread(tmp_path) -> N
 
 def test_group_ambient_cooldown_shortens_when_group_is_active(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
+    _register_watchmen(links)
     telegram = FakeTelegram()
     backend = FakeBackend()
     bot = TelegramBotService(telegram, backend, links)
 
-    bot.handle_update(_group_update(-100, "¿qué opináis de esto?", update_id=1), now=datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc))
+    bot.handle_update(_group_update(-100, "¿qué os parece Watchmen?", update_id=1), now=datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc))
     for idx in range(2, 7):
         bot.handle_update(_group_update(-100, f"mensaje {idx}", update_id=idx), now=datetime(2026, 5, 28, 16, idx, tzinfo=timezone.utc))
-    bot.handle_update(_group_update(-100, "¿alguna idea nueva?", update_id=7), now=datetime(2026, 5, 28, 16, 4, tzinfo=timezone.utc))
+    bot.handle_update(_group_update(-100, "¿y el final de Watchmen?", update_id=7), now=datetime(2026, 5, 28, 16, 4, tzinfo=timezone.utc))
 
     assert len(backend.ticks) == 2
     assert len(telegram.sent) == 2
@@ -1170,12 +1191,13 @@ def test_group_ambient_cooldown_shortens_when_group_is_active(tmp_path) -> None:
 
 def test_group_reply_waits_before_sending(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
+    _register_watchmen(links)
     telegram = FakeTelegram()
     backend = FakeBackend()
     slept: list[float] = []
     bot = TelegramBotService(telegram, backend, links, group_reply_delay_seconds=2.5, sleeper=slept.append)
 
-    bot.handle_update(_group_update(-100, "alguien sabe cual es la capital de españa", update_id=1))
+    bot.handle_update(_group_update(-100, "¿qué os parece Watchmen?", update_id=1))
 
     assert slept == [2.5]
     assert telegram.sent[-1]["chat_id"] == "-100"
@@ -1183,6 +1205,7 @@ def test_group_reply_waits_before_sending(tmp_path) -> None:
 
 def test_group_reply_mentions_sender_after_quiet_gap_when_username_exists(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
+    _register_watchmen(links)
     telegram = FakeTelegram()
     backend = FakeBackend()
     bot = TelegramBotService(telegram, backend, links)
@@ -1192,7 +1215,7 @@ def test_group_reply_mentions_sender_after_quiet_gap_when_username_exists(tmp_pa
         now=datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc),
     )
     bot.handle_update(
-        _group_update(-100, "alguien sabe cual es la capital de españa", user_id=11, update_id=2, username="maria"),
+        _group_update(-100, "¿alguien ha leído Watchmen?", user_id=11, update_id=2, username="maria"),
         now=datetime(2026, 5, 28, 16, 5, tzinfo=timezone.utc),
     )
 
@@ -1201,6 +1224,7 @@ def test_group_reply_mentions_sender_after_quiet_gap_when_username_exists(tmp_pa
 
 def test_group_reply_does_not_mention_sender_during_active_flow(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
+    _register_watchmen(links)
     telegram = FakeTelegram()
     backend = FakeBackend()
     bot = TelegramBotService(telegram, backend, links)
@@ -1210,7 +1234,7 @@ def test_group_reply_does_not_mention_sender_during_active_flow(tmp_path) -> Non
         now=datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc),
     )
     bot.handle_update(
-        _group_update(-100, "alguien sabe cual es la capital de españa", user_id=11, update_id=2, username="maria"),
+        _group_update(-100, "¿alguien ha leído Watchmen?", user_id=11, update_id=2, username="maria"),
         now=datetime(2026, 5, 28, 16, 1, tzinfo=timezone.utc),
     )
 
@@ -1242,7 +1266,7 @@ def test_group_mention_uses_group_memory_not_private_memory(tmp_path) -> None:
     assert telegram.sent[-1]["chat_id"] == "-100"
 
 
-def test_group_vulnerable_message_can_trigger_brief_participation(tmp_path) -> None:
+def test_group_vulnerable_message_is_observed_not_answered(tmp_path) -> None:
     links = TelegramLinkStore(tmp_path / "nino.db")
     telegram = FakeTelegram()
     backend = FakeBackend()
@@ -1250,10 +1274,9 @@ def test_group_vulnerable_message_can_trigger_brief_participation(tmp_path) -> N
 
     bot.handle_update(_group_update(-100, "me siento un poco perdido con esto", user_id=10))
 
-    assert backend.observations == []
-    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
-    assert backend.ticks[-1]["text"] == "me siento un poco perdido con esto"
-    assert telegram.sent[-1]["chat_id"] == "-100"
+    assert backend.ticks == []
+    assert telegram.sent == []
+    assert backend.observations[-1]["text"] == "me siento un poco perdido con esto"
 
 
 def test_group_reply_to_bot_is_directed_and_uses_group_memory(tmp_path) -> None:
@@ -1283,3 +1306,86 @@ def test_group_linked_sender_still_uses_group_memory_when_directed(tmp_path) -> 
     assert backend.ticks[-1]["user_id"] == "telegram-group-100"
     assert backend.ticks[-1]["text"] == "mi perfil"
     assert "ana" not in str(telegram.sent[-1]["text"]).lower()
+
+
+def test_record_known_work_rejects_generic_or_short_titles(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    now = datetime(2026, 5, 28, 12, 0, tzinfo=timezone.utc)
+
+    assert links.record_known_work("documento", medium="texto", summary="algo", source="test", now=now) is False
+    assert links.record_known_work("ab", medium="texto", summary="algo", source="test", now=now) is False
+    assert links.record_known_work("Watchmen", medium="cómic", summary="vigilantes", source="test", now=now) is True
+    assert [work["title"] for work in links.known_works()] == ["Watchmen"]
+
+
+def test_known_work_for_text_matches_on_word_boundary(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    _register_watchmen(links)
+
+    assert links.known_work_for_text("¿alguien ha leído Watchmen?") is not None
+    assert links.known_work_for_text("hoy hace buen tiempo") is None
+
+
+def test_group_text_document_not_directed_is_read_and_registered_without_reply(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    telegram = FakeTelegram()
+    telegram.files["doc"] = {"file_path": "documents/Sandman.txt"}
+    telegram.downloads["documents/Sandman.txt"] = "Sandman cuenta la historia de Sueño de los Eternos.".encode("utf-8")
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(
+        _document_update(-100, filename="Sandman.txt", group=True),
+        now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc),
+    )
+
+    assert telegram.sent == []
+    assert [work["title"] for work in links.known_works()] == ["Sandman"]
+    row = links.conn.execute("SELECT decision, reason FROM telegram_social_decision ORDER BY id DESC LIMIT 1").fetchone()
+    assert row["decision"] == "observe"
+    assert row["reason"] == "group_document_read"
+
+    # Una vez leída, amigo puede comentarla sin que le nombren.
+    bot.handle_update(_group_update(-100, "me ha encantado Sandman", user_id=11, update_id=2), now=datetime(2026, 5, 28, 10, 30, tzinfo=timezone.utc))
+    assert backend.ticks[-1]["user_id"] == "telegram-group-100"
+    assert "Sandman" in str(backend.ticks[-1]["text"])
+
+
+def test_private_text_document_registers_known_work(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    telegram.files["doc"] = {"file_path": "documents/Maus.txt"}
+    telegram.downloads["documents/Maus.txt"] = b"Maus narra el holocausto con ratones y gatos."
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_document_update(111, filename="Maus.txt"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert [work["title"] for work in links.known_works()] == ["Maus"]
+
+
+def test_lecturas_command_lists_known_works(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    _register_watchmen(links)
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_update(111, "/lecturas"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert backend.ticks == []
+    assert "Watchmen" in str(telegram.sent[-1]["text"])
+
+
+def test_lecturas_command_without_works_explains_how_to_feed_one(tmp_path) -> None:
+    links = TelegramLinkStore(tmp_path / "nino.db")
+    assert links.link_with_code(111, links.create_code("Ana"))
+    telegram = FakeTelegram()
+    backend = FakeBackend()
+    bot = TelegramBotService(telegram, backend, links)
+
+    bot.handle_update(_update(111, "/lecturas"), now=datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+
+    assert "Todavía no he leído" in str(telegram.sent[-1]["text"])
