@@ -28,6 +28,7 @@ nino-telegram = "nino.telegram:main"
 nino-synthetic-companion = "nino.synthetic_companion:main"
 nino-sync-runtime = "nino.sync_runtime:main"
 telegram-style-import = "nino.style_import:main"
+mindora-hub = "nino.hub:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
