@@ -607,8 +607,8 @@ def test_llm_prompt_blocks_unsupported_personal_opinions() -> None:
     assert "No des opiniones propias sobre obras" in system
     assert "si no aparecen en tu bitacora activa" in system
     assert "aun no tienes criterio formado" in system
-    assert "muestra curiosidad honesta" in system
-    assert "te interesa entenderlo mejor" in system
+    assert "escuchando y recordando lo que el usuario comparte" in system
+    assert "nunca conviertas la conversación en un interrogatorio" in system
     assert "Temas con criterio propio respaldado por evidencia: ninguno" in prompt
 
 
