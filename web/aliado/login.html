@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aliado login</title>
+  <style>/* ============================================================
+   ALIADO DESIGN SYSTEM — tokens
+   ============================================================ */
+:root {
+  /* Color · base neutra */
+  --al-bg: #ffffff;
+  --al-bg-warm: #f7f6f3;
+  --al-surface: #ffffff;
+  --al-surface-2: #faf9f7;
+  --al-line: #e8e8e5;
+  --al-line-strong: #d8d8d3;
+  --al-text: #1a1a1a;
+  --al-text-muted: #6b7280;
+  --al-text-soft: #9ca3af;
+
+  /* Color · acción (primario negro, estilo Taskos) */
+  --al-primary: #1a1a1a;
+  --al-primary-hover: #000000;
+  --al-on-primary: #ffffff;
+
+  /* Color · acento (teal heredado de Aliado, uso discreto) */
+  --al-accent: #1f6f78;
+  --al-accent-hover: #18585f;
+  --al-accent-soft: #e6f1f1;
+
+  /* Color · tints pastel por categoría (chips) */
+  --al-tint-violet: #ede9fe; --al-tint-violet-ink: #6d28d9;
+  --al-tint-mint:   #d1fae5; --al-tint-mint-ink:   #047857;
+  --al-tint-blue:   #dbeafe; --al-tint-blue-ink:   #1d4ed8;
+  --al-tint-peach:  #fee4cf; --al-tint-peach-ink:  #c2410c;
+  --al-tint-rose:   #fce7f3; --al-tint-rose-ink:   #be185d;
+  --al-tint-sky:    #e0f2fe; --al-tint-sky-ink:    #0369a1;
+
+  /* Color · estado */
+  --al-success: #047857; --al-success-soft: #dcfce7;
+  --al-warning: #b45309; --al-warning-soft: #fef3c7;
+  --al-danger:  #b42318; --al-danger-soft:  #fee2e2;
+  /* Confianza/privacidad — señal central del producto */
+  --al-trust: #1f6f78; --al-trust-soft: #e6f1f1;
+
+  /* Tipografía */
+  --al-font-serif: "Iowan Old Style", "Palatino Linotype", Georgia, "Times New Roman", serif;
+  --al-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --al-fs-xs: 12px;
+  --al-fs-sm: 13px;
+  --al-fs-base: 14px;
+  --al-fs-md: 16px;
+  --al-fs-lg: 18px;
+  --al-fs-xl: 20px;
+  --al-fs-2xl: 24px;
+  --al-fs-3xl: 30px;
+  --al-fs-4xl: 40px;
+  --al-fs-5xl: 52px;
+  --al-lh-tight: 1.15;
+  --al-lh: 1.55;
+  --al-fw-regular: 400;
+  --al-fw-medium: 500;
+  --al-fw-semibold: 600;
+  --al-fw-bold: 700;
+
+  /* Espaciado · escala base 4px */
+  --al-space-1: 4px;
+  --al-space-2: 8px;
+  --al-space-3: 12px;
+  --al-space-4: 16px;
+  --al-space-5: 20px;
+  --al-space-6: 24px;
+  --al-space-8: 32px;
+  --al-space-10: 40px;
+  --al-space-12: 64px;
+  --al-space-16: 96px;
+
+  /* Radios */
+  --al-radius-sm: 6px;
+  --al-radius: 10px;
+  --al-radius-lg: 14px;
+  --al-radius-pill: 999px;
+
+  /* Sombras · sutiles, look de bordes finos */
+  --al-shadow-sm: 0 1px 2px rgba(17,24,28,.04);
+  --al-shadow: 0 4px 16px rgba(17,24,28,.06);
+  --al-shadow-lg: 0 18px 50px rgba(17,24,28,.10);
+
+  /* z-index */
+  --al-z-nav: 20;
+  --al-z-modal: 40;
+  --al-z-toast: 50;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+.al, .al * { font-family: var(--al-font-sans); }
+.al {
+  margin: 0;
+  background: var(--al-bg);
+  color: var(--al-text);
+  font-size: var(--al-fs-base);
+  line-height: var(--al-lh);
+  -webkit-font-smoothing: antialiased;
+}
+.al h1, .al h2, .al h3, .al .al-serif {
+  font-family: var(--al-font-serif);
+  font-weight: var(--al-fw-regular);
+  line-height: var(--al-lh-tight);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.al h1 { font-size: var(--al-fs-5xl); }
+.al h2 { font-size: var(--al-fs-3xl); }
+.al h3 { font-size: var(--al-fs-xl); }
+.al a { color: var(--al-accent); text-decoration: none; }
+.al a:hover { text-decoration: underline; }
+.al-muted { color: var(--al-text-muted); }
+.al-soft { color: var(--al-text-soft); }
+
+/* ============================================================
+   Botones
+   ============================================================ */
+.al-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--al-space-2);
+  font-family: var(--al-font-sans); font-size: var(--al-fs-base); font-weight: var(--al-fw-medium);
+  min-height: 40px; padding: 0 var(--al-space-5);
+  border-radius: var(--al-radius-sm); border: 1px solid var(--al-primary);
+  background: var(--al-primary); color: var(--al-on-primary);
+  cursor: pointer; transition: background .15s ease, border-color .15s ease, opacity .15s ease;
+  white-space: nowrap; text-decoration: none;
+}
+.al-btn:hover { background: var(--al-primary-hover); border-color: var(--al-primary-hover); text-decoration: none; }
+.al-btn:disabled { opacity: .5; cursor: not-allowed; }
+.al-btn--secondary { background: var(--al-surface); color: var(--al-text); border-color: var(--al-line-strong); }
+.al-btn--secondary:hover { background: var(--al-surface-2); border-color: var(--al-text-soft); }
+.al-btn--ghost { background: transparent; color: var(--al-text); border-color: transparent; }
+.al-btn--ghost:hover { background: var(--al-surface-2); }
+.al-btn--danger { background: var(--al-surface); color: var(--al-danger); border-color: #e7c3c0; }
+.al-btn--danger:hover { background: var(--al-danger-soft); }
+.al-btn--sm { min-height: 32px; padding: 0 var(--al-space-3); font-size: var(--al-fs-sm); }
+.al-btn--lg { min-height: 48px; padding: 0 var(--al-space-6); font-size: var(--al-fs-md); }
+
+/* ============================================================
+   Formularios
+   ============================================================ */
+.al-field { display: grid; gap: var(--al-space-2); }
+.al-label { font-size: var(--al-fs-sm); font-weight: var(--al-fw-medium); color: var(--al-text); }
+.al-input, .al-textarea, .al-select {
+  width: 100%; font-family: var(--al-font-sans); font-size: var(--al-fs-base); color: var(--al-text);
+  background: var(--al-surface); border: 1px solid var(--al-line-strong); border-radius: var(--al-radius-sm);
+  padding: 0 var(--al-space-3); min-height: 40px; transition: border-color .15s ease, box-shadow .15s ease;
+}
+.al-textarea { padding: var(--al-space-3); min-height: 96px; resize: vertical; line-height: var(--al-lh); }
+.al-input:focus, .al-textarea:focus, .al-select:focus {
+  outline: none; border-color: var(--al-accent); box-shadow: 0 0 0 3px var(--al-accent-soft);
+}
+.al-input::placeholder, .al-textarea::placeholder { color: var(--al-text-soft); }
+.al-hint { font-size: var(--al-fs-xs); color: var(--al-text-muted); }
+.al-hint--error { color: var(--al-danger); }
+
+/* ============================================================
+   Tarjetas
+   ============================================================ */
+.al-card {
+  background: var(--al-surface); border: 1px solid var(--al-line); border-radius: var(--al-radius-lg);
+  padding: var(--al-space-5); display: grid; gap: var(--al-space-3);
+}
+.al-card--pad-lg { padding: var(--al-space-6); }
+.al-card__chip { justify-self: start; }
+.al-card__title { font-size: var(--al-fs-md); font-weight: var(--al-fw-semibold); color: var(--al-text); }
+.al-card__body { color: var(--al-text-muted); font-size: var(--al-fs-sm); }
+
+/* ============================================================
+   Chips de categoría (pastel) y badges de estado
+   ============================================================ */
+.al-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: var(--al-fw-semibold); letter-spacing: .06em; text-transform: uppercase;
+  padding: 4px 9px; border-radius: var(--al-radius-pill);
+  background: var(--al-tint-violet); color: var(--al-tint-violet-ink);
+}
+.al-chip--violet { background: var(--al-tint-violet); color: var(--al-tint-violet-ink); }
+.al-chip--mint   { background: var(--al-tint-mint);   color: var(--al-tint-mint-ink); }
+.al-chip--blue   { background: var(--al-tint-blue);   color: var(--al-tint-blue-ink); }
+.al-chip--peach  { background: var(--al-tint-peach);  color: var(--al-tint-peach-ink); }
+.al-chip--rose   { background: var(--al-tint-rose);   color: var(--al-tint-rose-ink); }
+.al-chip--sky    { background: var(--al-tint-sky);    color: var(--al-tint-sky-ink); }
+
+.al-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--al-fs-xs); font-weight: var(--al-fw-medium);
+  padding: 3px 10px; border-radius: var(--al-radius-pill);
+  background: var(--al-surface-2); color: var(--al-text-muted); border: 1px solid var(--al-line);
+}
+.al-badge--success { background: var(--al-success-soft); color: var(--al-success); border-color: transparent; }
+.al-badge--warning { background: var(--al-warning-soft); color: var(--al-warning); border-color: transparent; }
+.al-badge--danger  { background: var(--al-danger-soft);  color: var(--al-danger);  border-color: transparent; }
+.al-badge--trust   { background: var(--al-trust-soft);   color: var(--al-trust);   border-color: transparent; }
+
+/* Señales de confianza · franja visible (valor central) */
+.al-trust-strip {
+  display: flex; flex-wrap: wrap; gap: var(--al-space-2); align-items: center;
+  padding: var(--al-space-3) var(--al-space-4);
+  background: var(--al-trust-soft); border: 1px solid #cfe5e6; border-radius: var(--al-radius);
+}
+
+/* ============================================================
+   Navegación · topbar y layout app con sidebar
+   ============================================================ */
+.al-topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--al-space-4);
+  height: 60px; padding: 0 var(--al-space-6);
+  background: var(--al-bg); border-bottom: 1px solid var(--al-line);
+  position: sticky; top: 0; z-index: var(--al-z-nav);
+}
+.al-brand { font-family: var(--al-font-serif); font-size: var(--al-fs-xl); color: var(--al-text); }
+.al-topbar__nav { display: flex; align-items: center; gap: var(--al-space-2); }
+
+.al-app { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
+.al-sidebar {
+  background: var(--al-bg-warm); border-right: 1px solid var(--al-line);
+  padding: var(--al-space-5) var(--al-space-3); display: flex; flex-direction: column; gap: var(--al-space-1);
+}
+.al-sidebar__brand { font-family: var(--al-font-serif); font-size: var(--al-fs-lg); padding: 0 var(--al-space-3) var(--al-space-4); }
+.al-sidebar__section { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--al-text-soft); padding: var(--al-space-4) var(--al-space-3) var(--al-space-1); }
+.al-nav-item {
+  display: flex; align-items: center; gap: var(--al-space-3);
+  padding: var(--al-space-2) var(--al-space-3); border-radius: var(--al-radius-sm);
+  color: var(--al-text-muted); font-weight: var(--al-fw-medium); cursor: pointer; text-decoration: none;
+}
+.al-nav-item:hover { background: rgba(0,0,0,.04); color: var(--al-text); text-decoration: none; }
+.al-nav-item.is-active { background: var(--al-surface); color: var(--al-text); box-shadow: var(--al-shadow-sm); }
+.al-main { padding: var(--al-space-6); max-width: 1080px; }
+
+/* Tabs */
+.al-tabs { display: inline-flex; gap: var(--al-space-1); padding: 4px; background: var(--al-surface-2); border-radius: var(--al-radius); border: 1px solid var(--al-line); }
+.al-tab { border: 0; background: transparent; color: var(--al-text-muted); font-weight: var(--al-fw-medium); font-size: var(--al-fs-sm); padding: 6px 14px; border-radius: var(--al-radius-sm); cursor: pointer; }
+.al-tab.is-active { background: var(--al-surface); color: var(--al-text); box-shadow: var(--al-shadow-sm); }
+
+/* Toggle idioma ES/EN */
+.al-lang { display: inline-flex; border: 1px solid var(--al-line-strong); border-radius: var(--al-radius-sm); overflow: hidden; }
+.al-lang button { border: 0; background: var(--al-surface); color: var(--al-text-muted); font-size: var(--al-fs-sm); padding: 6px 12px; cursor: pointer; }
+.al-lang button.is-active { background: var(--al-surface-2); color: var(--al-text); font-weight: var(--al-fw-semibold); }
+
+/* ============================================================
+   Tablas
+   ============================================================ */
+.al-table { width: 100%; border: 1px solid var(--al-line); border-radius: var(--al-radius); overflow: hidden; background: var(--al-surface); }
+.al-table__row { display: grid; grid-template-columns: 1.6fr 1fr .6fr; gap: var(--al-space-3); align-items: center; padding: var(--al-space-3) var(--al-space-4); border-bottom: 1px solid var(--al-line); }
+.al-table__row:last-child { border-bottom: 0; }
+.al-table__row--head { background: var(--al-surface-2); color: var(--al-text-muted); font-size: var(--al-fs-xs); text-transform: uppercase; letter-spacing: .04em; }
+
+/* ============================================================
+   Modal / diálogo
+   ============================================================ */
+.al-modal { position: fixed; inset: 0; background: rgba(17,24,28,.36); display: grid; place-items: center; padding: var(--al-space-4); z-index: var(--al-z-modal); }
+.al-dialog { width: min(460px, 100%); background: var(--al-surface); border-radius: var(--al-radius-lg); border: 1px solid var(--al-line); box-shadow: var(--al-shadow-lg); padding: var(--al-space-6); display: grid; gap: var(--al-space-4); }
+.al-dialog__title { font-family: var(--al-font-serif); font-size: var(--al-fs-2xl); }
+
+/* ============================================================
+   Chat
+   ============================================================ */
+.al-chat { display: flex; flex-direction: column; gap: var(--al-space-3); padding: var(--al-space-4); }
+.al-bubble { max-width: 76%; padding: var(--al-space-3) var(--al-space-4); border-radius: var(--al-radius-lg); font-size: var(--al-fs-base); line-height: var(--al-lh); }
+.al-bubble--aliado { align-self: flex-start; background: var(--al-bg-warm); color: var(--al-text); border-bottom-left-radius: var(--al-radius-sm); }
+.al-bubble--user { align-self: flex-end; background: var(--al-primary); color: var(--al-on-primary); border-bottom-right-radius: var(--al-radius-sm); }
+.al-bubble__cite { display: inline-flex; gap: 6px; margin-top: 6px; font-size: var(--al-fs-xs); color: var(--al-text-soft); }
+/* Cita inline a documento, p.ej. [Portfolio#2] — valor central: respuestas con fuente */
+.al-cite { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; margin: 0 2px; border-radius: var(--al-radius-pill); background: var(--al-accent-soft); color: var(--al-accent); font-size: var(--al-fs-xs); font-weight: var(--al-fw-medium); white-space: nowrap; cursor: default; }
+.al-bubble--user .al-cite { background: rgba(255,255,255,.20); color: #fff; }
+.al-composer { display: grid; grid-template-columns: 1fr auto; gap: var(--al-space-3); padding: var(--al-space-4); border-top: 1px solid var(--al-line); background: var(--al-bg); }
+
+/* ============================================================
+   Dropzone
+   ============================================================ */
+.al-dropzone { border: 1.5px dashed var(--al-line-strong); border-radius: var(--al-radius-lg); padding: var(--al-space-10) var(--al-space-6); text-align: center; color: var(--al-text-muted); background: var(--al-surface-2); transition: border-color .15s ease, background .15s ease; }
+.al-dropzone.is-drag { border-color: var(--al-accent); background: var(--al-accent-soft); }
+
+/* ============================================================
+   Estados · vacío, carga, error
+   ============================================================ */
+.al-empty { display: grid; gap: var(--al-space-3); justify-items: center; text-align: center; padding: var(--al-space-12) var(--al-space-6); color: var(--al-text-muted); }
+.al-empty__title { font-family: var(--al-font-serif); font-size: var(--al-fs-xl); color: var(--al-text); }
+.al-skeleton { background: linear-gradient(90deg, #eee 25%, #f5f5f5 37%, #eee 63%); background-size: 400% 100%; animation: al-shimmer 1.3s ease infinite; border-radius: var(--al-radius-sm); height: 14px; }
+@keyframes al-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+.al-spinner { width: 22px; height: 22px; border: 2px solid var(--al-line-strong); border-top-color: var(--al-accent); border-radius: 50%; animation: al-spin .7s linear infinite; }
+@keyframes al-spin { to { transform: rotate(360deg); } }
+.al-error-box { display: flex; gap: var(--al-space-3); align-items: flex-start; padding: var(--al-space-4); background: var(--al-danger-soft); border: 1px solid #f0c8c4; border-radius: var(--al-radius); color: #7a1d15; }
+
+/* Utilidades */
+.al-section { padding: var(--al-space-16) var(--al-space-6); }
+.al-section--warm { background: var(--al-bg-warm); }
+.al-container { max-width: 1080px; margin: 0 auto; }
+.al-grid { display: grid; gap: var(--al-space-4); }
+.al-grid--cards { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.al-stack { display: grid; gap: var(--al-space-3); }
+.al-row { display: flex; align-items: center; gap: var(--al-space-3); }
+.al-hero { text-align: center; max-width: 720px; margin: 0 auto; display: grid; gap: var(--al-space-5); }
+.al-hero h1 { font-size: clamp(34px, 6vw, 52px); }
+.al-divider { height: 1px; background: var(--al-line); border: 0; margin: 0; }
+
+/* Responsive · mobile-first */
+@media (max-width: 860px) {
+  .al-app { grid-template-columns: 1fr; }
+  .al-sidebar { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--al-line); position: sticky; top: 0; z-index: var(--al-z-nav); }
+  .al-sidebar__brand, .al-sidebar__section { display: none; }
+  .al-main { padding: var(--al-space-4); }
+  .al-bubble { max-width: 88%; }
+  .al-section { padding: var(--al-space-10) var(--al-space-4); }
+}</style>
+  <style>
+    body.al { min-height: 100vh; display: grid; place-items: center; background: var(--al-bg-warm); padding: var(--al-space-4); }
+    .login-card { width: min(430px, 100%); background: var(--al-surface); border: 1px solid var(--al-line); border-radius: var(--al-radius-lg); padding: var(--al-space-8); display: grid; gap: var(--al-space-4); box-shadow: var(--al-shadow); }
+    .login-card h1 { font-size: var(--al-fs-3xl); }
+    .login-status { min-height: 20px; color: var(--al-danger); font-size: var(--al-fs-sm); }
+  </style>
+</head>
+<body class="al">
+  <main class="login-card">
+    <div class="al-stack" style="gap:6px">
+      <h1 class="al-serif">Aliado</h1>
+      <p class="al-muted">Entra con tu email y contraseña. Aliado te llevará automáticamente al espacio que te corresponde.</p>
+    </div>
+    <form id="loginForm" class="al-stack">
+      <label class="al-field"><span class="al-label">Email</span><input id="email" class="al-input" type="email" autocomplete="username" placeholder="tu@email.com" required></label>
+      <label class="al-field"><span class="al-label">Contraseña</span><input id="password" class="al-input" type="password" autocomplete="current-password" required></label>
+      <label class="al-field"><span class="al-label">Empresa <span class="al-soft">(si aplica)</span></span><input id="company" class="al-input" autocomplete="organization" placeholder="acme"></label>
+      <button id="loginButton" class="al-btn al-btn--lg" type="submit">Entrar</button>
+    </form>
+    <div class="al-hint">Si no recuerdas tu empresa o contraseña, habla con el administrador de tu organización.</div>
+    <div id="status" class="login-status"></div>
+  </main>
+  <script>
+    const SUPERADMIN_EMAIL = ["mindora.data", "gmail.com"].join("@");
+    const $ = id => document.getElementById(id);
+    async function post(path, payload) {
+      const res = await fetch(path, {method:"POST", credentials:"same-origin", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) throw new Error(data.error || res.statusText);
+      return data;
+    }
+    $("loginForm").onsubmit = async event => {
+      event.preventDefault();
+      $("loginButton").disabled = true;
+      $("status").textContent = "";
+      const email = $("email").value.trim().toLowerCase();
+      const password = $("password").value;
+      const company = $("company").value.trim();
+      try {
+        if (email === SUPERADMIN_EMAIL) {
+          await post("/superadmin/login", {username: email, password});
+          window.location.href = "/superadmin";
+          return;
+        }
+        if (!company) throw new Error("empresa_required");
+        const out = await post("/auth/login", {email, password, company_id: company, agent_id: "nino"});
+        localStorage.setItem("nino_user_id", out.user_id || "");
+        localStorage.setItem("nino_company_id", out.company_id || company);
+        if (out.session_token) localStorage.setItem("nino_session_token", out.session_token);
+        localStorage.setItem("aliado_email", email);
+        localStorage.setItem("aliado_company_id", out.company_id || company);
+        window.location.href = out.role === "admin" ? "/app" : "/user";
+      } catch (err) {
+        $("status").textContent = "No se pudo iniciar sesión.";
+        $("loginButton").disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>

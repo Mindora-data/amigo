@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amigo — Un chat que aprende quién eres | Mindora Labs</title>
+<meta name="description" content="Amigo vive en tu Telegram y aprende quién eres: recuerda tus conversaciones, tus gustos y tus rutinas. Cuanto más hablas con él, mejor te conoce y mejor te ayuda.">
+<meta name="author" content="Mindora Labs">
+<link rel="canonical" href="https://amigo.mindoralabs.net">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://amigo.mindoralabs.net">
+<meta property="og:title" content="Amigo — Un chat que aprende quién eres">
+<meta property="og:description" content="Memoria y contexto al servicio de tu día a día. Vive en tu Telegram. Privado por diseño.">
+<meta property="og:site_name" content="Amigo · Mindora Labs">
+<style>/* ============================================================
+   ALIADO / MINDORA DESIGN SYSTEM — tokens (reutilizado para Amigo)
+   ============================================================ */
+:root {
+  --al-bg: #ffffff;
+  --al-bg-warm: #f7f6f3;
+  --al-surface: #ffffff;
+  --al-surface-2: #faf9f7;
+  --al-line: #e8e8e5;
+  --al-line-strong: #d8d8d3;
+  --al-text: #1a1a1a;
+  --al-text-muted: #6b7280;
+  --al-text-soft: #9ca3af;
+
+  --al-primary: #1a1a1a;
+  --al-primary-hover: #000000;
+  --al-on-primary: #ffffff;
+
+  /* Acento de Amigo: violeta cálido (compañía / cercanía) */
+  --al-accent: #6d28d9;
+  --al-accent-hover: #5b21b6;
+  --al-accent-soft: #ede9fe;
+
+  --al-tint-violet: #ede9fe; --al-tint-violet-ink: #6d28d9;
+  --al-tint-mint:   #d1fae5; --al-tint-mint-ink:   #047857;
+  --al-tint-blue:   #dbeafe; --al-tint-blue-ink:   #1d4ed8;
+  --al-tint-peach:  #fee4cf; --al-tint-peach-ink:  #c2410c;
+  --al-tint-rose:   #fce7f3; --al-tint-rose-ink:   #be185d;
+  --al-tint-sky:    #e0f2fe; --al-tint-sky-ink:    #0369a1;
+
+  --al-success: #047857; --al-success-soft: #dcfce7;
+  --al-trust: #6d28d9; --al-trust-soft: #ede9fe;
+
+  --al-font-serif: "Iowan Old Style", "Palatino Linotype", Georgia, "Times New Roman", serif;
+  --al-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --al-fs-xs: 12px;  --al-fs-sm: 13px;  --al-fs-base: 14px;  --al-fs-md: 16px;
+  --al-fs-lg: 18px;  --al-fs-xl: 20px;  --al-fs-2xl: 24px;  --al-fs-3xl: 30px;
+  --al-fs-4xl: 40px; --al-fs-5xl: 52px;
+  --al-lh-tight: 1.15; --al-lh: 1.55;
+  --al-fw-regular: 400; --al-fw-medium: 500; --al-fw-semibold: 600; --al-fw-bold: 700;
+
+  --al-space-1: 4px;  --al-space-2: 8px;  --al-space-3: 12px; --al-space-4: 16px;
+  --al-space-5: 20px; --al-space-6: 24px; --al-space-8: 32px; --al-space-10: 40px;
+  --al-space-12: 64px; --al-space-16: 96px;
+
+  --al-radius-sm: 6px; --al-radius: 10px; --al-radius-lg: 14px; --al-radius-pill: 999px;
+
+  --al-shadow-sm: 0 1px 2px rgba(17,24,28,.04);
+  --al-shadow: 0 4px 16px rgba(17,24,28,.06);
+  --al-shadow-lg: 0 18px 50px rgba(17,24,28,.10);
+
+  --al-z-nav: 20;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+.al, .al * { font-family: var(--al-font-sans); }
+.al {
+  margin: 0; background: var(--al-bg); color: var(--al-text);
+  font-size: var(--al-fs-base); line-height: var(--al-lh);
+  -webkit-font-smoothing: antialiased; scroll-behavior: smooth;
+}
+.al h1, .al h2, .al h3, .al .al-serif {
+  font-family: var(--al-font-serif); font-weight: var(--al-fw-regular);
+  line-height: var(--al-lh-tight); letter-spacing: -0.01em; margin: 0;
+}
+.al h1 { font-size: var(--al-fs-5xl); }
+.al h2 { font-size: var(--al-fs-3xl); }
+.al h3 { font-size: var(--al-fs-xl); }
+.al a { color: var(--al-accent); text-decoration: none; }
+.al a:hover { text-decoration: underline; }
+.al-muted { color: var(--al-text-muted); }
+.al-soft { color: var(--al-text-soft); }
+
+/* Botones */
+.al-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--al-space-2);
+  font-family: var(--al-font-sans); font-size: var(--al-fs-base); font-weight: var(--al-fw-medium);
+  min-height: 40px; padding: 0 var(--al-space-5);
+  border-radius: var(--al-radius-sm); border: 1px solid var(--al-primary);
+  background: var(--al-primary); color: var(--al-on-primary);
+  cursor: pointer; transition: background .15s ease, border-color .15s ease, opacity .15s ease;
+  white-space: nowrap; text-decoration: none;
+}
+.al-btn:hover { background: var(--al-primary-hover); border-color: var(--al-primary-hover); text-decoration: none; }
+.al-btn--secondary { background: var(--al-surface); color: var(--al-text); border-color: var(--al-line-strong); }
+.al-btn--secondary:hover { background: var(--al-surface-2); border-color: var(--al-text-soft); }
+.al-btn--sm { min-height: 32px; padding: 0 var(--al-space-3); font-size: var(--al-fs-sm); }
+.al-btn--lg { min-height: 48px; padding: 0 var(--al-space-6); font-size: var(--al-fs-md); }
+
+/* Tarjetas */
+.al-card {
+  background: var(--al-surface); border: 1px solid var(--al-line); border-radius: var(--al-radius-lg);
+  padding: var(--al-space-5); display: grid; gap: var(--al-space-3);
+}
+.al-card--pad-lg { padding: var(--al-space-6); }
+.al-card__title { font-size: var(--al-fs-md); font-weight: var(--al-fw-semibold); color: var(--al-text); }
+.al-card__body { color: var(--al-text-muted); font-size: var(--al-fs-sm); }
+
+/* Chips / badges */
+.al-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: var(--al-fw-semibold); letter-spacing: .06em; text-transform: uppercase;
+  padding: 4px 9px; border-radius: var(--al-radius-pill);
+  background: var(--al-tint-violet); color: var(--al-tint-violet-ink);
+}
+.al-chip--violet { background: var(--al-tint-violet); color: var(--al-tint-violet-ink); }
+.al-chip--mint   { background: var(--al-tint-mint);   color: var(--al-tint-mint-ink); }
+.al-chip--blue   { background: var(--al-tint-blue);   color: var(--al-tint-blue-ink); }
+.al-chip--peach  { background: var(--al-tint-peach);  color: var(--al-tint-peach-ink); }
+.al-chip--rose   { background: var(--al-tint-rose);   color: var(--al-tint-rose-ink); }
+.al-chip--sky    { background: var(--al-tint-sky);    color: var(--al-tint-sky-ink); }
+.al-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--al-fs-xs); font-weight: var(--al-fw-medium);
+  padding: 3px 10px; border-radius: var(--al-radius-pill);
+  background: var(--al-surface-2); color: var(--al-text-muted); border: 1px solid var(--al-line);
+}
+.al-badge--trust { background: var(--al-trust-soft); color: var(--al-trust); border-color: transparent; }
+.al-trust-strip {
+  display: flex; flex-wrap: wrap; gap: var(--al-space-2); align-items: center;
+  padding: var(--al-space-3) var(--al-space-4);
+  background: var(--al-trust-soft); border: 1px solid #ddd2f5; border-radius: var(--al-radius);
+}
+
+/* Layout */
+.al-section { padding: var(--al-space-16) var(--al-space-6); }
+.al-section--warm { background: var(--al-bg-warm); }
+.al-container { max-width: 1080px; margin: 0 auto; }
+.al-grid { display: grid; gap: var(--al-space-4); }
+.al-grid--cards { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.al-stack { display: grid; gap: var(--al-space-3); }
+.al-row { display: flex; align-items: center; gap: var(--al-space-3); }
+
+/* Nav / hero específicos */
+.nav { position: sticky; top: 0; z-index: var(--al-z-nav); display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; padding: 0 clamp(18px, 5vw, 64px); background: rgba(255,255,255,.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--al-line); }
+.al-brand { font-family: var(--al-font-serif); font-size: var(--al-fs-xl); color: var(--al-text); }
+.nav__links { display: flex; align-items: center; gap: 18px; }
+.nav__links a { color: var(--al-text-muted); font-size: var(--al-fs-sm); }
+.nav__links a:hover { color: var(--al-text); text-decoration: none; }
+.hero { text-align: center; padding: clamp(64px, 12vw, 140px) clamp(18px, 5vw, 64px) clamp(40px, 8vw, 80px); }
+.hero h1 { font-size: clamp(40px, 8vw, 76px); max-width: 18ch; margin: 0 auto; }
+.hero .lead { max-width: 60ch; margin: 0 auto; font-size: clamp(16px, 2.2vw, 20px); }
+.lead-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.step-num { font-size: var(--al-fs-sm); color: var(--al-text-soft); }
+.quote { font-family: var(--al-font-serif); font-size: clamp(22px, 4vw, 34px); max-width: 22ch; margin: 0 auto; text-align: center; line-height: 1.25; }
+@media (max-width: 720px) { .nav__links a:not(.al-btn) { display: none; } }
+</style>
+</head>
+<body class="al">
+  <header class="nav">
+    <a class="al-brand" href="#top">Amigo</a>
+    <nav class="nav__links">
+      <a href="#funciona">Cómo funciona</a>
+      <a href="#caracteristicas">Características</a>
+      <a href="https://mindoralabs.net">Mindora Labs</a>
+      <a class="al-btn al-btn--sm" href="/user">Abrir Amigo</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero al-stack" style="gap:24px">
+      <div class="al-stack" style="gap:18px">
+        <span class="al-chip al-chip--violet" style="margin:0 auto">Compañero con memoria</span>
+        <h1 class="al-serif">Un chat que aprende quién eres.</h1>
+        <p class="lead al-muted">Amigo vive en tu Telegram, pero no es un chat normal. Recuerda vuestras conversaciones, aprende tus gustos, tus rutinas y lo que te importa. Cuanto más hablas con él, mejor te conoce — y mejor te ayuda. Crece contigo.</p>
+      </div>
+      <div class="lead-row">
+        <a class="al-btn al-btn--lg" href="/user">Abrir Amigo</a>
+        <a class="al-btn al-btn--secondary al-btn--lg" href="#funciona">Cómo funciona</a>
+      </div>
+      <div class="al-trust-strip" style="justify-content:center;max-width:560px;margin:8px auto 0">
+        <span class="al-badge al-badge--trust">🔒 Privado por diseño</span>
+        <span class="al-badge al-badge--trust">Tu memoria, en tu servidor</span>
+      </div>
+    </section>
+
+    <section id="caracteristicas" class="al-section al-section--warm">
+      <div class="al-container al-stack" style="gap:32px">
+        <h2 class="al-serif" style="text-align:center">Lo que hace especial a Amigo</h2>
+        <div class="al-grid al-grid--cards">
+          <article class="al-card"><span class="al-chip al-chip--violet">Memoria</span><div class="al-card__title">Recuerda de verdad</div><div class="al-card__body">No empieza de cero cada vez. Guarda lo que cuentas y lo retoma cuando hace falta.</div></article>
+          <article class="al-card"><span class="al-chip al-chip--blue">Aprendizaje</span><div class="al-card__title">Aprende quién eres</div><div class="al-card__body">Tus gustos, tus rutinas y lo que te importa. Va afinando con cada conversación.</div></article>
+          <article class="al-card"><span class="al-chip al-chip--sky">Telegram</span><div class="al-card__title">Vive donde tú estás</div><div class="al-card__body">Habla con él desde tu Telegram, sin instalar nada. También desde la web.</div></article>
+          <article class="al-card"><span class="al-chip al-chip--peach">Proactivo</span><div class="al-card__title">Da el primer paso</div><div class="al-card__body">No solo responde: te recuerda cosas y retoma temas cuando tiene sentido.</div></article>
+          <article class="al-card"><span class="al-chip al-chip--mint">Privacidad</span><div class="al-card__title">Privado por diseño</div><div class="al-card__body">Tu memoria se guarda en tu servidor. Sin nube de terceros, sin fugas.</div></article>
+          <article class="al-card"><span class="al-chip al-chip--rose">Vínculo</span><div class="al-card__title">Crece contigo</div><div class="al-card__body">El primer día es un asistente. Al mes, es alguien que te conoce.</div></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="funciona" class="al-section">
+      <div class="al-container al-stack" style="gap:32px">
+        <h2 class="al-serif" style="text-align:center">Cómo funciona</h2>
+        <div class="al-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+          <div class="al-card"><span class="step-num">01</span><div class="al-card__title">Habla con él</div><div class="al-card__body">Desde Telegram o la web, en lenguaje natural. Como con cualquier amigo.</div></div>
+          <div class="al-card"><span class="step-num">02</span><div class="al-card__title">Aprende de ti</div><div class="al-card__body">Recuerda lo importante, conecta los puntos y construye tu contexto.</div></div>
+          <div class="al-card"><span class="step-num">03</span><div class="al-card__title">Te conoce</div><div class="al-card__body">Con el tiempo, sus respuestas son tuyas: pensadas para ti, no genéricas.</div></div>
+        </div>
+        <p class="quote al-serif" style="margin-top:24px">"El primer día es un asistente. Al mes, es alguien que te conoce."</p>
+      </div>
+    </section>
+
+    <section class="al-section al-section--warm">
+      <div class="al-container al-stack" style="gap:20px;text-align:center;max-width:640px">
+        <h2 class="al-serif">Empieza a hablar con Amigo</h2>
+        <p class="al-muted">Abre el chat y empieza la conversación. Cuanto antes empieces, antes te conoce.</p>
+        <div class="lead-row">
+          <a class="al-btn al-btn--lg" href="/user">Abrir Amigo</a>
+          <a class="al-btn al-btn--secondary al-btn--lg" href="https://mindoralabs.net/dashboard">Ir al dashboard</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="al-section" style="padding-top:32px;padding-bottom:32px;border-top:1px solid var(--al-line)">
+    <div class="al-container al-row" style="justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <strong>Amigo</strong>
+      <span class="al-muted"><a href="https://mindoralabs.net">Mindora Labs</a> · <a href="/user">Abrir chat</a> · <a href="https://mindoralabs.net/dashboard">Dashboard</a></span>
+      <span class="al-muted">Tu memoria, en tu servidor.</span>
+    </div>
+  </footer>
+</body>
+</html>

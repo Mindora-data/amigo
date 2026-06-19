@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aliado</title>
+<style>/* ============================================================
+   ALIADO DESIGN SYSTEM — tokens
+   ============================================================ */
+:root {
+  /* Color · base neutra */
+  --al-bg: #ffffff;
+  --al-bg-warm: #f7f6f3;
+  --al-surface: #ffffff;
+  --al-surface-2: #faf9f7;
+  --al-line: #e8e8e5;
+  --al-line-strong: #d8d8d3;
+  --al-text: #1a1a1a;
+  --al-text-muted: #6b7280;
+  --al-text-soft: #9ca3af;
+
+  /* Color · acción (primario negro, estilo Taskos) */
+  --al-primary: #1a1a1a;
+  --al-primary-hover: #000000;
+  --al-on-primary: #ffffff;
+
+  /* Color · acento (teal heredado de Aliado, uso discreto) */
+  --al-accent: #1f6f78;
+  --al-accent-hover: #18585f;
+  --al-accent-soft: #e6f1f1;
+
+  /* Color · tints pastel por categoría (chips) */
+  --al-tint-violet: #ede9fe; --al-tint-violet-ink: #6d28d9;
+  --al-tint-mint:   #d1fae5; --al-tint-mint-ink:   #047857;
+  --al-tint-blue:   #dbeafe; --al-tint-blue-ink:   #1d4ed8;
+  --al-tint-peach:  #fee4cf; --al-tint-peach-ink:  #c2410c;
+  --al-tint-rose:   #fce7f3; --al-tint-rose-ink:   #be185d;
+  --al-tint-sky:    #e0f2fe; --al-tint-sky-ink:    #0369a1;
+
+  /* Color · estado */
+  --al-success: #047857; --al-success-soft: #dcfce7;
+  --al-warning: #b45309; --al-warning-soft: #fef3c7;
+  --al-danger:  #b42318; --al-danger-soft:  #fee2e2;
+  /* Confianza/privacidad — señal central del producto */
+  --al-trust: #1f6f78; --al-trust-soft: #e6f1f1;
+
+  /* Tipografía */
+  --al-font-serif: "Iowan Old Style", "Palatino Linotype", Georgia, "Times New Roman", serif;
+  --al-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --al-fs-xs: 12px;
+  --al-fs-sm: 13px;
+  --al-fs-base: 14px;
+  --al-fs-md: 16px;
+  --al-fs-lg: 18px;
+  --al-fs-xl: 20px;
+  --al-fs-2xl: 24px;
+  --al-fs-3xl: 30px;
+  --al-fs-4xl: 40px;
+  --al-fs-5xl: 52px;
+  --al-lh-tight: 1.15;
+  --al-lh: 1.55;
+  --al-fw-regular: 400;
+  --al-fw-medium: 500;
+  --al-fw-semibold: 600;
+  --al-fw-bold: 700;
+
+  /* Espaciado · escala base 4px */
+  --al-space-1: 4px;
+  --al-space-2: 8px;
+  --al-space-3: 12px;
+  --al-space-4: 16px;
+  --al-space-5: 20px;
+  --al-space-6: 24px;
+  --al-space-8: 32px;
+  --al-space-10: 40px;
+  --al-space-12: 64px;
+  --al-space-16: 96px;
+
+  /* Radios */
+  --al-radius-sm: 6px;
+  --al-radius: 10px;
+  --al-radius-lg: 14px;
+  --al-radius-pill: 999px;
+
+  /* Sombras · sutiles, look de bordes finos */
+  --al-shadow-sm: 0 1px 2px rgba(17,24,28,.04);
+  --al-shadow: 0 4px 16px rgba(17,24,28,.06);
+  --al-shadow-lg: 0 18px 50px rgba(17,24,28,.10);
+
+  /* z-index */
+  --al-z-nav: 20;
+  --al-z-modal: 40;
+  --al-z-toast: 50;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+.al, .al * { font-family: var(--al-font-sans); }
+.al {
+  margin: 0;
+  background: var(--al-bg);
+  color: var(--al-text);
+  font-size: var(--al-fs-base);
+  line-height: var(--al-lh);
+  -webkit-font-smoothing: antialiased;
+}
+.al h1, .al h2, .al h3, .al .al-serif {
+  font-family: var(--al-font-serif);
+  font-weight: var(--al-fw-regular);
+  line-height: var(--al-lh-tight);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.al h1 { font-size: var(--al-fs-5xl); }
+.al h2 { font-size: var(--al-fs-3xl); }
+.al h3 { font-size: var(--al-fs-xl); }
+.al a { color: var(--al-accent); text-decoration: none; }
+.al a:hover { text-decoration: underline; }
+.al-muted { color: var(--al-text-muted); }
+.al-soft { color: var(--al-text-soft); }
+
+/* ============================================================
+   Botones
+   ============================================================ */
+.al-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--al-space-2);
+  font-family: var(--al-font-sans); font-size: var(--al-fs-base); font-weight: var(--al-fw-medium);
+  min-height: 40px; padding: 0 var(--al-space-5);
+  border-radius: var(--al-radius-sm); border: 1px solid var(--al-primary);
+  background: var(--al-primary); color: var(--al-on-primary);
+  cursor: pointer; transition: background .15s ease, border-color .15s ease, opacity .15s ease;
+  white-space: nowrap; text-decoration: none;
+}
+.al-btn:hover { background: var(--al-primary-hover); border-color: var(--al-primary-hover); text-decoration: none; }
+.al-btn:disabled { opacity: .5; cursor: not-allowed; }
+.al-btn--secondary { background: var(--al-surface); color: var(--al-text); border-color: var(--al-line-strong); }
+.al-btn--secondary:hover { background: var(--al-surface-2); border-color: var(--al-text-soft); }
+.al-btn--ghost { background: transparent; color: var(--al-text); border-color: transparent; }
+.al-btn--ghost:hover { background: var(--al-surface-2); }
+.al-btn--danger { background: var(--al-surface); color: var(--al-danger); border-color: #e7c3c0; }
+.al-btn--danger:hover { background: var(--al-danger-soft); }
+.al-btn--sm { min-height: 32px; padding: 0 var(--al-space-3); font-size: var(--al-fs-sm); }
+.al-btn--lg { min-height: 48px; padding: 0 var(--al-space-6); font-size: var(--al-fs-md); }
+
+/* ============================================================
+   Formularios
+   ============================================================ */
+.al-field { display: grid; gap: var(--al-space-2); }
+.al-label { font-size: var(--al-fs-sm); font-weight: var(--al-fw-medium); color: var(--al-text); }
+.al-input, .al-textarea, .al-select {
+  width: 100%; font-family: var(--al-font-sans); font-size: var(--al-fs-base); color: var(--al-text);
+  background: var(--al-surface); border: 1px solid var(--al-line-strong); border-radius: var(--al-radius-sm);
+  padding: 0 var(--al-space-3); min-height: 40px; transition: border-color .15s ease, box-shadow .15s ease;
+}
+.al-textarea { padding: var(--al-space-3); min-height: 96px; resize: vertical; line-height: var(--al-lh); }
+.al-input:focus, .al-textarea:focus, .al-select:focus {
+  outline: none; border-color: var(--al-accent); box-shadow: 0 0 0 3px var(--al-accent-soft);
+}
+.al-input::placeholder, .al-textarea::placeholder { color: var(--al-text-soft); }
+.al-hint { font-size: var(--al-fs-xs); color: var(--al-text-muted); }
+.al-hint--error { color: var(--al-danger); }
+
+/* ============================================================
+   Tarjetas
+   ============================================================ */
+.al-card {
+  background: var(--al-surface); border: 1px solid var(--al-line); border-radius: var(--al-radius-lg);
+  padding: var(--al-space-5); display: grid; gap: var(--al-space-3);
+}
+.al-card--pad-lg { padding: var(--al-space-6); }
+.al-card__chip { justify-self: start; }
+.al-card__title { font-size: var(--al-fs-md); font-weight: var(--al-fw-semibold); color: var(--al-text); }
+.al-card__body { color: var(--al-text-muted); font-size: var(--al-fs-sm); }
+
+/* ============================================================
+   Chips de categoría (pastel) y badges de estado
+   ============================================================ */
+.al-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: var(--al-fw-semibold); letter-spacing: .06em; text-transform: uppercase;
+  padding: 4px 9px; border-radius: var(--al-radius-pill);
+  background: var(--al-tint-violet); color: var(--al-tint-violet-ink);
+}
+.al-chip--violet { background: var(--al-tint-violet); color: var(--al-tint-violet-ink); }
+.al-chip--mint   { background: var(--al-tint-mint);   color: var(--al-tint-mint-ink); }
+.al-chip--blue   { background: var(--al-tint-blue);   color: var(--al-tint-blue-ink); }
+.al-chip--peach  { background: var(--al-tint-peach);  color: var(--al-tint-peach-ink); }
+.al-chip--rose   { background: var(--al-tint-rose);   color: var(--al-tint-rose-ink); }
+.al-chip--sky    { background: var(--al-tint-sky);    color: var(--al-tint-sky-ink); }
+
+.al-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--al-fs-xs); font-weight: var(--al-fw-medium);
+  padding: 3px 10px; border-radius: var(--al-radius-pill);
+  background: var(--al-surface-2); color: var(--al-text-muted); border: 1px solid var(--al-line);
+}
+.al-badge--success { background: var(--al-success-soft); color: var(--al-success); border-color: transparent; }
+.al-badge--warning { background: var(--al-warning-soft); color: var(--al-warning); border-color: transparent; }
+.al-badge--danger  { background: var(--al-danger-soft);  color: var(--al-danger);  border-color: transparent; }
+.al-badge--trust   { background: var(--al-trust-soft);   color: var(--al-trust);   border-color: transparent; }
+
+/* Señales de confianza · franja visible (valor central) */
+.al-trust-strip {
+  display: flex; flex-wrap: wrap; gap: var(--al-space-2); align-items: center;
+  padding: var(--al-space-3) var(--al-space-4);
+  background: var(--al-trust-soft); border: 1px solid #cfe5e6; border-radius: var(--al-radius);
+}
+
+/* ============================================================
+   Navegación · topbar y layout app con sidebar
+   ============================================================ */
+.al-topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--al-space-4);
+  height: 60px; padding: 0 var(--al-space-6);
+  background: var(--al-bg); border-bottom: 1px solid var(--al-line);
+  position: sticky; top: 0; z-index: var(--al-z-nav);
+}
+.al-brand { font-family: var(--al-font-serif); font-size: var(--al-fs-xl); color: var(--al-text); }
+.al-topbar__nav { display: flex; align-items: center; gap: var(--al-space-2); }
+
+.al-app { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
+.al-sidebar {
+  background: var(--al-bg-warm); border-right: 1px solid var(--al-line);
+  padding: var(--al-space-5) var(--al-space-3); display: flex; flex-direction: column; gap: var(--al-space-1);
+}
+.al-sidebar__brand { font-family: var(--al-font-serif); font-size: var(--al-fs-lg); padding: 0 var(--al-space-3) var(--al-space-4); }
+.al-sidebar__section { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--al-text-soft); padding: var(--al-space-4) var(--al-space-3) var(--al-space-1); }
+.al-nav-item {
+  display: flex; align-items: center; gap: var(--al-space-3);
+  padding: var(--al-space-2) var(--al-space-3); border-radius: var(--al-radius-sm);
+  color: var(--al-text-muted); font-weight: var(--al-fw-medium); cursor: pointer; text-decoration: none;
+}
+.al-nav-item:hover { background: rgba(0,0,0,.04); color: var(--al-text); text-decoration: none; }
+.al-nav-item.is-active { background: var(--al-surface); color: var(--al-text); box-shadow: var(--al-shadow-sm); }
+.al-main { padding: var(--al-space-6); max-width: 1080px; }
+
+/* Tabs */
+.al-tabs { display: inline-flex; gap: var(--al-space-1); padding: 4px; background: var(--al-surface-2); border-radius: var(--al-radius); border: 1px solid var(--al-line); }
+.al-tab { border: 0; background: transparent; color: var(--al-text-muted); font-weight: var(--al-fw-medium); font-size: var(--al-fs-sm); padding: 6px 14px; border-radius: var(--al-radius-sm); cursor: pointer; }
+.al-tab.is-active { background: var(--al-surface); color: var(--al-text); box-shadow: var(--al-shadow-sm); }
+
+/* Toggle idioma ES/EN */
+.al-lang { display: inline-flex; border: 1px solid var(--al-line-strong); border-radius: var(--al-radius-sm); overflow: hidden; }
+.al-lang button { border: 0; background: var(--al-surface); color: var(--al-text-muted); font-size: var(--al-fs-sm); padding: 6px 12px; cursor: pointer; }
+.al-lang button.is-active { background: var(--al-surface-2); color: var(--al-text); font-weight: var(--al-fw-semibold); }
+
+/* ============================================================
+   Tablas
+   ============================================================ */
+.al-table { width: 100%; border: 1px solid var(--al-line); border-radius: var(--al-radius); overflow: hidden; background: var(--al-surface); }
+.al-table__row { display: grid; grid-template-columns: 1.6fr 1fr .6fr; gap: var(--al-space-3); align-items: center; padding: var(--al-space-3) var(--al-space-4); border-bottom: 1px solid var(--al-line); }
+.al-table__row:last-child { border-bottom: 0; }
+.al-table__row--head { background: var(--al-surface-2); color: var(--al-text-muted); font-size: var(--al-fs-xs); text-transform: uppercase; letter-spacing: .04em; }
+
+/* ============================================================
+   Modal / diálogo
+   ============================================================ */
+.al-modal { position: fixed; inset: 0; background: rgba(17,24,28,.36); display: grid; place-items: center; padding: var(--al-space-4); z-index: var(--al-z-modal); }
+.al-dialog { width: min(460px, 100%); background: var(--al-surface); border-radius: var(--al-radius-lg); border: 1px solid var(--al-line); box-shadow: var(--al-shadow-lg); padding: var(--al-space-6); display: grid; gap: var(--al-space-4); }
+.al-dialog__title { font-family: var(--al-font-serif); font-size: var(--al-fs-2xl); }
+
+/* ============================================================
+   Chat
+   ============================================================ */
+.al-chat { display: flex; flex-direction: column; gap: var(--al-space-3); padding: var(--al-space-4); }
+.al-bubble { max-width: 76%; padding: var(--al-space-3) var(--al-space-4); border-radius: var(--al-radius-lg); font-size: var(--al-fs-base); line-height: var(--al-lh); }
+.al-bubble--aliado { align-self: flex-start; background: var(--al-bg-warm); color: var(--al-text); border-bottom-left-radius: var(--al-radius-sm); }
+.al-bubble--user { align-self: flex-end; background: var(--al-primary); color: var(--al-on-primary); border-bottom-right-radius: var(--al-radius-sm); }
+.al-bubble__cite { display: inline-flex; gap: 6px; margin-top: 6px; font-size: var(--al-fs-xs); color: var(--al-text-soft); }
+/* Cita inline a documento, p.ej. [Portfolio#2] — valor central: respuestas con fuente */
+.al-cite { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; margin: 0 2px; border-radius: var(--al-radius-pill); background: var(--al-accent-soft); color: var(--al-accent); font-size: var(--al-fs-xs); font-weight: var(--al-fw-medium); white-space: nowrap; cursor: default; }
+.al-bubble--user .al-cite { background: rgba(255,255,255,.20); color: #fff; }
+.al-composer { display: grid; grid-template-columns: 1fr auto; gap: var(--al-space-3); padding: var(--al-space-4); border-top: 1px solid var(--al-line); background: var(--al-bg); }
+
+/* ============================================================
+   Dropzone
+   ============================================================ */
+.al-dropzone { border: 1.5px dashed var(--al-line-strong); border-radius: var(--al-radius-lg); padding: var(--al-space-10) var(--al-space-6); text-align: center; color: var(--al-text-muted); background: var(--al-surface-2); transition: border-color .15s ease, background .15s ease; }
+.al-dropzone.is-drag { border-color: var(--al-accent); background: var(--al-accent-soft); }
+
+/* ============================================================
+   Estados · vacío, carga, error
+   ============================================================ */
+.al-empty { display: grid; gap: var(--al-space-3); justify-items: center; text-align: center; padding: var(--al-space-12) var(--al-space-6); color: var(--al-text-muted); }
+.al-empty__title { font-family: var(--al-font-serif); font-size: var(--al-fs-xl); color: var(--al-text); }
+.al-skeleton { background: linear-gradient(90deg, #eee 25%, #f5f5f5 37%, #eee 63%); background-size: 400% 100%; animation: al-shimmer 1.3s ease infinite; border-radius: var(--al-radius-sm); height: 14px; }
+@keyframes al-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+.al-spinner { width: 22px; height: 22px; border: 2px solid var(--al-line-strong); border-top-color: var(--al-accent); border-radius: 50%; animation: al-spin .7s linear infinite; }
+@keyframes al-spin { to { transform: rotate(360deg); } }
+.al-error-box { display: flex; gap: var(--al-space-3); align-items: flex-start; padding: var(--al-space-4); background: var(--al-danger-soft); border: 1px solid #f0c8c4; border-radius: var(--al-radius); color: #7a1d15; }
+
+/* Utilidades */
+.al-section { padding: var(--al-space-16) var(--al-space-6); }
+.al-section--warm { background: var(--al-bg-warm); }
+.al-container { max-width: 1080px; margin: 0 auto; }
+.al-grid { display: grid; gap: var(--al-space-4); }
+.al-grid--cards { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.al-stack { display: grid; gap: var(--al-space-3); }
+.al-row { display: flex; align-items: center; gap: var(--al-space-3); }
+.al-hero { text-align: center; max-width: 720px; margin: 0 auto; display: grid; gap: var(--al-space-5); }
+.al-hero h1 { font-size: clamp(34px, 6vw, 52px); }
+.al-divider { height: 1px; background: var(--al-line); border: 0; margin: 0; }
+
+/* Responsive · mobile-first */
+@media (max-width: 860px) {
+  .al-app { grid-template-columns: 1fr; }
+  .al-sidebar { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--al-line); position: sticky; top: 0; z-index: var(--al-z-nav); }
+  .al-sidebar__brand, .al-sidebar__section { display: none; }
+  .al-main { padding: var(--al-space-4); }
+  .al-bubble { max-width: 88%; }
+  .al-section { padding: var(--al-space-10) var(--al-space-4); }
+}</style>
+</head>
+<body class="al">
+
+<style>
+  html, body.al { height: 100%; }
+  .chat-shell { display: grid; grid-template-rows: 60px 1fr; height: 100vh; }
+  .chat-body { display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
+  .chat-col { display: grid; grid-template-rows: 1fr auto; min-height: 0; }
+  .chat-scroll { overflow-y: auto; padding: var(--al-space-5) var(--al-space-6); }
+  .chat-aside { border-left: 1px solid var(--al-line); background: var(--al-bg-warm); padding: var(--al-space-4); overflow: hidden; display: flex; flex-direction: column; gap: var(--al-space-3); }
+  .panel { background: var(--al-surface); border: 1px solid var(--al-line); border-radius: var(--al-radius); overflow: hidden; display: flex; flex-direction: column; }
+  .panel--grow { flex: 1; min-height: 0; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; border: 0; background: transparent; cursor: pointer; padding: 12px 14px; font-family: var(--al-font-sans); font-size: var(--al-fs-sm); font-weight: var(--al-fw-semibold); color: var(--al-text); text-transform: uppercase; letter-spacing: .04em; }
+  .panel-head:hover { background: var(--al-surface-2); }
+  .panel-head .chev { transition: transform .15s ease; color: var(--al-text-soft); font-size: 12px; }
+  .panel-head[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+  .panel-head__label { display: inline-flex; align-items: center; gap: 8px; }
+  .panel-count { font-size: var(--al-fs-xs); font-weight: var(--al-fw-medium); color: var(--al-text-soft); background: var(--al-surface-2); border: 1px solid var(--al-line); border-radius: 999px; padding: 1px 8px; text-transform: none; letter-spacing: 0; }
+  .panel-body { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; }
+  .panel--grow .panel-body { flex: 1; }
+  #notes { flex: 1; width: 100%; resize: none; min-height: 160px; font-size: var(--al-fs-sm); }
+  .notes-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .msg { display: flex; flex-direction: column; gap: 4px; max-width: 78%; }
+  .msg--user { align-self: flex-end; align-items: flex-end; }
+  .msg--aliado { align-self: flex-start; align-items: flex-start; }
+  .msg-action { opacity: 0; transition: opacity .12s ease; }
+  .msg:hover .msg-action, .msg-action:focus { opacity: 1; }
+  .doc-chips { display: flex; flex-wrap: wrap; gap: var(--al-space-2); }
+  .doc-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--al-surface); border: 1px solid var(--al-line); border-radius: var(--al-radius-pill); padding: 4px 6px 4px 12px; font-size: var(--al-fs-sm); }
+  .doc-chip button { border: 0; background: transparent; color: var(--al-text-soft); cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px; border-radius: 50%; }
+  .doc-chip button:hover { background: var(--al-danger-soft); color: var(--al-danger); }
+  .quick-prompts { display: flex; flex-wrap: wrap; gap: var(--al-space-2); justify-content: center; }
+  .quick-prompt, .suggestion-chip { background: var(--al-surface); border: 1px solid var(--al-line-strong); border-radius: var(--al-radius-pill); padding: 8px 14px; font-size: var(--al-fs-sm); cursor: pointer; color: var(--al-text); }
+  .quick-prompt:hover, .suggestion-chip:hover { background: var(--al-surface-2); }
+  .composer-wrap { border-top: 1px solid var(--al-line); background: var(--al-bg); padding: var(--al-space-4) var(--al-space-6); }
+  .composer-inner { max-width: 860px; margin: 0 auto; display: grid; gap: var(--al-space-3); }
+  .sales-copilot { border: 1px solid var(--al-line); border-radius: var(--al-radius); background: var(--al-surface-2); padding: var(--al-space-3); display: grid; gap: var(--al-space-2); }
+  .sales-copilot__head { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+  .sales-copilot__head strong { font-size: var(--al-fs-sm); }
+  .sales-copilot__head span { font-size: var(--al-fs-xs); color: var(--al-text-muted); }
+  .sales-copilot__grid { display: grid; grid-template-columns: 1.4fr repeat(4, auto); gap: var(--al-space-2); }
+  .suggestions { display: flex; flex-wrap: wrap; gap: var(--al-space-2); }
+  .composer-row { display: grid; grid-template-columns: auto 1fr auto; gap: var(--al-space-3); align-items: end; }
+  .composer-row textarea { resize: none; max-height: 140px; min-height: 44px; }
+  .icon-btn { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: var(--al-radius-sm); border: 1px solid var(--al-line-strong); background: var(--al-surface); cursor: pointer; font-size: 18px; color: var(--al-text-muted); }
+  .icon-btn:hover { background: var(--al-surface-2); }
+  .upload-progress { height: 4px; background: var(--al-line); border-radius: 999px; overflow: hidden; display: none; }
+  .upload-progress.active { display: block; }
+  .upload-progress > span { display: block; height: 100%; width: 0; background: var(--al-accent); transition: width .2s ease; }
+  .session-chip { font-size: var(--al-fs-sm); color: var(--al-text-muted); }
+  .status-line { text-align: center; font-size: var(--al-fs-xs); color: var(--al-text-muted); min-height: 16px; }
+  .team-list { display: grid; gap: 6px; }
+  .team-item { font-size: var(--al-fs-sm); color: var(--al-text-muted); padding: 6px 0; border-bottom: 1px solid var(--al-line); }
+  @media (max-width: 860px) {
+    .chat-body { grid-template-columns: 1fr; }
+    .chat-aside { display: none; }
+    .chat-scroll, .composer-wrap { padding-left: var(--al-space-4); padding-right: var(--al-space-4); }
+    .sales-copilot__grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="chat-shell">
+  <div class="al-topbar">
+    <span class="al-brand">Aliado</span>
+    <div class="al-topbar__nav">
+      <span id="sessionChip" class="session-chip">Sin sesión</span>
+      <div id="loginView"><a id="loginLink" class="al-btn al-btn--secondary al-btn--sm" href="/login">Iniciar sesión</a></div>
+      <div id="sessionView" class="al-topbar__nav" hidden>
+        <button id="passwordButton" class="al-btn al-btn--ghost al-btn--sm" type="button" hidden>Contraseña</button>
+        <button id="teamButton" class="al-btn al-btn--ghost al-btn--sm" type="button" hidden>Usuarios</button>
+        <button id="logoutButton" class="al-btn al-btn--ghost al-btn--sm" type="button">Salir</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="chat-body">
+    <div class="chat-col">
+      <div id="messages" class="al-chat chat-scroll" aria-live="polite"></div>
+      <div class="composer-wrap" id="minimalUserApp">
+        <div class="composer-inner">
+          <div id="salesCopilot" class="sales-copilot" hidden>
+            <div class="sales-copilot__head"><strong>Copiloto comercial</strong><span>Acciones rápidas con portfolio, CRM y memoria visible</span></div>
+            <div class="sales-copilot__grid">
+              <input id="salesAccount" class="al-input" placeholder="Cliente o cuenta (opcional)">
+              <button class="al-btn al-btn--secondary al-btn--sm" type="button" data-sales-action="recommend">Qué vender</button>
+              <button class="al-btn al-btn--secondary al-btn--sm" type="button" data-sales-action="objection">Objeción</button>
+              <button class="al-btn al-btn--secondary al-btn--sm" type="button" data-sales-action="call">Preparar llamada</button>
+              <button class="al-btn al-btn--secondary al-btn--sm" type="button" data-sales-action="followup">Seguimiento</button>
+            </div>
+          </div>
+          <div id="docSuggestions" class="suggestions" hidden></div>
+          <form id="composer" class="composer-row" autocomplete="off">
+            <button id="attachButton" class="icon-btn" type="button" title="Adjuntar documentos" aria-label="Subir documento">+</button>
+            <textarea id="text" class="al-textarea" rows="1" placeholder="Escribe a Aliado…" aria-label="Mensaje"></textarea>
+            <button id="sendButton" class="al-btn" type="submit" disabled>Enviar</button>
+          </form>
+          <div id="uploadProgress" class="upload-progress"><span id="uploadBar"></span></div>
+          <div id="status" class="status-line" role="status" aria-live="polite"></div>
+          <input id="fileInput" type="file" multiple hidden
+                 accept=".pdf,.docx,.txt,.md,.csv,.json,.html">
+        </div>
+      </div>
+    </div>
+
+    <aside class="chat-aside">
+      <section class="panel" id="docsPanel">
+        <button class="panel-head" id="docsToggle" type="button" aria-expanded="false" aria-controls="docsBody">
+          <span class="panel-head__label">Mis documentos <span id="docsCount" class="panel-count" hidden>0</span></span>
+          <span class="chev">▾</span>
+        </button>
+        <div class="panel-body" id="docsBody" hidden>
+          <p id="docsHint" class="al-hint">Sube archivos para que Aliado responda con tu contexto.</p>
+          <div id="userDropTarget" class="al-dropzone" style="padding:20px 14px">
+            Arrastra PDF, Word, TXT, MD, CSV o JSON aquí
+          </div>
+          <div class="al-row" style="gap:8px">
+            <button id="docsUploadButton" class="al-btn al-btn--secondary al-btn--sm" type="button">Subir archivos</button>
+            <button id="folderUploadButton" class="al-btn al-btn--secondary al-btn--sm" type="button">Subir carpeta</button>
+          </div>
+          <input id="folderInput" type="file" multiple hidden webkitdirectory directory
+                 accept=".pdf,.docx,.txt,.md,.csv,.json,.html">
+          <div id="docsList" class="doc-chips"></div>
+        </div>
+      </section>
+
+      <section class="panel panel--grow" id="notesPanel">
+        <button class="panel-head" id="notesToggle" type="button" aria-expanded="true" aria-controls="notesBody">
+          <span class="panel-head__label">Notas</span>
+          <span class="chev">▾</span>
+        </button>
+        <div class="panel-body" id="notesBody">
+          <textarea id="notes" class="al-textarea" placeholder="Pega aquí lo que quieras del chat o toma notas mientras hablas con Aliado…"></textarea>
+          <div class="notes-foot">
+            <span id="notesSaved" class="al-hint">Se guardan en este navegador.</span>
+            <button id="notesClear" class="al-btn al-btn--ghost al-btn--sm" type="button">Vaciar</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="al-trust-strip">
+        <span class="al-badge al-badge--trust">🔒 Memoria aislada por empresa</span>
+      </div>
+    </aside>
+  </div>
+
+  <div id="passwordPanel" class="al-modal" hidden>
+    <div class="al-dialog">
+      <div class="al-dialog__title">Cambiar contraseña</div>
+      <form id="passwordForm" class="al-stack">
+        <label class="al-field"><span class="al-label">Contraseña actual</span><input id="currentPassword" class="al-input" type="password" autocomplete="current-password" required></label>
+        <label class="al-field"><span class="al-label">Nueva contraseña</span><input id="newPassword" class="al-input" type="password" autocomplete="new-password" required></label>
+        <div class="al-row" style="justify-content:flex-end">
+          <button type="button" class="al-btn al-btn--secondary" data-close="passwordPanel">Cancelar</button>
+          <button type="submit" class="al-btn">Guardar contraseña</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="teamPanel" class="al-modal" hidden>
+    <div class="al-dialog">
+      <div class="al-dialog__title">Usuarios de la empresa</div>
+      <form id="teamCreate" class="al-stack">
+        <div class="al-grid" style="grid-template-columns:1fr 1fr">
+          <input id="teamName" class="al-input" placeholder="Nombre">
+          <input id="teamEmail" class="al-input" type="email" placeholder="email@empresa.com">
+        </div>
+        <div class="al-row">
+          <select id="teamRole" class="al-select">
+            <option value="user">Usuario</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button type="submit" class="al-btn">Crear usuario</button>
+        </div>
+      </form>
+      <div id="teamCredentials" class="al-hint"></div>
+      <div id="teamList" class="team-list"></div>
+      <div class="al-row" style="justify-content:flex-end">
+        <button type="button" class="al-btn al-btn--secondary" data-close="teamPanel">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const STORAGE_USER = "nino_user_id";
+  const STORAGE_COMPANY = "aliado_company_id";
+  const AGENT_ID = "nino";
+  let session = { authenticated:false, user_id:"", company_id:"", role:"" };
+  let activeRole = "";
+  let inboxTimer = null;
+  const deliveredInbox = new Set();
+  const deliveredInboxText = new Set();
+
+  function currentUserId() { return (session.user_id || localStorage.getItem(STORAGE_USER) || "usuario").trim(); }
+  function currentCompanyId() { return (session.company_id || localStorage.getItem(STORAGE_COMPANY) || "").trim(); }
+  function agentPath(p) { return `/users/${encodeURIComponent(currentUserId())}/agents/${encodeURIComponent(AGENT_ID)}${p}`; }
+  function documentsPath(p = "") { return `/users/${encodeURIComponent(currentUserId())}/documents${p}`; }
+
+  function humanError(error) {
+    const messages = {
+      session_required: "Tu sesión ha caducado. Vuelve a iniciar sesión para continuar.",
+      forbidden: "No tienes permiso para hacer esta acción.",
+      company_document_text_not_extracted: "No pude leer texto de ese archivo. Prueba con TXT, MD, DOCX o un PDF con texto seleccionable."
+    };
+    return messages[error] || error || "No se pudo completar la acción.";
+  }
+  async function api(path, options = {}) {
+    const res = await fetch(path, { credentials:"same-origin", ...options,
+      headers:{ "Content-Type":"application/json", ...(options.headers || {}) } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(humanError(data.error || res.statusText));
+    return data;
+  }
+  function status(text) { $("status").textContent = text || ""; }
+  function submitComposer(form) { if (form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event("submit", {cancelable:true, bubbles:true})); }
+  function shouldSubmitOnEnter(event) { return (event.key === "Enter" || event.key === "NumpadEnter") && !event.shiftKey && !event.isComposing; }
+  function localNowIso() {
+    const now = new Date(); const off = -now.getTimezoneOffset();
+    const sign = off >= 0 ? "+" : "-"; const abs = Math.abs(off);
+    const hh = String(Math.floor(abs/60)).padStart(2,"0"); const mm = String(abs%60).padStart(2,"0");
+    const local = new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().slice(0,-1);
+    return `${local}${sign}${hh}:${mm}`;
+  }
+
+  // Resalta citas inline [Documento#N] como chips .al-cite (respuestas con fuente).
+  function renderWithCitations(parent, text) {
+    const re = /\[[^\]]+#\d+\]/g;
+    let last = 0, match;
+    while ((match = re.exec(text)) !== null) {
+      if (match.index > last) parent.appendChild(document.createTextNode(text.slice(last, match.index)));
+      const cite = document.createElement("span");
+      cite.className = "al-cite";
+      cite.textContent = match[0].replace(/^\[|\]$/g, "");
+      cite.title = "Fuente citada por Aliado";
+      parent.appendChild(cite);
+      last = re.lastIndex;
+    }
+    if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+  }
+  function clearEmptyState() { const e = $("messages").querySelector(".emptyState"); if (e) e.remove(); }
+  function addMessage(role, text) {
+    clearEmptyState();
+    const isUser = role === "user";
+    const wrap = document.createElement("div");
+    wrap.className = `msg msg--${isUser ? "user" : "aliado"}`;
+    const bubble = document.createElement("div");
+    bubble.className = `al-bubble al-bubble--${isUser ? "user" : "aliado"}`;
+    if (isUser) bubble.textContent = text; else renderWithCitations(bubble, text);
+    wrap.appendChild(bubble);
+    if (!isUser) {
+      const save = document.createElement("button");
+      save.type = "button";
+      save.className = "al-btn al-btn--ghost al-btn--sm msg-action";
+      save.textContent = "Guardar en notas";
+      save.onclick = () => appendToNotes(text);
+      wrap.appendChild(save);
+    }
+    $("messages").appendChild(wrap);
+    $("messages").scrollTop = $("messages").scrollHeight;
+  }
+  function renderEmptyState() {
+    $("messages").replaceChildren();
+    const prompts = activeRole === "admin"
+      ? ["Qué documentos hay cargados", "Dime opciones de venta del portfolio", "Cómo creo usuarios"]
+      : ["Dime productos para vender", "Prepara una llamada con un cliente", "Cómo respondo a una objeción de precio"];
+    const empty = document.createElement("section");
+    empty.className = "emptyState al-empty";
+    const title = document.createElement("div");
+    title.className = "al-empty__title";
+    title.textContent = "¿Qué necesitas vender o resolver hoy?";
+    const copy = document.createElement("p");
+    copy.className = "al-muted";
+    copy.textContent = activeRole === "admin"
+      ? "Puedo ayudarte con documentos de empresa, portfolio, usuarios y dudas de administración de Aliado."
+      : "Puedo cruzar portfolio, documentos, CRM y tu contexto privado para ayudarte con clientes, objeciones y próximos pasos.";
+    const buttons = document.createElement("div");
+    buttons.className = "quickPrompts quick-prompts";
+    prompts.forEach((p) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "quickPrompt quick-prompt"; b.textContent = p;
+      b.onclick = () => { $("text").value = p; resizeComposer(); $("text").focus(); };
+      buttons.appendChild(b);
+    });
+    empty.append(title, copy, buttons);
+    $("messages").appendChild(empty);
+  }
+
+  function resizeComposer() {
+    const box = $("text");
+    box.style.height = "auto";
+    box.style.height = `${Math.min(box.scrollHeight, 140)}px`;
+    $("sendButton").disabled = !box.value.trim();
+  }
+  function updateSessionUi() {
+    const logged = Boolean(session.authenticated);
+    $("loginView").hidden = logged;
+    $("sessionView").hidden = !logged;
+    $("passwordButton").hidden = !logged;
+    $("teamButton").hidden = activeRole !== "admin";
+    $("sessionChip").textContent = logged ? `${session.user_id} · ${session.company_id || "sin empresa"}` : "Sin sesión";
+    $("salesCopilot").hidden = !logged;
+  }
+
+  async function resumeSession() {
+    const out = await api("/session/status").catch(() => null);
+    if (out && out.authenticated) {
+      session = { authenticated:true, user_id:out.user_id || "", company_id:out.company_id || "", role:out.role || "" };
+      activeRole = session.role || "";
+      if (session.user_id) localStorage.setItem(STORAGE_USER, session.user_id);
+      if (session.company_id) localStorage.setItem(STORAGE_COMPANY, session.company_id);
+      updateSessionUi();
+      loadNotes();
+      await loadConversation();
+      await loadDocuments();
+      startInboxPolling();
+      $("text").focus();
+    } else {
+      session = { authenticated:false, user_id:"", company_id:"", role:"" };
+      activeRole = "";
+      updateSessionUi();
+      loadNotes();
+      $("docsHint").textContent = "Inicia sesión para subir y consultar tus documentos.";
+      renderEmptyState();
+      addMessage("aliado", "Inicia sesión para hablar conmigo.");
+    }
+  }
+  async function loadConversation() {
+    const out = await api(agentPath("/conversation")).catch(() => ({ turns: [] }));
+    $("messages").replaceChildren();
+    const turns = out.turns || out.conversation || [];
+    turns.forEach((t) => addMessage(t.role === "user" ? "user" : "aliado", t.text || t.content || ""));
+    if (!turns.length) renderEmptyState();
+  }
+  async function sendText(event) {
+    event.preventDefault();
+    const text = $("text").value.trim();
+    if (!text) return;
+    $("text").value = ""; resizeComposer();
+    addMessage("user", text);
+    try {
+      const out = await api(agentPath("/tick"), { method:"POST",
+        body: JSON.stringify({ intent:"chat", text, salience:0.7, confidence:0.8, now: localNowIso() }) });
+      const reply = out.action && out.action.payload ? out.action.payload.text : "";
+      if (reply) addMessage("aliado", reply);
+    } catch (err) {
+      status(err.message);
+    } finally {
+      resizeComposer(); $("text").focus();
+    }
+  }
+
+  // --- Copiloto comercial: rellena el prompt con la plantilla adecuada ---
+  function fillSalesPrompt(action) {
+    const account = $("salesAccount").value.trim();
+    const target = account ? ` para ${account}` : "";
+    const prompts = {
+      recommend: `Qué le vendo${target}? Usa el portfolio y documentos de mi empresa, mis documentos privados y el CRM visible. Dame producto sugerido, motivo, fuente, objeción probable y siguiente paso. Si no consta en documentos o CRM, dilo claramente.`,
+      objection: `Cómo respondo a una objeción de precio${target}? Usa solo argumentos respaldados por portfolio, documentos o CRM visible. Dame respuesta breve, prueba documental y límite de confianza.`,
+      call: `Prepárame una llamada comercial${target}. Resume contexto de cuenta, necesidad probable, producto a proponer, preguntas clave, objeción probable y siguiente paso. No inventes datos si no constan.`,
+      followup: `Qué seguimiento hago${target}? Revisa CRM, memoria de cuenta y documentos visibles. Propón próximos pasos concretos y qué información falta antes de avanzar.`
+    };
+    $("text").value = prompts[action] || prompts.recommend;
+    resizeComposer();
+    $("text").focus();
+  }
+  function setDocumentSuggestions(docs) {
+    const box = $("docSuggestions");
+    box.replaceChildren();
+    if (!docs.length) { box.hidden = true; return; }
+    const questions = ["Resume mis documentos", "¿Qué puntos importantes hay?", "¿Qué debería hacer después?"];
+    if (activeRole === "commercial" || activeRole === "manager") {
+      questions.unshift("¿Qué le vendo a este cliente?", "¿Cómo respondo a una objeción de precio?", "Resume el pipeline actual");
+    }
+    questions.forEach((q) => {
+      const btn = document.createElement("button");
+      btn.type = "button"; btn.className = "suggestionChip suggestion-chip"; btn.textContent = q;
+      btn.onclick = () => { $("text").value = q; resizeComposer(); $("text").focus(); };
+      box.appendChild(btn);
+    });
+    box.hidden = false;
+  }
+
+  // --- Documentos ---
+  function setDocsCount(n) { const b = $("docsCount"); b.textContent = String(n); b.hidden = !n; }
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || "").split(",", 2).pop() || "");
+      reader.onerror = () => reject(reader.error || new Error("file_read_error"));
+      reader.readAsDataURL(file);
+    });
+  }
+  async function loadDocuments() {
+    if (!session.authenticated) { $("docsList").replaceChildren(); setDocsCount(0); setDocumentSuggestions([]); return; }
+    const out = await api(documentsPath()).catch(() => ({ documents: [] }));
+    const docs = out.documents || [];
+    setDocsCount(docs.length);
+    $("docsHint").textContent = docs.length
+      ? `${docs.length} documento(s) privado(s) en este chat.`
+      : "Sube archivos para que Aliado responda con tu contexto.";
+    setDocumentSuggestions(docs);
+    $("docsList").replaceChildren(...docs.map((doc) => {
+      const chip = document.createElement("span");
+      chip.className = "doc-chip";
+      chip.append(document.createTextNode(doc.title || doc.source || "Documento"));
+      const del = document.createElement("button");
+      del.type = "button"; del.textContent = "×"; del.title = "Eliminar";
+      del.onclick = async () => {
+        await api(documentsPath(`/${encodeURIComponent(doc.document_id)}`), { method:"DELETE", body:"{}" });
+        await loadDocuments();
+      };
+      chip.appendChild(del);
+      return chip;
+    }));
+  }
+  function setUploadProgress(text, pct = 0, active = true) {
+    $("uploadProgress").classList.toggle("active", active);
+    $("uploadBar").style.width = `${Math.max(0, Math.min(100, Math.round(pct)))}%`;
+    status(text);
+  }
+  async function uploadDocuments(files) {
+    const selected = Array.from(files || []);
+    if (!selected.length) return;
+    if (!session.authenticated) { status("Inicia sesión para subir documentos."); return; }
+    let saved = 0; const failed = [];
+    for (let i = 0; i < selected.length; i += 1) {
+      const file = selected[i];
+      try {
+        if (!/\.(pdf|docx|txt|md|csv|json|html)$/i.test(file.name)) { failed.push(`${file.name}: formato no admitido`); continue; }
+        setUploadProgress(`${i+1}/${selected.length} · leyendo · ${file.name}`, (i/selected.length)*100);
+        const content_base64 = await fileToBase64(file);
+        setUploadProgress(`${i+1}/${selected.length} · indexando · ${file.name}`, ((i+0.6)/selected.length)*100);
+        await api(documentsPath(), { method:"POST", body: JSON.stringify({
+          title: file.name.replace(/\.[^.]+$/, ""), source: file.name, mime_type: file.type || "", content_base64 }) });
+        saved += 1;
+        setUploadProgress(`${i+1}/${selected.length} · listo · ${file.name}`, ((i+1)/selected.length)*100);
+      } catch (err) { failed.push(`${file.name}: ${err.message}`); }
+    }
+    status(failed.length ? `${saved} documentos guardados. ${failed.length} no se pudieron subir.` : `${saved} documentos guardados. Ya puedes preguntar por ellos.`);
+    await loadDocuments();
+    window.setTimeout(() => setUploadProgress("", 0, false), failed.length ? 4200 : 1600);
+  }
+
+  // --- Equipo (admin) y contraseña ---
+  async function loadTeam() {
+    if (activeRole !== "admin" || !currentCompanyId()) return;
+    const out = await api(`/companies/${encodeURIComponent(currentCompanyId())}/users`).catch(() => ({ users: [] }));
+    $("teamList").replaceChildren(...(out.users || []).map((u) => {
+      const row = document.createElement("div");
+      row.className = "team-item";
+      row.textContent = `${u.name} · ${u.email} · ${u.role} · ${u.active ? "activo" : "inactivo"}`;
+      return row;
+    }));
+  }
+  async function createTeamUser(event) {
+    event.preventDefault();
+    try {
+      const out = await api(`/companies/${encodeURIComponent(currentCompanyId())}/users`, { method:"POST",
+        body: JSON.stringify({ name:$("teamName").value, email:$("teamEmail").value, role:$("teamRole").value }) });
+      $("teamCredentials").textContent = `Contraseña inicial de ${out.user.email}: ${out.initial_password}`;
+      $("teamName").value = ""; $("teamEmail").value = "";
+      await loadTeam();
+    } catch (err) { status(err.message); }
+  }
+  async function changePassword(event) {
+    event.preventDefault();
+    try {
+      await api("/session/password", { method:"POST",
+        body: JSON.stringify({ current_password:$("currentPassword").value, new_password:$("newPassword").value }) });
+      $("currentPassword").value = ""; $("newPassword").value = "";
+      $("passwordPanel").hidden = true;
+      status("Contraseña actualizada.");
+    } catch (err) { status(err.message); }
+  }
+
+  // --- Bandeja proactiva ---
+  async function loadProactiveInbox() {
+    await api(agentPath("/proactivity/evaluate"), { method:"POST", body: JSON.stringify({ now: localNowIso() }) }).catch(() => {});
+    const out = await api(agentPath("/proactivity/inbox")).catch(() => ({ inbox: [] }));
+    for (const item of out.inbox || []) {
+      if (item.status === "delivered" || deliveredInbox.has(item.id)) continue;
+      const text = item.action && item.action.payload ? item.action.payload.text : "";
+      if (!text) continue;
+      const key = text.trim().toLowerCase();
+      if (deliveredInboxText.has(key)) continue;
+      deliveredInboxText.add(key); deliveredInbox.add(item.id);
+      addMessage("aliado", text);
+      await api(agentPath(`/proactivity/inbox/${encodeURIComponent(item.id)}/delivered`), { method:"POST", body:"{}" }).catch(() => {});
+    }
+  }
+  function startInboxPolling() { if (inboxTimer) return; loadProactiveInbox(); inboxTimer = window.setInterval(loadProactiveInbox, 30000); }
+
+  // --- Paneles plegables (Documentos / Notas) ---
+  function togglePanel(btn, body) {
+    const open = btn.getAttribute("aria-expanded") === "true";
+    btn.setAttribute("aria-expanded", String(!open));
+    body.hidden = open;
+  }
+  function ensureNotesOpen() {
+    if ($("notesToggle").getAttribute("aria-expanded") !== "true") {
+      $("notesToggle").setAttribute("aria-expanded", "true");
+      $("notesBody").hidden = false;
+    }
+  }
+  // --- Notas (bloc local de este navegador, por usuario) ---
+  let notesTimer = null;
+  function notesKey() { return `aliado_notes:${currentUserId()}`; }
+  function flashSaved(text) { $("notesSaved").textContent = text; }
+  function saveNotes() { try { localStorage.setItem(notesKey(), $("notes").value); } catch (e) {} }
+  function loadNotes() { try { $("notes").value = localStorage.getItem(notesKey()) || ""; } catch (e) {} }
+  function appendToNotes(text) {
+    ensureNotesOpen();
+    const ta = $("notes");
+    ta.value = ta.value.trim() ? `${ta.value.trim()}\n\n${text}` : text;
+    saveNotes();
+    flashSaved("Añadido a notas");
+    ta.scrollTop = ta.scrollHeight;
+  }
+
+  // --- Wiring ---
+  $("composer").onsubmit = sendText;
+  $("text").addEventListener("input", resizeComposer);
+  $("text").addEventListener("keydown", (e) => { if (shouldSubmitOnEnter(e)) { e.preventDefault(); submitComposer($("composer")); } });
+  $("attachButton").onclick = () => $("fileInput").click();
+  $("docsUploadButton").onclick = () => $("fileInput").click();
+  $("folderUploadButton").onclick = () => $("folderInput").click();
+  $("folderInput").onchange = async () => {
+    const files = Array.from($("folderInput").files || []);
+    if (!files.length) return;
+    try { await uploadDocuments(files); } catch (err) { status(err.message); }
+    finally { $("folderInput").value = ""; resizeComposer(); $("text").focus(); }
+  };
+  $("userDropTarget").onclick = () => $("fileInput").click();
+  $("userDropTarget").ondragover = (event) => { event.preventDefault(); $("userDropTarget").classList.add("is-drag"); };
+  $("userDropTarget").ondragleave = () => $("userDropTarget").classList.remove("is-drag");
+  $("userDropTarget").ondrop = async (event) => {
+    event.preventDefault(); $("userDropTarget").classList.remove("is-drag");
+    try { await uploadDocuments(Array.from(event.dataTransfer.files || [])); } catch (err) { status(err.message); }
+  };
+  $("fileInput").onchange = async () => {
+    const files = Array.from($("fileInput").files || []);
+    if (!files.length) return;
+    try { await uploadDocuments(files); } catch (err) { status(err.message); }
+    finally { $("fileInput").value = ""; resizeComposer(); $("text").focus(); }
+  };
+  document.querySelectorAll("[data-sales-action]").forEach((b) => { b.onclick = () => fillSalesPrompt(b.dataset.salesAction); });
+  document.querySelectorAll("[data-close]").forEach((b) => { b.onclick = () => { $(b.dataset.close).hidden = true; }; });
+  $("passwordButton").onclick = () => { $("passwordPanel").hidden = false; $("currentPassword").focus(); };
+  $("teamButton").onclick = async () => { $("teamPanel").hidden = false; await loadTeam(); };
+  $("passwordForm").onsubmit = changePassword;
+  $("teamCreate").onsubmit = createTeamUser;
+  $("docsToggle").onclick = () => togglePanel($("docsToggle"), $("docsBody"));
+  $("notesToggle").onclick = () => togglePanel($("notesToggle"), $("notesBody"));
+  $("notes").addEventListener("input", () => {
+    flashSaved("Guardando…");
+    clearTimeout(notesTimer);
+    notesTimer = window.setTimeout(() => { saveNotes(); flashSaved("Guardado en este navegador."); }, 400);
+  });
+  $("notesClear").onclick = () => {
+    if (!$("notes").value || window.confirm("¿Vaciar las notas de este chat?")) {
+      $("notes").value = ""; saveNotes(); flashSaved("Notas vacías.");
+    }
+  };
+  $("logoutButton").onclick = async () => {
+    await api("/session/logout", { method:"POST", body:"{}" }).catch(() => {});
+    localStorage.removeItem(STORAGE_USER); localStorage.removeItem(STORAGE_COMPANY);
+    session = { authenticated:false, user_id:"", company_id:"", role:"" }; activeRole = "";
+    updateSessionUi(); $("docsList").replaceChildren(); setDocsCount(0);
+    $("messages").replaceChildren();
+    addMessage("aliado", "Sesión cerrada. Usa Iniciar sesión para volver a entrar.");
+  };
+
+  resizeComposer();
+  session.authenticated = true; session.user_id = "marta"; session.company_id = "acme"; activeRole = "commercial";
+  updateSessionUi();
+  setDocsCount(2); $("docsHint").textContent = "2 documento(s) privado(s) en este chat.";
+  ["Portfolio 2026.pdf","Tarifas Q2.xlsx"].forEach((n)=>{const c=document.createElement("span");c.className="doc-chip";c.append(document.createTextNode(n));const b=document.createElement("button");b.type="button";b.textContent="×";c.appendChild(b);document.getElementById("docsList").appendChild(c);});
+  setDocumentSuggestions([{}]);
+  addMessage("user","¿Qué le ofrezco a Telefónica en la renovación?");
+  addMessage("aliado","Para Telefónica encaja Cloud Backup Pro: ya tienen infraestructura compatible y aparece en su ficha de cuenta [Portfolio 2026#2]. Precio de lista 3.200€/año según tarifa vigente [Tarifas Q2#1]. Objeción probable: presupuesto cerrado este trimestre — propon piloto de 60 días. Siguiente paso: enviar propuesta antes del viernes.");
+  $("notes").value = "Telefónica — renovación\n• Proponer Cloud Backup Pro (piloto 60 días)\n• Enviar propuesta antes del viernes";
+</script>
+
+</body>
+</html>
