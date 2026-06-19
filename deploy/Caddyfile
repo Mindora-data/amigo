@@ -1,0 +1,37 @@
+mindoralabs.net {
+    handle /dashboard* {
+        reverse_proxy 127.0.0.1:8000
+    }
+    handle {
+        root * /srv/landing
+        file_server
+    }
+}
+
+amigo.mindoralabs.net {
+    handle / {
+        root * /srv/amigo-landing
+        file_server
+    }
+    handle {
+        reverse_proxy 127.0.0.1:8001
+    }
+}
+
+aliado.mindoralabs.net {
+    root * /srv/aliado-landing
+    file_server
+}
+
+taskos.mindoralabs.net {
+    root * /srv/taskos-landing
+    file_server
+}
+
+api.taskos.mindoralabs.net {
+    reverse_proxy 127.0.0.1:8002
+}
+
+app.taskos.mindoralabs.net {
+    reverse_proxy 127.0.0.1:3010
+}
