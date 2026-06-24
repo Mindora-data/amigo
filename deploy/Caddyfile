@@ -23,6 +23,10 @@ aliado.mindoralabs.net {
     file_server
 }
 
+app.aliado.mindoralabs.net {
+    reverse_proxy 127.0.0.1:8003
+}
+
 taskos.mindoralabs.net {
     root * /srv/taskos-landing
     file_server
