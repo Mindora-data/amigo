@@ -51,13 +51,15 @@ class HubConfig:
     session_pepper: str = "hub-dev-pepper"
     require_https: bool = False
     amigo_db_path: str = ""
+    aliado_db_path: str = ""
+    taskos_db_path: str = ""
 
 
 def default_initiatives(config: HubConfig) -> list[Initiative]:
     return [
         Initiative("amigo", "amigo", "Compañero con memoria en Telegram", config.amigo_db_path),
-        Initiative("aliado", "aliado", "Iniciativa de Mindora Labs (por conectar)", ""),
-        Initiative("taskos", "taskos", "Iniciativa de Mindora Labs (por conectar)", ""),
+        Initiative("aliado", "aliado", "Conocimiento corporativo para empresas", config.aliado_db_path),
+        Initiative("taskos", "taskos", "Tareas entregadas por agentes de IA", config.taskos_db_path),
     ]
 
 
@@ -161,6 +163,136 @@ def amigo_snapshot(db_path: str) -> dict[str, Any]:
     }
 
 
+def _rows(conn: sqlite3.Connection, sql: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
+    try:
+        return conn.execute(sql, params).fetchall()
+    except sqlite3.Error:
+        return []
+
+
+def _scalar(conn: sqlite3.Connection, sql: str) -> int:
+    rows = _rows(conn, sql)
+    try:
+        return int(rows[0][0]) if rows else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def aliado_snapshot(db_path: str) -> dict[str, Any]:
+    """Read aliado's corporate data read-only: companies, users, documents."""
+    if not db_path or not Path(db_path).exists():
+        return {"connected": False, "reason": "sin datos todavía"}
+    conn = _connect_ro(db_path)
+    try:
+        companies = [dict(r) for r in _rows(
+            conn,
+            "SELECT company_id, name, active, onboarding_completed, created_at "
+            "FROM company ORDER BY created_at DESC",
+        )]
+        users = [dict(r) for r in _rows(
+            conn,
+            "SELECT user_id, company_id, name, email, role, active, created_at "
+            "FROM company_user ORDER BY created_at DESC",
+        )]
+        docs = [dict(r) for r in _rows(
+            conn,
+            "SELECT title, category, folder, restricted, created_at "
+            "FROM company_document ORDER BY updated_at DESC LIMIT 100",
+        )]
+        n_admins = sum(1 for u in users if str(u.get("role")) == "admin")
+        n_crm = _scalar(conn, "SELECT COUNT(*) FROM crm_companies")
+    finally:
+        conn.close()
+    return {
+        "connected": True,
+        "sections": [
+            {"title": "Resumen", "metrics": [
+                {"label": "empresas", "value": len(companies)},
+                {"label": "usuarios", "value": len(users)},
+                {"label": "admins", "value": n_admins},
+                {"label": "documentos", "value": len(docs)},
+                {"label": "cuentas CRM", "value": n_crm},
+            ]},
+            {"title": "Empresas", "table": {
+                "columns": ["Empresa", "Activa", "Onboarding", "Creada"],
+                "rows": [[c.get("name"), "sí" if c.get("active") else "no",
+                          "sí" if c.get("onboarding_completed") else "no", c.get("created_at")]
+                         for c in companies],
+            }},
+            {"title": "Usuarios", "table": {
+                "columns": ["Nombre", "Email", "Rol", "Empresa", "Activo", "Creado"],
+                "rows": [[u.get("name"), u.get("email"), u.get("role"), u.get("company_id"),
+                          "sí" if u.get("active") else "no", u.get("created_at")]
+                         for u in users],
+            }},
+            {"title": "Documentos de empresa", "table": {
+                "columns": ["Título", "Categoría", "Carpeta", "Visibilidad", "Creado"],
+                "rows": [[d.get("title"), d.get("category"), d.get("folder"),
+                          "privado" if d.get("restricted") else "compartido", d.get("created_at")]
+                         for d in docs],
+            }},
+        ],
+    }
+
+
+def taskos_snapshot(db_path: str) -> dict[str, Any]:
+    """Read taskos (mindora-aios) data read-only: users, workspaces, tasks."""
+    if not db_path or not Path(db_path).exists():
+        return {"connected": False, "reason": "sin datos todavía"}
+    conn = _connect_ro(db_path)
+    try:
+        users = [dict(r) for r in _rows(
+            conn,
+            "SELECT email, name, provider, email_verified, is_active, created_at "
+            "FROM users ORDER BY created_at DESC",
+        )]
+        workspaces = [dict(r) for r in _rows(
+            conn,
+            "SELECT project_name, goal, current_phase, execution_mode, updated_at "
+            "FROM workspaces ORDER BY updated_at DESC LIMIT 100",
+        )]
+        tasks_total = _scalar(conn, "SELECT COALESCE(SUM(total_tasks_run), 0) FROM accounts")
+        n_verified = sum(1 for u in users if u.get("email_verified"))
+        action_counts = {
+            str(r["status"]): int(r["c"])
+            for r in _rows(conn, "SELECT status, COUNT(*) AS c FROM workspace_actions GROUP BY status")
+        }
+    finally:
+        conn.close()
+    return {
+        "connected": True,
+        "sections": [
+            {"title": "Resumen", "metrics": [
+                {"label": "usuarios", "value": len(users)},
+                {"label": "verificados", "value": n_verified},
+                {"label": "workspaces", "value": len(workspaces)},
+                {"label": "tareas ejecutadas", "value": tasks_total},
+                {"label": "acciones", "value": sum(action_counts.values())},
+            ]},
+            {"title": "Usuarios", "table": {
+                "columns": ["Email", "Nombre", "Proveedor", "Verificado", "Activo", "Creado"],
+                "rows": [[u.get("email"), u.get("name"), u.get("provider"),
+                          "sí" if u.get("email_verified") else "no",
+                          "sí" if u.get("is_active") else "no", u.get("created_at")]
+                         for u in users],
+            }},
+            {"title": "Workspaces", "table": {
+                "columns": ["Proyecto", "Objetivo", "Fase", "Modo", "Actualizado"],
+                "rows": [[w.get("project_name"), str(w.get("goal") or "")[:80],
+                          w.get("current_phase"), w.get("execution_mode"), w.get("updated_at")]
+                         for w in workspaces],
+            }},
+        ],
+    }
+
+
+SNAPSHOTTERS: dict[str, Callable[[str], dict[str, Any]]] = {
+    "amigo": amigo_snapshot,
+    "aliado": aliado_snapshot,
+    "taskos": taskos_snapshot,
+}
+
+
 def build_overview(config: HubConfig) -> dict[str, Any]:
     initiatives: list[dict[str, Any]] = []
     for initiative in default_initiatives(config):
@@ -169,8 +301,9 @@ def build_overview(config: HubConfig) -> dict[str, Any]:
             "name": initiative.name,
             "description": initiative.description,
         }
-        if initiative.initiative_id == "amigo":
-            snapshot = amigo_snapshot(initiative.db_path)
+        snapshotter = SNAPSHOTTERS.get(initiative.initiative_id)
+        if snapshotter and initiative.db_path:
+            snapshot = snapshotter(initiative.db_path)
             entry["status"] = "connected" if snapshot.get("connected") else "empty"
             entry["snapshot"] = snapshot
         else:
@@ -400,12 +533,29 @@ function renderCards() {
 
 function esc(v) { return String(v == null ? "" : v).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
+function renderSections(sections) {
+  return (sections || []).map(sec => {
+    let h = '<div class="panel">';
+    if (sec.title) h += `<h3>${esc(sec.title)}</h3>`;
+    if (sec.metrics && sec.metrics.length) h += '<div class="metric-row">' +
+      sec.metrics.map(m => `<div class="metric"><strong>${esc(m.value)}</strong>${esc(m.label)}</div>`).join("") + '</div>';
+    if (sec.table) {
+      const t = sec.table;
+      if (!t.rows || !t.rows.length) h += '<p class="muted">Sin datos todavía.</p>';
+      else h += '<table><tr>' + (t.columns || []).map(c => `<th>${esc(c)}</th>`).join("") + '</tr>' +
+        t.rows.map(r => '<tr>' + r.map(cell => `<td>${esc(cell)}</td>`).join("") + '</tr>').join("") + '</table>';
+    }
+    return h + '</div>';
+  }).join("");
+}
+
 function renderDetail() {
   const it = DATA.initiatives.find(i => i.id === selected);
   const d = $("detail");
   if (!it || it.status === "not_connected") { d.innerHTML = '<div class="panel muted">Esta iniciativa todavía no está conectada al panel.</div>'; return; }
   const s = it.snapshot || {};
   if (!s.connected) { d.innerHTML = '<div class="panel muted">Sin datos todavía. En cuanto haya actividad, aparecerá aquí.</div>'; return; }
+  if (s.sections) { d.innerHTML = renderSections(s.sections); return; }
   const tabs = [["users", "Usuarios"], ["usage", "Uso"], ["learnings", "Aprendizajes"]];
   let html = '<div class="tabs">' + tabs.map(([k, l]) => `<button class="${k === tab ? "active" : ""}" onclick="setTab('${k}')">${l}</button>`).join("") + "</div>";
   if (tab === "users") html += renderUsers(s.users);
@@ -512,6 +662,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to amigo's SQLite database (read-only).",
     )
     parser.add_argument(
+        "--aliado-db",
+        default=os.environ.get("MINDORA_HUB_ALIADO_DB", "/srv/aliado/data/nino.db"),
+        help="Path to aliado's SQLite database (read-only).",
+    )
+    parser.add_argument(
+        "--taskos-db",
+        default=os.environ.get("MINDORA_HUB_TASKOS_DB", "/srv/mindora-aios/var/taskos.db"),
+        help="Path to taskos's SQLite database (read-only).",
+    )
+    parser.add_argument(
         "--hash-password",
         action="store_true",
         help="Read a password from stdin, print its hash, and exit.",
@@ -532,9 +692,11 @@ def main(argv: list[str] | None = None) -> int:
         session_pepper=os.environ.get("MINDORA_HUB_SESSION_PEPPER", "hub-dev-pepper"),
         require_https=os.environ.get("MINDORA_HUB_ENV", "").lower() == "prod",
         amigo_db_path=args.amigo_db,
+        aliado_db_path=args.aliado_db,
+        taskos_db_path=args.taskos_db,
     )
     app = create_hub_app(config)
-    print(f"Mindora hub on http://{args.host}:{args.port} (amigo db: {args.amigo_db})")
+    print(f"Mindora hub on http://{args.host}:{args.port} (amigo: {args.amigo_db}, aliado: {args.aliado_db}, taskos: {args.taskos_db})")
     with make_server(args.host, args.port, app) as httpd:
         httpd.serve_forever()
     return 0
